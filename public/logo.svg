@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="95" fill="#FFFFFF" stroke="#059669" stroke-width="2"/>
+  
+  <!-- Professional geometric design - overlapping L shapes representing Lawson -->
+  <g transform="translate(100, 100)">
+    <!-- Outer L shape -->
+    <path d="M -35 -40 L -15 -40 L -15 35 L -35 35 Z" fill="none" stroke="#059669" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    
+    <!-- Inner L shape (inverted) -->
+    <path d="M 5 -40 L 35 -40 L 35 -20 L 5 -20 Z" fill="none" stroke="#059669" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 15 -10 L 35 -10 L 35 35 L 15 35 Z" fill="none" stroke="#059669" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    
+    <!-- Center accent dot -->
+    <circle cx="0" cy="0" r="4" fill="#059669"/>
+  </g>
+  
+  <!-- LLC text indicator at bottom -->
+  <text x="100" y="170" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#059669">LLC</text>
+</svg>
