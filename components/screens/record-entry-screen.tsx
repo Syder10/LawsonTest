@@ -46,11 +46,12 @@ const PRODUCT_TYPE_FORMS: Record<string, string[]> = {
   "Ginger Production": [],
   "Extraction Monitoring Records": ["Bitters"],
   "Filling Line Daily Records": ["Bitters", "Ginger"],
+  "Stocks Keeping For Labels & Caps": ["Bitters", "Ginger"],
   "Packaging Daily Records": ["Bitters", "Ginger"],
   "Daily Records Alcohol For Concentrate": [],
   "Herbs Stock": [],
   "Caramel Stock": ["Bitters", "Ginger"],
-  "Caps Stock": [],
+  "Caps Stock": [], // No product selector - caps cover all products
   "Labels Stock": ["Bitters", "Ginger"],
 }
 
@@ -182,6 +183,18 @@ const formFields: Record<string, Field[]> = {
     { label: "Total Production", type: "number", required: true },
     { label: "Remarks", type: "text", required: false },
   ],
+  "Stocks Keeping For Labels & Caps": [
+    { label: "Number of Caps (BITTERS)", type: "number", required: false },
+    { label: "Number of Caps (GINGER)", type: "number", required: false },
+    { label: "Number of Labels (BITTERS)", type: "number", required: false },
+    { label: "Number of Labels (GINGER)", type: "number", required: false },
+    { label: "Number of CARTONS", type: "number", required: true },
+    { label: "Number of ROLLS", type: "number", required: true },
+    { label: "Machine Number", type: "text", required: true },
+    { label: "Time", type: "time", required: true },
+    { label: "Name of Personnel", type: "text", required: true },
+    { label: "Remarks", type: "text", required: false },
+  ],
   "Packaging Daily Records": [
     { label: "Quantity Of Cartons Produced", type: "number", required: true },
     { label: "Number of Cartons Wasted", type: "number", required: true },
@@ -280,7 +293,19 @@ const formFields: Record<string, Field[]> = {
   ],
 }
 
-const fieldProductTypeMap: Record<string, Record<string, string[]>> = {}
+const fieldProductTypeMap: Record<string, Record<string, string[]>> = {
+  "Stocks Keeping For Labels & Caps": {
+    "Number of Caps (BITTERS)": ["Bitters"],
+    "Number of Caps (GINGER)": ["Ginger"],
+    "Number of Labels (BITTERS)": ["Bitters"],
+    "Number of Labels (GINGER)": ["Ginger"],
+    "Number of CARTONS": ["Bitters", "Ginger"],
+    "Number of ROLLS": ["Bitters", "Ginger"],
+    "Machine Number": ["Bitters", "Ginger"],
+    Time: ["Bitters", "Ginger"],
+    "Name of Personnel": ["Bitters", "Ginger"],
+  },
+}
 
 const validateStockFields = (data: Record<string, string>, product?: string): string => {
   const fields =
@@ -332,6 +357,7 @@ export default function RecordEntryScreen({
   const [previousStock, setPreviousStock] = useState<number | null>(null)
   const [hasPreviousStock, setHasPreviousStock] = useState<boolean>(false)
   const [isLoadingStock, setIsLoadingStock] = useState<boolean>(false)
+  // Per-product previous stock for Caramel Stock and Labels Stock
   const [perProductPreviousStock, setPerProductPreviousStock] = useState<Record<string, number | null>>({})
 
   const [numberOfTanks, setNumberOfTanks] = useState<number>(1)
@@ -339,28 +365,42 @@ export default function RecordEntryScreen({
   const [selectedHerbs, setSelectedHerbs] = useState<string[]>([])
   const [herbsData, setHerbsData] = useState<Record<string, Record<string, string>>>({})
   const [herbsPreviousStock, setHerbsPreviousStock] = useState<Record<string, number | null>>({})
-  const [herbOptions, setHerbOptions] = useState<string[]>([])
-  const [isLoadingHerbs, setIsLoadingHerbs] = useState(false)
+  const baseHerbOptions = [
+    "Nyame Dua",
+    "Mahogany",
+    "Yellow",
+    "Kraman Koti",
+    "Twentini",
+    "Assase Hwam",
+    "Kumanii",
+    "Kakapenpen",
+    "Kooko Amae",
+    "Otie",
+    "Susumasa",
+    "Ginger",
+    "Tiger Nut",
+  ]
+  const [customHerbs, setCustomHerbs] = useState<string[]>([])
+  const [customHerbName, setCustomHerbName] = useState<string>("")
   const [showCreateHerbDialog, setShowCreateHerbDialog] = useState(false)
   const [newHerbName, setNewHerbName] = useState<string>("")
+  const herbOptions = [...baseHerbOptions, ...customHerbs]
 
   useEffect(() => {
-    const loadHerbs = async () => {
-      setIsLoadingHerbs(true)
+    const loadCustomHerbs = () => {
       try {
-        const res = await fetch("/api/herbs")
-        if (!res.ok) throw new Error("Failed to fetch herbs")
-        const data = await res.json()
-        setHerbOptions(data.herbs ?? [])
-        console.log("[v0] Loaded herbs from DB:", data.herbs)
+        const stored = localStorage.getItem("customHerbsList")
+        if (stored) {
+          const herbs = JSON.parse(stored)
+          setCustomHerbs(herbs)
+          console.log("[v0] Loaded custom herbs from storage:", herbs)
+        }
       } catch (err) {
-        console.error("[v0] Error loading herbs:", err)
-      } finally {
-        setIsLoadingHerbs(false)
+        console.warn("[v0] Error loading custom herbs from storage:", err)
       }
     }
 
-    loadHerbs()
+    loadCustomHerbs()
   }, [])
 
   useEffect(() => {
@@ -371,6 +411,7 @@ export default function RecordEntryScreen({
       setIsLoadingStock(true)
       console.log("[v0] Fetching previous stock for recordType:", recordType)
 
+      // ── Per-product fetch for Caramel Stock and Labels Stock ──────────────
       if (recordType === "Caramel Stock" || recordType === "Labels Stock") {
         try {
           const products = ["Bitters", "Ginger"]
@@ -388,12 +429,14 @@ export default function RecordEntryScreen({
 
           setPerProductPreviousStock(results)
 
+          // Pre-populate opening stock for each product that has a previous record
           setFormDataByProduct((prev) => {
             const updated = { ...prev }
             products.forEach((product) => {
               if (results[product] != null) {
                 if (!updated[product]) updated[product] = {}
                 updated[product]["Opening Stock Level"] = String(results[product])
+                // Recalculate any dependent fields
                 fields.forEach((f) => {
                   if (f.calculatedFrom && f.calculation && Array.isArray(f.calculatedFrom)) {
                     const sourceValues = f.calculatedFrom.reduce((acc, srcField) => {
@@ -408,6 +451,7 @@ export default function RecordEntryScreen({
             return updated
           })
 
+          // Show banner if at least one product has a previous record
           setHasPreviousStock(Object.values(results).some((v) => v != null))
           setPreviousStock(null)
         } catch (err) {
@@ -419,6 +463,7 @@ export default function RecordEntryScreen({
         return
       }
 
+      // ── Single fetch for Caps Stock, Preforms, Alcohol ───────────────────
       try {
         const params = new URLSearchParams({ recordType, date, department })
         const response = await fetch(`/api/records/previous-stock?${params}`)
@@ -481,7 +526,9 @@ export default function RecordEntryScreen({
 
   const handleProductionTypeChange = (type: string) => {
     setProductionTypes((prev) => {
-      if (prev.includes(type)) return prev.filter((t) => t !== type)
+      if (prev.includes(type)) {
+        return prev.filter((t) => t !== type)
+      }
       return [...prev, type]
     })
   }
@@ -490,7 +537,9 @@ export default function RecordEntryScreen({
     setNumberOfTanks(num)
     const updated: ExtractionTankData = { ...extractionTankData }
     for (let i = 0; i < num; i++) {
-      if (!updated[i]) updated[i] = { data: {}, isSameAsFirst: false }
+      if (!updated[i]) {
+        updated[i] = { data: {}, isSameAsFirst: false }
+      }
     }
     setExtractionTankData(updated)
   }
@@ -509,9 +558,11 @@ export default function RecordEntryScreen({
       const updated = { ...prev }
       if (!updated[tankIndex]) updated[tankIndex] = { data: {}, isSameAsFirst: false }
       updated[tankIndex].isSameAsFirst = checked
+
       if (checked && prev[0]?.data) {
         updated[tankIndex].data = JSON.parse(JSON.stringify(prev[0].data))
       }
+
       return updated
     })
   }
@@ -534,6 +585,7 @@ export default function RecordEntryScreen({
             },
             {} as Record<string, number>,
           )
+
           const calculatedValue = f.calculation(sourceValues)
           updatedData[f.label] = String(calculatedValue)
         } else if (f.calculatedFrom && typeof f.calculatedFrom === "string" && f.multiplier) {
@@ -543,7 +595,10 @@ export default function RecordEntryScreen({
       })
 
       const stockError = validateStockFields(updatedData, product)
-      setStockErrors((prev) => ({ ...prev, [key]: stockError || "" }))
+      setStockErrors((prev) => ({
+        ...prev,
+        [key]: stockError || "",
+      }))
 
       updated[key] = updatedData
       return updated
@@ -567,6 +622,8 @@ export default function RecordEntryScreen({
 
     const isOpeningStockField = field.isStockField && field.stockFieldType === "opening"
 
+    // For Caramel Stock and Labels Stock: lock per product independently
+    // For all others: use the single hasPreviousStock flag
     let shouldLockField = false
     if (isOpeningStockField) {
       if (recordType === "Caramel Stock" || recordType === "Labels Stock") {
@@ -741,13 +798,16 @@ export default function RecordEntryScreen({
 
   const fetchHerbPreviousStock = async (herb: string) => {
     try {
-      console.log("[v0] Fetching previous stock for herb:", herb)
+      const herbName = herb === "Others" ? customHerbName : herb
+      if (!herbName) return
+
+      console.log("[v0] Fetching previous stock for herb:", herbName)
 
       const params = new URLSearchParams({
         recordType: "Herbs Stock",
         date,
         department,
-        herbType: herb,
+        herbType: herbName,
       })
 
       const response = await fetch(`/api/records/previous-stock?${params}`)
@@ -755,7 +815,10 @@ export default function RecordEntryScreen({
 
       if (data.hasPrevious && data.previousStock !== null && data.previousStock !== undefined) {
         console.log("[v0] Previous stock found for herb:", data.previousStock)
-        setHerbsPreviousStock((prev) => ({ ...prev, [herb]: data.previousStock }))
+        setHerbsPreviousStock((prev) => ({
+          ...prev,
+          [herb]: data.previousStock,
+        }))
         setHerbsData((prev) => {
           const updated = { ...prev }
           if (!updated[herb]) updated[herb] = {}
@@ -763,23 +826,32 @@ export default function RecordEntryScreen({
           return updated
         })
       } else {
-        setHerbsPreviousStock((prev) => ({ ...prev, [herb]: null }))
+        setHerbsPreviousStock((prev) => ({
+          ...prev,
+          [herb]: null,
+        }))
       }
     } catch (error) {
       console.error("[v0] Error fetching herb stock:", error)
-      setHerbsPreviousStock((prev) => ({ ...prev, [herb]: null }))
+      setHerbsPreviousStock((prev) => ({
+        ...prev,
+        [herb]: null,
+      }))
     }
   }
 
   const handleHerbSelectionChange = (herb: string) => {
     setSelectedHerbs((prev) => {
-      if (prev.includes(herb)) return prev.filter((h) => h !== herb)
-      fetchHerbPreviousStock(herb)
-      return [...prev, herb]
+      if (prev.includes(herb)) {
+        return prev.filter((h) => h !== herb)
+      } else {
+        fetchHerbPreviousStock(herb)
+        return [...prev, herb]
+      }
     })
   }
 
-  const handleCreateHerb = async () => {
+  const handleCreateHerb = () => {
     const trimmedName = newHerbName.trim()
 
     if (!trimmedName) {
@@ -787,42 +859,32 @@ export default function RecordEntryScreen({
       return
     }
 
-    if (herbOptions.map((h) => h.toLowerCase()).includes(trimmedName.toLowerCase())) {
+    if (customHerbs.includes(trimmedName)) {
+      setError("This herb already exists")
+      return
+    }
+
+    if (herbOptions.includes(trimmedName)) {
       setError("This herb is already in the list")
       return
     }
 
-    try {
-      const res = await fetch("/api/herbs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: trimmedName }),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        setError(data.error || "Failed to create herb")
-        return
+    setCustomHerbs((prev) => {
+      const updated = [...prev, trimmedName]
+      try {
+        localStorage.setItem("customHerbsList", JSON.stringify(updated))
+        console.log("[v0] Saved custom herbs to storage:", updated)
+      } catch (err) {
+        console.warn("[v0] Error saving custom herbs to storage:", err)
       }
+      return updated
+    })
 
-      // Add to local list immediately so it appears without a full reload
-      setHerbOptions((prev) => [...prev, trimmedName].sort())
-
-      // Automatically select the new herb
-      setSelectedHerbs((prev) => [...prev, trimmedName])
-
-      // Fetch previous stock for the new herb
-      fetchHerbPreviousStock(trimmedName)
-
-      setShowCreateHerbDialog(false)
-      setNewHerbName("")
-      setError(null)
-      console.log("[v0] Herb created and saved to DB:", trimmedName)
-    } catch (err) {
-      console.error("[v0] Error creating herb:", err)
-      setError("Failed to create herb")
-    }
+    setSelectedHerbs((prev) => [...prev, trimmedName])
+    fetchHerbPreviousStock(trimmedName)
+    setShowCreateHerbDialog(false)
+    setNewHerbName("")
+    setError(null)
   }
 
   const renderHerbsStockForm = () => {
@@ -872,26 +934,40 @@ export default function RecordEntryScreen({
             </button>
           </div>
           <div className="flex flex-wrap gap-3">
-            {isLoadingHerbs ? (
-              <p className="text-sm text-emerald-700/70">Loading herbs...</p>
-            ) : (
-              herbOptions.map((herb) => (
-                <label key={herb} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={selectedHerbs.includes(herb)}
-                    onChange={() => handleHerbSelectionChange(herb)}
-                    className="w-4 h-4 accent-emerald-600"
-                  />
-                  <span className="text-sm text-foreground">{herb}</span>
-                </label>
-              ))
-            )}
+            {herbOptions.map((herb) => (
+              <label key={herb} className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedHerbs.includes(herb)}
+                  onChange={() => {
+                    handleHerbSelectionChange(herb)
+                    if (herb === "Others" && !selectedHerbs.includes(herb)) {
+                      setCustomHerbName("")
+                    }
+                  }}
+                  className="w-4 h-4 accent-emerald-600"
+                />
+                <span className="text-sm text-foreground">{herb}</span>
+              </label>
+            ))}
           </div>
+
+          {selectedHerbs.includes("Others") && (
+            <div className="mt-4 space-y-2">
+              <label className="text-xs font-semibold text-emerald-950">Herb Name</label>
+              <input
+                type="text"
+                value={customHerbName}
+                onChange={(e) => setCustomHerbName(e.target.value)}
+                placeholder="Enter the name of the herb"
+                className="w-full px-3 py-2 text-sm border border-emerald-300 rounded bg-white"
+              />
+            </div>
+          )}
 
           {selectedHerbs.length > 0 && (
             <div className="text-xs text-emerald-700/70 font-medium mt-2">
-              Selected: {selectedHerbs.join(", ")}
+              Selected: {selectedHerbs.map((h) => h === "Others" && customHerbName ? customHerbName : h).join(", ")}
             </div>
           )}
         </div>
@@ -899,35 +975,38 @@ export default function RecordEntryScreen({
         {selectedHerbs.length > 0 && (
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-emerald-950">Herbs Stock Data</h3>
-            {selectedHerbs.map((herb) => (
-              <div key={herb} className="bg-background/50 p-4 rounded-lg border border-primary/20">
-                <div className="mb-3 font-semibold text-sm text-foreground">{herb}</div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                  {stockFieldLabels.map((fieldLabel) => {
-                    const isDisabledField = ["Total Qty", "Remaining Qty"].includes(fieldLabel)
-                    const isAvailableStock = fieldLabel === "Available Stock"
-                    const hasPreviousStockForHerb = herbsPreviousStock[herb] !== null && herbsPreviousStock[herb] !== undefined
-                    const shouldDisable = isDisabledField || (isAvailableStock && hasPreviousStockForHerb)
+            {selectedHerbs.map((herb) => {
+              const displayHerbName = herb === "Others" ? customHerbName : herb
+              return (
+                <div key={herb} className="bg-background/50 p-4 rounded-lg border border-primary/20">
+                  <div className="mb-3 font-semibold text-sm text-foreground">{displayHerbName}</div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                    {stockFieldLabels.map((fieldLabel) => {
+                      const isDisabledField = ["Total Qty", "Remaining Qty"].includes(fieldLabel)
+                      const isAvailableStock = fieldLabel === "Available Stock"
+                      const hasPreviousStockForHerb = herbsPreviousStock[herb] !== null && herbsPreviousStock[herb] !== undefined
+                      const shouldDisable = isDisabledField || (isAvailableStock && hasPreviousStockForHerb)
 
-                    return (
-                      <div key={fieldLabel} className="space-y-1">
-                        <label className="text-[10px] font-medium text-foreground/70 uppercase tracking-wide">
-                          {fieldLabel}
-                        </label>
-                        <input
-                          type={["Checked By", "Remarks"].includes(fieldLabel) ? "text" : "number"}
-                          value={herbsData[herb]?.[fieldLabel] || ""}
-                          onChange={(e) => handleHerbFieldChange(herb, fieldLabel, e.target.value)}
-                          disabled={shouldDisable}
-                          className="w-full px-2 py-1 text-sm border border-primary/30 rounded bg-background disabled:bg-muted disabled:opacity-50"
-                          placeholder={fieldLabel}
-                        />
-                      </div>
-                    )
-                  })}
+                      return (
+                        <div key={fieldLabel} className="space-y-1">
+                          <label className="text-[10px] font-medium text-foreground/70 uppercase tracking-wide">
+                            {fieldLabel}
+                          </label>
+                          <input
+                            type={["Checked By", "Remarks"].includes(fieldLabel) ? "text" : "number"}
+                            value={herbsData[herb]?.[fieldLabel] || ""}
+                            onChange={(e) => handleHerbFieldChange(herb, fieldLabel, e.target.value)}
+                            disabled={shouldDisable}
+                            className="w-full px-2 py-1 text-sm border border-primary/30 rounded bg-background disabled:bg-muted disabled:opacity-50"
+                            placeholder={fieldLabel}
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
 
@@ -948,7 +1027,9 @@ export default function RecordEntryScreen({
                   value={newHerbName}
                   onChange={(e) => setNewHerbName(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") handleCreateHerb()
+                    if (e.key === "Enter") {
+                      handleCreateHerb()
+                    }
                   }}
                   className="col-span-3"
                 />
@@ -1073,7 +1154,10 @@ export default function RecordEntryScreen({
                         tankIndex,
                         tankData[field.label] || "",
                         (value) => handleExtractionTankChange(tankIndex, field.label, value),
-                        isSameAsFirst && tankIndex > 0 && field.label !== "Tank Number" && field.label !== "Alcohol Percentage",
+                        isSameAsFirst &&
+                          tankIndex > 0 &&
+                          field.label !== "Tank Number" &&
+                          field.label !== "Alcohol Percentage",
                       )}
                     </div>
                   ))}
@@ -1098,7 +1182,9 @@ export default function RecordEntryScreen({
 
           fields.forEach((field) => {
             if (!field.required) return
-            if (!tankData[field.label]?.trim()) missingFields.push(field.label)
+            if (!tankData[field.label]?.trim()) {
+              missingFields.push(field.label)
+            }
           })
 
           if (missingFields.length > 0) {
@@ -1108,10 +1194,17 @@ export default function RecordEntryScreen({
           }
 
           const submitData = {
-            date, supervisorName, shift, group, department, recordType,
+            date,
+            supervisorName,
+            shift,
+            group,
+            department,
+            recordType,
             productType: "Bitters",
             formData: tankData,
           }
+
+          console.log("[v0] Submitting extraction form data:", submitData)
 
           const response = await fetch("/api/records/submit", {
             method: "POST",
@@ -1120,7 +1213,10 @@ export default function RecordEntryScreen({
           })
 
           const responseData = await response.json()
-          if (!response.ok) throw new Error(responseData.error || "Failed to save")
+
+          if (!response.ok) {
+            throw new Error(responseData.error || "Failed to save")
+          }
         }
 
         setIsLoading(false)
@@ -1144,25 +1240,46 @@ export default function RecordEntryScreen({
           return
         }
 
+        const customHerbsToAdd: string[] = []
+
         for (const herb of selectedHerbs) {
           const herbData = herbsData[herb] || {}
           const requiredFields = ["Available Stock", "Qty Received", "Qty Used", "Checked By"]
           const missingFields: string[] = []
 
           requiredFields.forEach((field) => {
-            if (!herbData[field]?.toString().trim()) missingFields.push(field)
+            if (!herbData[field]?.toString().trim()) {
+              missingFields.push(field)
+            }
           })
 
-          if (missingFields.length > 0) {
-            setError(`${herb} missing: ${missingFields.join(", ")}`)
+          if (herb === "Others" && !customHerbName.trim()) {
+            setError("Please enter a custom herb name for 'Others'")
             setIsLoading(false)
             return
           }
 
+          if (herb === "Others" && customHerbName.trim() && !customHerbs.includes(customHerbName.trim())) {
+            customHerbsToAdd.push(customHerbName.trim())
+          }
+
+          if (missingFields.length > 0) {
+            const displayHerbName = herb === "Others" ? customHerbName : herb
+            setError(`${displayHerbName} missing: ${missingFields.join(", ")}`)
+            setIsLoading(false)
+            return
+          }
+
+          const displayHerbName = herb === "Others" ? customHerbName : herb
           const submitData = {
-            date, supervisorName, shift, group, department, recordType,
+            date,
+            supervisorName,
+            shift,
+            group,
+            department,
+            recordType,
             formData: {
-              "Type of Herb": herb,
+              "Type of Herb": displayHerbName,
               ...herbData,
             },
           }
@@ -1176,9 +1293,21 @@ export default function RecordEntryScreen({
           })
 
           const responseData = await response.json()
-          if (!response.ok) throw new Error(responseData.error || "Failed to save")
+
+          if (!response.ok) {
+            throw new Error(responseData.error || "Failed to save")
+          }
         }
 
+        if (customHerbsToAdd.length > 0) {
+          setCustomHerbs((prev) => {
+            const updatedList = [...prev, ...customHerbsToAdd]
+            console.log("[v0] Adding custom herbs to list:", customHerbsToAdd)
+            return updatedList
+          })
+        }
+
+        setCustomHerbName("")
         setIsLoading(false)
         onSubmit()
       } catch (error) {
@@ -1210,7 +1339,20 @@ export default function RecordEntryScreen({
       fields.forEach((field) => {
         if (field.calculatedFrom) return
         if (field.disabled) return
-        if (!formData[field.label]?.trim() && field.required) missingFields.push(field.label)
+
+        if (recordType === "Stocks Keeping For Labels & Caps") {
+          const fieldProductMap = fieldProductTypeMap[recordType]
+          if (fieldProductMap && fieldProductMap[field.label]) {
+            const requiredFor = fieldProductMap[field.label]
+            if (!requiredFor.includes(product)) {
+              return
+            }
+          }
+        }
+
+        if (!formData[field.label]?.trim() && field.required) {
+          missingFields.push(field.label)
+        }
       })
 
       if (missingFields.length > 0) {
@@ -1225,7 +1367,12 @@ export default function RecordEntryScreen({
     try {
       for (const product of productsToSubmit) {
         const submitData = {
-          date, supervisorName, shift, group, department, recordType,
+          date,
+          supervisorName,
+          shift,
+          group,
+          department,
+          recordType,
           productType: product === "default" ? null : product,
           formData: formDataByProduct[product],
         }
@@ -1242,7 +1389,9 @@ export default function RecordEntryScreen({
         const responseData = await response.json()
         console.log("[v0] Response:", responseData)
 
-        if (!response.ok) throw new Error(responseData.error || "Failed to save")
+        if (!response.ok) {
+          throw new Error(responseData.error || "Failed to save")
+        }
       }
 
       setIsLoading(false)
@@ -1343,7 +1492,8 @@ export default function RecordEntryScreen({
             : supportsMultiProduct && productionTypes.length > 0
               ? productionTypes.map((product) => {
                   const filteredFields = getFilteredFields([product])
-                  const productStockError = stockErrors[product]
+                  const key = product
+                  const productStockError = stockErrors[key]
 
                   return (
                     <div key={product} className="p-6 rounded-lg bg-background/50 border border-primary/20">
