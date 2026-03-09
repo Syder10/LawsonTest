@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import type { FormField } from "@/constants/formConfig"
+import { FORM_FIELDS, PRODUCT_TYPE_FORMS, type FormField } from "@/constants/formConfig"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -15,15 +15,13 @@ import {
 } from "@/components/ui/dialog"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
-import { Plus } from "lucide-react"
+import { Plus, ChevronDown } from "lucide-react"
 
 interface RecordEntryFormProps {
     recordType: string
     supervisorName: string
     department: string
     groupNumber: number
-    fields: FormField[]
-    availableProducts: string[]
 }
 
 interface ExtractionTankData {
@@ -37,8 +35,7 @@ const validateStockFields = (data: Record<string, string>): string => {
     const opening = Number(data["Opening Stock (BAGS)"] || data["Opening Stock Level"] || 0)
     const received = Number(data["Quantity Received"] || data["Quantity Received (BAGS)"] || 0)
     const used = Number(data["Quantity Used"] || data["Preforms Used (BAGS)"] || 0)
-    const remaining = opening + received - used
-    if (used > 0 && remaining < 0) {
+    if (used > 0 && (opening + received - used) < 0) {
         return `Cannot use more than available. Have ${opening}, received ${received}, trying to use ${used}`
     }
     return ""
@@ -49,34 +46,30 @@ export default function RecordEntryForm({
     supervisorName,
     department,
     groupNumber,
-    fields,
-    availableProducts,
 }: RecordEntryFormProps) {
     const router = useRouter()
+
+    const fields: FormField[] = FORM_FIELDS[recordType] || []
+    const availableProducts: string[] = PRODUCT_TYPE_FORMS[recordType] || []
+    const supportsMultiProduct = availableProducts.length > 0
+
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const [shift, setShift] = useState<string>("")
-    const [selectedDate, setSelectedDate] = useState<string>(
-        new Date().toISOString().split("T")[0]
-    )
+    const [shift, setShift] = useState("")
+    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0])
 
-    // Multi-product support
-    const supportsMultiProduct = availableProducts.length > 0
     const [productionTypes, setProductionTypes] = useState<string[]>([])
     const [formDataByProduct, setFormDataByProduct] = useState<Record<string, Record<string, string>>>({})
     const [stockErrors, setStockErrors] = useState<Record<string, string>>({})
 
-    // Stock auto-population
     const [isLoadingStock, setIsLoadingStock] = useState(false)
     const [hasPreviousStock, setHasPreviousStock] = useState(false)
     const [previousStock, setPreviousStock] = useState<number | null>(null)
     const [perProductPreviousStock, setPerProductPreviousStock] = useState<Record<string, number | null>>({})
 
-    // Extraction monitoring
     const [numberOfTanks, setNumberOfTanks] = useState(1)
     const [extractionTankData, setExtractionTankData] = useState<ExtractionTankData>({})
 
-    // Herbs stock
     const [herbOptions, setHerbOptions] = useState<string[]>([])
     const [isLoadingHerbs, setIsLoadingHerbs] = useState(false)
     const [selectedHerbs, setSelectedHerbs] = useState<string[]>([])
@@ -85,25 +78,20 @@ export default function RecordEntryForm({
     const [showCreateHerbDialog, setShowCreateHerbDialog] = useState(false)
     const [newHerbName, setNewHerbName] = useState("")
 
-    // Load herbs
     useEffect(() => {
-        const loadHerbs = async () => {
+        const load = async () => {
             setIsLoadingHerbs(true)
             try {
                 const res = await fetch("/api/herbs")
                 if (!res.ok) throw new Error()
                 const data = await res.json()
                 setHerbOptions(data.herbs ?? [])
-            } catch {
-                console.error("Failed to load herbs")
-            } finally {
-                setIsLoadingHerbs(false)
-            }
+            } catch { /* silent */ }
+            finally { setIsLoadingHerbs(false) }
         }
-        loadHerbs()
+        load()
     }, [])
 
-    // Auto-populate previous stock
     useEffect(() => {
         const stockForms = [
             "Daily Records (Preform Usage)",
@@ -121,15 +109,13 @@ export default function RecordEntryForm({
                 try {
                     const products = ["Bitters", "Ginger"]
                     const results: Record<string, number | null> = {}
-                    await Promise.all(
-                        products.map(async (product) => {
-                            const params = new URLSearchParams({ recordType, date: selectedDate, department, product })
-                            const res = await fetch(`/api/records/previous-stock?${params}`)
-                            if (!res.ok) { results[product] = null; return }
-                            const data = await res.json()
-                            results[product] = data.hasPrevious && data.previousStock != null ? data.previousStock : null
-                        })
-                    )
+                    await Promise.all(products.map(async (product) => {
+                        const p = new URLSearchParams({ recordType, date: selectedDate, department, product })
+                        const res = await fetch(`/api/records/previous-stock?${p}`)
+                        if (!res.ok) { results[product] = null; return }
+                        const d = await res.json()
+                        results[product] = d.hasPrevious && d.previousStock != null ? d.previousStock : null
+                    }))
                     setPerProductPreviousStock(results)
                     setFormDataByProduct((prev) => {
                         const updated = { ...prev }
@@ -137,7 +123,7 @@ export default function RecordEntryForm({
                             if (results[product] != null) {
                                 if (!updated[product]) updated[product] = {}
                                 updated[product]["Opening Stock Level"] = String(results[product])
-                                recalcFields(updated[product])
+                                recalcAllFields(updated[product])
                             }
                         })
                         return updated
@@ -149,21 +135,20 @@ export default function RecordEntryForm({
             }
 
             try {
-                const params = new URLSearchParams({ recordType, date: selectedDate, department })
-                const res = await fetch(`/api/records/previous-stock?${params}`)
+                const p = new URLSearchParams({ recordType, date: selectedDate, department })
+                const res = await fetch(`/api/records/previous-stock?${p}`)
                 if (!res.ok) { setHasPreviousStock(false); setIsLoadingStock(false); return }
-                const data = await res.json()
-                if (data.hasPrevious && data.previousStock != null) {
-                    setPreviousStock(data.previousStock)
+                const d = await res.json()
+                if (d.hasPrevious && d.previousStock != null) {
+                    setPreviousStock(d.previousStock)
                     setHasPreviousStock(true)
                     const openingLabel = recordType === "Daily Records (Preform Usage)"
-                        ? "Opening Stock (BAGS)"
-                        : "Opening Stock Level"
+                        ? "Opening Stock (BAGS)" : "Opening Stock Level"
                     setFormDataByProduct((prev) => {
                         const updated = { ...prev }
                         if (!updated["default"]) updated["default"] = {}
-                        updated["default"][openingLabel] = String(data.previousStock)
-                        recalcFields(updated["default"])
+                        updated["default"][openingLabel] = String(d.previousStock)
+                        recalcAllFields(updated["default"])
                         return updated
                     })
                 } else {
@@ -175,12 +160,11 @@ export default function RecordEntryForm({
         fetchStock()
     }, [recordType, selectedDate, department])
 
-    const recalcFields = (data: Record<string, string>) => {
+    const recalcAllFields = (data: Record<string, string>) => {
         fields.forEach((f) => {
             if (f.calculatedFrom && f.calculation && Array.isArray(f.calculatedFrom)) {
                 const vals = f.calculatedFrom.reduce((acc, k) => {
-                    acc[k] = parseFloat(data[k] || "0")
-                    return acc
+                    acc[k] = parseFloat(data[k] || "0"); return acc
                 }, {} as Record<string, number>)
                 data[f.label] = String(f.calculation(vals))
             } else if (f.calculatedFrom && typeof f.calculatedFrom === "string" && f.multiplier) {
@@ -194,11 +178,10 @@ export default function RecordEntryForm({
         setFormDataByProduct((prev) => {
             const updated = { ...prev }
             if (!updated[key]) updated[key] = {}
-            const updatedData = { ...updated[key], [field]: value }
-            recalcFields(updatedData)
-            const stockError = validateStockFields(updatedData)
-            setStockErrors((prev) => ({ ...prev, [key]: stockError }))
-            updated[key] = updatedData
+            const d = { ...updated[key], [field]: value }
+            recalcAllFields(d)
+            setStockErrors((se) => ({ ...se, [key]: validateStockFields(d) }))
+            updated[key] = d
             return updated
         })
     }
@@ -209,7 +192,6 @@ export default function RecordEntryForm({
         )
     }
 
-    // Extraction tank handlers
     const handleNumberOfTanksChange = (num: number) => {
         setNumberOfTanks(num)
         setExtractionTankData((prev) => {
@@ -222,39 +204,39 @@ export default function RecordEntryForm({
     }
 
     const handleExtractionTankChange = (tankIndex: number, field: string, value: string) => {
-        setExtractionTankData((prev) => {
-            const updated = { ...prev }
-            if (!updated[tankIndex]) updated[tankIndex] = { data: {}, isSameAsFirst: false }
-            updated[tankIndex] = { ...updated[tankIndex], data: { ...updated[tankIndex].data, [field]: value } }
-            return updated
-        })
+        setExtractionTankData((prev) => ({
+            ...prev,
+            [tankIndex]: {
+                ...(prev[tankIndex] || { data: {}, isSameAsFirst: false }),
+                data: { ...(prev[tankIndex]?.data || {}), [field]: value },
+            },
+        }))
     }
 
     const handleCopyFromFirst = (tankIndex: number, checked: boolean) => {
-        setExtractionTankData((prev) => {
-            const updated = { ...prev }
-            if (!updated[tankIndex]) updated[tankIndex] = { data: {}, isSameAsFirst: false }
-            updated[tankIndex] = {
-                ...updated[tankIndex],
+        setExtractionTankData((prev) => ({
+            ...prev,
+            [tankIndex]: {
+                ...(prev[tankIndex] || { data: {}, isSameAsFirst: false }),
                 isSameAsFirst: checked,
-                data: checked && prev[0]?.data ? JSON.parse(JSON.stringify(prev[0].data)) : updated[tankIndex].data,
-            }
-            return updated
-        })
+                data: checked && prev[0]?.data
+                    ? JSON.parse(JSON.stringify(prev[0].data))
+                    : (prev[tankIndex]?.data || {}),
+            },
+        }))
     }
 
-    // Herb handlers
     const fetchHerbPreviousStock = async (herb: string) => {
         try {
-            const params = new URLSearchParams({ recordType: "Herbs Stock", date: selectedDate, department, herbType: herb })
-            const res = await fetch(`/api/records/previous-stock?${params}`)
-            const data = await res.json()
-            if (data.hasPrevious && data.previousStock != null) {
-                setHerbsPreviousStock((prev) => ({ ...prev, [herb]: data.previousStock }))
+            const p = new URLSearchParams({ recordType: "Herbs Stock", date: selectedDate, department, herbType: herb })
+            const res = await fetch(`/api/records/previous-stock?${p}`)
+            const d = await res.json()
+            if (d.hasPrevious && d.previousStock != null) {
+                setHerbsPreviousStock((prev) => ({ ...prev, [herb]: d.previousStock }))
                 setHerbsData((prev) => {
                     const updated = { ...prev }
                     if (!updated[herb]) updated[herb] = {}
-                    updated[herb]["Available Stock"] = String(data.previousStock)
+                    updated[herb]["Available Stock"] = String(d.previousStock)
                     return updated
                 })
             } else {
@@ -275,47 +257,43 @@ export default function RecordEntryForm({
 
     const handleHerbFieldChange = (herb: string, fieldLabel: string, value: string) => {
         setHerbsData((prev) => {
-            const herbData = { ...(prev[herb] || {}), [fieldLabel]: value }
+            const d = { ...(prev[herb] || {}), [fieldLabel]: value }
             if (["Available Stock", "Qty Received"].includes(fieldLabel)) {
-                herbData["Total Qty"] = String(
-                    Number(herbData["Available Stock"] || 0) + Number(herbData["Qty Received"] || 0)
-                )
+                d["Total Qty"] = String(Number(d["Available Stock"] || 0) + Number(d["Qty Received"] || 0))
             }
             if (["Available Stock", "Qty Received", "Qty Used"].includes(fieldLabel)) {
-                herbData["Remaining Qty"] = String(
-                    Number(herbData["Available Stock"] || 0) +
-                    Number(herbData["Qty Received"] || 0) -
-                    Number(herbData["Qty Used"] || 0)
+                d["Remaining Qty"] = String(
+                    Number(d["Available Stock"] || 0) + Number(d["Qty Received"] || 0) - Number(d["Qty Used"] || 0)
                 )
             }
-            return { ...prev, [herb]: herbData }
+            return { ...prev, [herb]: d }
         })
     }
 
     const handleCreateHerb = async () => {
-        const trimmedName = newHerbName.trim()
-        if (!trimmedName) { setError("Please enter a herb name"); return }
-        if (herbOptions.map((h) => h.toLowerCase()).includes(trimmedName.toLowerCase())) {
+        const name = newHerbName.trim()
+        if (!name) { setError("Please enter a herb name"); return }
+        if (herbOptions.map((h) => h.toLowerCase()).includes(name.toLowerCase())) {
             setError("This herb already exists"); return
         }
         try {
             const res = await fetch("/api/herbs", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name: trimmedName }),
+                body: JSON.stringify({ name }),
             })
-            const data = await res.json()
-            if (!res.ok) { setError(data.error || "Failed to create herb"); return }
-            setHerbOptions((prev) => [...prev, trimmedName].sort())
-            setSelectedHerbs((prev) => [...prev, trimmedName])
-            fetchHerbPreviousStock(trimmedName)
+            const d = await res.json()
+            if (!res.ok) { setError(d.error || "Failed to create herb"); return }
+            setHerbOptions((prev) => [...prev, name].sort())
+            setSelectedHerbs((prev) => [...prev, name])
+            fetchHerbPreviousStock(name)
             setShowCreateHerbDialog(false)
             setNewHerbName("")
             setError(null)
         } catch { setError("Failed to create herb") }
     }
 
-    // ── Field renderer ──────────────────────────────────────────────────────────
+    // ── Field renderers ─────────────────────────────────────────────────────────
     const renderField = (field: FormField, product: string) => {
         const value = formDataByProduct[product]?.[field.label] || ""
         const isOpeningStock = field.isStockField && field.stockFieldType === "opening"
@@ -325,22 +303,16 @@ export default function RecordEntryForm({
                 : hasPreviousStock
         )
         const isDisabled = !!field.disabled || isLocked
-        const isCalculated = field.disabled && (field.calculatedFrom || field.multiplier)
+        const isAutoCalc = field.disabled && (field.calculatedFrom || field.multiplier)
 
         if (field.isExtractionAlcoholPercentage && field.options) {
             return (
-                <div className="flex gap-3">
+                <div className="flex gap-2">
                     {field.options.map((opt) => (
-                        <label key={opt} className="flex items-center gap-2 cursor-pointer">
-                            <input
-                                type="radio"
-                                name={`${product}-${field.label}`}
-                                value={opt}
-                                checked={value === opt}
-                                onChange={(e) => handleInputChange(product, field.label, e.target.value)}
-                                disabled={isDisabled}
-                                className="w-4 h-4 accent-emerald-600"
-                            />
+                        <label key={opt} className="flex items-center gap-1.5 cursor-pointer">
+                            <input type="radio" name={`${product}-${field.label}`} value={opt}
+                                checked={value === opt} onChange={(e) => handleInputChange(product, field.label, e.target.value)}
+                                disabled={isDisabled} className="w-3.5 h-3.5 accent-emerald-600" />
                             <span className="text-sm font-medium">{opt}</span>
                         </label>
                     ))}
@@ -350,66 +322,43 @@ export default function RecordEntryForm({
 
         if (field.type === "textarea") {
             return (
-                <textarea
-                    className="w-full p-3 rounded-xl border border-emerald-100 bg-white focus:border-emerald-500 focus:ring-emerald-500/20 focus:outline-none resize-none transition-all"
-                    rows={3}
-                    value={value}
+                <textarea rows={3} value={value} disabled={isDisabled}
                     onChange={(e) => handleInputChange(product, field.label, e.target.value)}
-                    disabled={isDisabled}
-                    placeholder=""
+                    className="w-full px-3 py-2 text-sm rounded-xl border border-emerald-100 bg-white focus:border-emerald-500 focus:outline-none resize-none transition-all disabled:bg-emerald-50 disabled:cursor-not-allowed"
                 />
             )
         }
 
         return (
             <div className="relative">
-                <Input
-                    type={field.type}
-                    value={value}
+                <Input type={field.type} value={value} required={field.required} disabled={isDisabled}
                     onChange={(e) => handleInputChange(product, field.label, e.target.value)}
-                    disabled={isDisabled}
-                    required={field.required}
-                    className={`w-full p-5 text-base rounded-xl transition-all ${
-                        isDisabled
-                            ? "bg-emerald-50/80 border-emerald-100 cursor-not-allowed"
-                            : "bg-white border-emerald-100 focus:border-emerald-500 focus:ring-emerald-500/20"
-                    }`}
+                    className={`w-full px-3 py-2 text-sm rounded-xl transition-all h-10 ${isDisabled
+                        ? "bg-emerald-50/80 border-emerald-100 cursor-not-allowed"
+                        : "bg-white border-emerald-100 focus:border-emerald-500 focus:ring-emerald-500/20"}`}
                 />
                 {isLocked && value && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-blue-600">
-                        🔒 prev. shift
-                    </span>
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-blue-600 whitespace-nowrap">🔒 prev</span>
                 )}
-                {isCalculated && value && !isLocked && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-emerald-600">
-                        ✓ auto
-                    </span>
+                {isAutoCalc && value && !isLocked && (
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-emerald-600">✓ auto</span>
                 )}
             </div>
         )
     }
 
     const renderExtractionField = (
-        field: FormField,
-        tankIndex: number,
-        value: string,
-        onChange: (v: string) => void,
-        disabled = false
+        field: FormField, tankIndex: number, value: string,
+        onChange: (v: string) => void, disabled = false
     ) => {
         if (field.isExtractionAlcoholPercentage && field.options) {
             return (
-                <div className="flex gap-3">
+                <div className="flex gap-2">
                     {field.options.map((opt) => (
-                        <label key={opt} className="flex items-center gap-2 cursor-pointer">
-                            <input
-                                type="radio"
-                                name={`tank-${tankIndex}-${field.label}`}
-                                value={opt}
-                                checked={value === opt}
-                                onChange={(e) => onChange(e.target.value)}
-                                disabled={disabled}
-                                className="w-4 h-4 accent-emerald-600"
-                            />
+                        <label key={opt} className="flex items-center gap-1.5 cursor-pointer">
+                            <input type="radio" name={`tank-${tankIndex}-${field.label}`} value={opt}
+                                checked={value === opt} onChange={(e) => onChange(e.target.value)}
+                                disabled={disabled} className="w-3.5 h-3.5 accent-emerald-600" />
                             <span className="text-sm font-medium">{opt}</span>
                         </label>
                     ))}
@@ -418,45 +367,31 @@ export default function RecordEntryForm({
         }
         if (field.type === "textarea") {
             return (
-                <textarea
-                    className="w-full p-3 rounded-xl border border-emerald-100 bg-white focus:outline-none focus:border-emerald-500 resize-none transition-all disabled:bg-emerald-50 disabled:cursor-not-allowed"
-                    rows={3}
-                    value={value}
-                    onChange={(e) => onChange(e.target.value)}
-                    disabled={disabled}
+                <textarea rows={2} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}
+                    className="w-full px-3 py-2 text-sm rounded-xl border border-emerald-100 bg-white focus:outline-none resize-none disabled:bg-emerald-50 disabled:cursor-not-allowed"
                 />
             )
         }
         return (
-            <Input
-                type={field.type}
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                disabled={disabled}
-                className={`w-full p-5 text-base rounded-xl transition-all ${
-                    disabled ? "bg-emerald-50 border-emerald-100 cursor-not-allowed" : "bg-white border-emerald-100 focus:border-emerald-500"
-                }`}
+            <Input type={field.type} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}
+                className={`w-full px-3 py-2 text-sm rounded-xl h-10 transition-all ${disabled
+                    ? "bg-emerald-50 border-emerald-100 cursor-not-allowed"
+                    : "bg-white border-emerald-100 focus:border-emerald-500"}`}
             />
         )
     }
 
-    // ── Special form renderers ──────────────────────────────────────────────────
+    // ── Special renderers ───────────────────────────────────────────────────────
     const renderExtractionMonitoringForm = () => (
-        <div className="space-y-6">
-            <div className="bg-emerald-50/50 p-5 rounded-2xl border border-emerald-100 space-y-3">
-                <Label className="text-sm font-bold text-emerald-900">Number of Tanks for Monitoring</Label>
+        <div className="space-y-5">
+            <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 space-y-3">
+                <Label className="text-sm font-bold text-emerald-900">Number of Tanks</Label>
                 <div className="flex gap-2 flex-wrap">
                     {Array.from({ length: 20 }, (_, i) => i + 1).map((num) => (
-                        <button
-                            key={num}
-                            type="button"
-                            onClick={() => handleNumberOfTanksChange(num)}
-                            className={`px-4 py-2 rounded-xl font-semibold transition-all text-sm ${
-                                numberOfTanks === num
-                                    ? "bg-emerald-600 text-white shadow-sm"
-                                    : "bg-white border-2 border-emerald-200 text-emerald-800 hover:border-emerald-400"
-                            }`}
-                        >
+                        <button key={num} type="button" onClick={() => handleNumberOfTanksChange(num)}
+                            className={`w-9 h-9 rounded-lg font-semibold text-sm transition-all ${numberOfTanks === num
+                                ? "bg-emerald-600 text-white shadow-sm"
+                                : "bg-white border-2 border-emerald-200 text-emerald-800 hover:border-emerald-400"}`}>
                             {num}
                         </button>
                     ))}
@@ -467,29 +402,24 @@ export default function RecordEntryForm({
                     const tankData = extractionTankData[tankIndex]?.data || {}
                     const isSameAsFirst = extractionTankData[tankIndex]?.isSameAsFirst || false
                     return (
-                        <div key={tankIndex} className="bg-white p-6 rounded-2xl border border-emerald-100 shadow-sm">
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="font-bold text-emerald-900">Tank {tankIndex + 1}</h3>
+                        <div key={tankIndex} className="bg-white p-5 rounded-2xl border border-emerald-100 shadow-sm">
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="font-bold text-emerald-900 text-sm">Tank {tankIndex + 1}</h3>
                                 {tankIndex > 0 && (
-                                    <label className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-slate-600">
-                                        <input
-                                            type="checkbox"
-                                            checked={isSameAsFirst}
+                                    <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-500">
+                                        <input type="checkbox" checked={isSameAsFirst}
                                             onChange={(e) => handleCopyFromFirst(tankIndex, e.target.checked)}
-                                            className="w-4 h-4 accent-emerald-600"
-                                        />
+                                            className="w-3.5 h-3.5 accent-emerald-600" />
                                         Same as Tank 1
                                     </label>
                                 )}
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 {fields.map((field) => (
-                                    <div key={`${tankIndex}-${field.label}`} className="space-y-2">
-                                        <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">{field.label}</Label>
+                                    <div key={`${tankIndex}-${field.label}`} className="space-y-1">
+                                        <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{field.label}</Label>
                                         {renderExtractionField(
-                                            field,
-                                            tankIndex,
-                                            tankData[field.label] || "",
+                                            field, tankIndex, tankData[field.label] || "",
                                             (val) => handleExtractionTankChange(tankIndex, field.label, val),
                                             isSameAsFirst && tankIndex > 0 && field.label !== "Tank Number" && field.label !== "Alcohol Percentage"
                                         )}
@@ -508,32 +438,32 @@ export default function RecordEntryForm({
         const tank80 = fields.filter((f) => f.label.includes("(80)"))
         const other = fields.filter((f) => !f.label.includes("(70)") && !f.label.includes("(80)"))
         return (
-            <div className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                        <h3 className="text-center font-bold text-emerald-800 border-b border-emerald-200 pb-2">70% (350L)</h3>
+            <div className="space-y-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div className="space-y-3">
+                        <h3 className="text-center font-bold text-emerald-800 text-sm border-b border-emerald-200 pb-2">70% (350L)</h3>
                         {tank70.map((field) => (
-                            <div key={field.label} className="space-y-2">
-                                <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">{field.label.replace(" (70)", "")}</Label>
+                            <div key={field.label} className="space-y-1">
+                                <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{field.label.replace(" (70)", "")}</Label>
                                 {renderField(field, "default")}
                             </div>
                         ))}
                     </div>
-                    <div className="space-y-4">
-                        <h3 className="text-center font-bold text-emerald-800 border-b border-emerald-200 pb-2">80% (400L)</h3>
+                    <div className="space-y-3">
+                        <h3 className="text-center font-bold text-emerald-800 text-sm border-b border-emerald-200 pb-2">80% (400L)</h3>
                         {tank80.map((field) => (
-                            <div key={field.label} className="space-y-2">
-                                <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">{field.label.replace(" (80)", "")}</Label>
+                            <div key={field.label} className="space-y-1">
+                                <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{field.label.replace(" (80)", "")}</Label>
                                 {renderField(field, "default")}
                             </div>
                         ))}
                     </div>
                 </div>
                 {other.length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-emerald-100">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-emerald-100">
                         {other.map((field) => (
-                            <div key={field.label} className="space-y-2">
-                                <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">{field.label}</Label>
+                            <div key={field.label} className="space-y-1">
+                                <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{field.label}</Label>
                                 {renderField(field, "default")}
                             </div>
                         ))}
@@ -546,52 +476,40 @@ export default function RecordEntryForm({
     const renderHerbsStockForm = () => {
         const stockFieldLabels = ["Available Stock", "Qty Received", "Total Qty", "Qty Used", "Remaining Qty", "Checked By", "Remarks"]
         return (
-            <div className="space-y-6">
-                <div className="bg-emerald-50/50 p-5 rounded-2xl border border-emerald-100 space-y-3">
-                    <div className="flex items-center justify-between">
-                        <Label className="text-sm font-bold text-emerald-900">Select Herbs (multiple allowed)</Label>
-                        <button
-                            type="button"
-                            onClick={() => setShowCreateHerbDialog(true)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition-colors"
-                        >
-                            <Plus size={15} /> Create Herb
+            <div className="space-y-5">
+                <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                        <Label className="text-sm font-bold text-emerald-900">Select Herbs</Label>
+                        <button type="button" onClick={() => setShowCreateHerbDialog(true)}
+                            className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-colors">
+                            <Plus size={13} /> Create Herb
                         </button>
                     </div>
-                    <div className="flex flex-wrap gap-3">
+                    <div className="flex flex-wrap gap-2">
                         {isLoadingHerbs ? (
-                            <p className="text-sm text-emerald-700/70">Loading herbs...</p>
-                        ) : (
-                            herbOptions.map((herb) => (
-                                <label key={herb} className="flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedHerbs.includes(herb)}
-                                        onChange={() => handleHerbSelectionChange(herb)}
-                                        className="w-4 h-4 accent-emerald-600"
-                                    />
-                                    <span className="text-sm text-slate-700 font-medium">{herb}</span>
-                                </label>
-                            ))
-                        )}
+                            <p className="text-xs text-emerald-700/70">Loading herbs...</p>
+                        ) : herbOptions.map((herb) => (
+                            <label key={herb} className="flex items-center gap-1.5 cursor-pointer">
+                                <input type="checkbox" checked={selectedHerbs.includes(herb)}
+                                    onChange={() => handleHerbSelectionChange(herb)}
+                                    className="w-3.5 h-3.5 accent-emerald-600" />
+                                <span className="text-sm text-slate-700 font-medium">{herb}</span>
+                            </label>
+                        ))}
                     </div>
                     {selectedHerbs.length > 0 && (
                         <p className="text-xs text-emerald-700/70 font-medium">Selected: {selectedHerbs.join(", ")}</p>
                     )}
                 </div>
-
                 {selectedHerbs.length > 0 && (
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                         {selectedHerbs.map((herb) => (
-                            <div key={herb} className="bg-white p-5 rounded-2xl border border-emerald-100 shadow-sm">
-                                <p className="font-bold text-emerald-900 mb-4">{herb}</p>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div key={herb} className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm">
+                                <p className="font-bold text-emerald-900 text-sm mb-3">{herb}</p>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                     {stockFieldLabels.map((fieldLabel) => {
                                         const isAutoCalc = ["Total Qty", "Remaining Qty"].includes(fieldLabel)
-                                        const isAvailableLocked =
-                                            fieldLabel === "Available Stock" &&
-                                            herbsPreviousStock[herb] != null
-                                        const isDisabled = isAutoCalc || isAvailableLocked
+                                        const isLocked = fieldLabel === "Available Stock" && herbsPreviousStock[herb] != null
                                         return (
                                             <div key={fieldLabel} className="space-y-1">
                                                 <Label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">{fieldLabel}</Label>
@@ -600,12 +518,12 @@ export default function RecordEntryForm({
                                                         type={["Checked By", "Remarks"].includes(fieldLabel) ? "text" : "number"}
                                                         value={herbsData[herb]?.[fieldLabel] || ""}
                                                         onChange={(e) => handleHerbFieldChange(herb, fieldLabel, e.target.value)}
-                                                        disabled={isDisabled}
-                                                        className="w-full px-3 py-2 text-sm rounded-xl border border-emerald-100 bg-white focus:border-emerald-500 focus:outline-none disabled:bg-emerald-50 disabled:cursor-not-allowed transition-all"
-                                                        placeholder={fieldLabel}
+                                                        disabled={isAutoCalc || isLocked}
+                                                        placeholder=""
+                                                        className="w-full px-2 py-1.5 text-sm rounded-lg border border-emerald-100 bg-white focus:border-emerald-500 focus:outline-none disabled:bg-emerald-50 disabled:cursor-not-allowed transition-all h-9"
                                                     />
-                                                    {isAvailableLocked && herbsData[herb]?.[fieldLabel] && (
-                                                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-blue-600">🔒</span>
+                                                    {isLocked && herbsData[herb]?.[fieldLabel] && (
+                                                        <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-blue-600">🔒</span>
                                                     )}
                                                 </div>
                                             </div>
@@ -616,33 +534,22 @@ export default function RecordEntryForm({
                         ))}
                     </div>
                 )}
-
                 <Dialog open={showCreateHerbDialog} onOpenChange={setShowCreateHerbDialog}>
-                    <DialogContent className="sm:max-w-[425px]">
+                    <DialogContent className="sm:max-w-[400px]">
                         <DialogHeader>
                             <DialogTitle>Create New Herb</DialogTitle>
-                            <DialogDescription>
-                                Add a new herb type to the system for future selections.
-                            </DialogDescription>
+                            <DialogDescription>Add a new herb type to the system.</DialogDescription>
                         </DialogHeader>
-                        <div className="py-4">
-                            <Label htmlFor="herb-name" className="text-emerald-900 font-semibold">Herb Name</Label>
-                            <Input
-                                id="herb-name"
-                                placeholder="e.g., Alligator Pepper, Ginger Root"
-                                value={newHerbName}
+                        <div className="py-3">
+                            <Label htmlFor="herb-name" className="text-emerald-900 font-semibold text-sm">Herb Name</Label>
+                            <Input id="herb-name" placeholder="e.g., Alligator Pepper" value={newHerbName}
                                 onChange={(e) => setNewHerbName(e.target.value)}
                                 onKeyDown={(e) => e.key === "Enter" && handleCreateHerb()}
-                                className="mt-2 p-5 rounded-xl border-emerald-100"
-                            />
+                                className="mt-1.5 rounded-xl border-emerald-100" />
                         </div>
                         <DialogFooter>
-                            <Button variant="outline" onClick={() => { setShowCreateHerbDialog(false); setNewHerbName("") }}>
-                                Cancel
-                            </Button>
-                            <Button onClick={handleCreateHerb} className="bg-emerald-600 hover:bg-emerald-700 text-white">
-                                Create Herb
-                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => { setShowCreateHerbDialog(false); setNewHerbName("") }}>Cancel</Button>
+                            <Button size="sm" onClick={handleCreateHerb} className="bg-emerald-600 hover:bg-emerald-700 text-white">Create</Button>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
@@ -658,15 +565,13 @@ export default function RecordEntryForm({
         setError(null)
 
         try {
-            // Extraction Monitoring
             if (recordType === "Extraction Monitoring Records") {
                 for (let i = 0; i < numberOfTanks; i++) {
                     const tankData = extractionTankData[i]?.data || {}
                     const missing = fields.filter((f) => f.required && !tankData[f.label]?.trim()).map((f) => f.label)
                     if (missing.length > 0) { setError(`Tank ${i + 1} missing: ${missing.join(", ")}`); setIsSubmitting(false); return }
                     const res = await fetch("/api/records/submit", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
+                        method: "POST", headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ recordType, supervisorName, department, group: groupNumber, shift, date: selectedDate, productType: "Bitters", formData: tankData }),
                     })
                     if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Failed to save") }
@@ -674,17 +579,14 @@ export default function RecordEntryForm({
                 toast.success("Extraction records submitted!"); router.push("/dashboard/forms"); return
             }
 
-            // Herbs Stock
             if (recordType === "Herbs Stock") {
-                if (selectedHerbs.length === 0) { setError("Please select at least one herb type"); setIsSubmitting(false); return }
+                if (selectedHerbs.length === 0) { setError("Please select at least one herb"); setIsSubmitting(false); return }
                 for (const herb of selectedHerbs) {
                     const herbData = herbsData[herb] || {}
-                    const requiredFields = ["Available Stock", "Qty Received", "Qty Used", "Checked By"]
-                    const missing = requiredFields.filter((f) => !herbData[f]?.toString().trim())
+                    const missing = ["Available Stock", "Qty Received", "Qty Used", "Checked By"].filter((f) => !herbData[f]?.toString().trim())
                     if (missing.length > 0) { setError(`${herb} missing: ${missing.join(", ")}`); setIsSubmitting(false); return }
                     const res = await fetch("/api/records/submit", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
+                        method: "POST", headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ recordType, supervisorName, department, group: groupNumber, shift, date: selectedDate, formData: { "Type of Herb": herb, ...herbData } }),
                     })
                     if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Failed to save") }
@@ -692,7 +594,6 @@ export default function RecordEntryForm({
                 toast.success("Herbs stock submitted!"); router.push("/dashboard/forms"); return
             }
 
-            // Multi-product or single
             if (supportsMultiProduct && productionTypes.length === 0) {
                 setError(`Please select at least one: ${availableProducts.join(", ")}`); setIsSubmitting(false); return
             }
@@ -713,8 +614,7 @@ export default function RecordEntryForm({
 
             for (const product of productsToSubmit) {
                 const res = await fetch("/api/records/submit", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    method: "POST", headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         recordType, supervisorName, department, group: groupNumber, shift, date: selectedDate,
                         productType: product === "default" ? undefined : product,
@@ -726,7 +626,7 @@ export default function RecordEntryForm({
 
             toast.success("Record submitted successfully!"); router.push("/dashboard/forms")
         } catch (err) {
-            toast.error("There was a problem submitting the record.")
+            toast.error("There was a problem submitting.")
             setError(err instanceof Error ? err.message : "Failed to save record")
         } finally {
             setIsSubmitting(false)
@@ -735,94 +635,92 @@ export default function RecordEntryForm({
 
     // ── Render ──────────────────────────────────────────────────────────────────
     return (
-        <div className="bg-white rounded-3xl p-6 md:p-10 shadow-sm border border-emerald-100">
-            <form onSubmit={handleSubmit} className="space-y-8">
+        <div className="bg-white rounded-3xl p-5 md:p-8 shadow-sm border border-emerald-100">
+            <form onSubmit={handleSubmit} className="space-y-6">
 
-                {/* Step 1: Shift */}
-                <div className="bg-emerald-50/50 p-6 rounded-2xl border border-emerald-100 space-y-4">
-                    <Label className="text-base font-bold text-emerald-950 flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-black">1</span>
-                        Select Shift Type *
-                    </Label>
-                    <div className="flex gap-3">
-                        {["Morning", "Afternoon", "Night"].map((s) => (
-                            <label
-                                key={s}
-                                className={`flex-1 flex items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                                    shift === s
-                                        ? "border-emerald-600 bg-emerald-50 text-emerald-900 shadow-sm"
-                                        : "border-slate-200 bg-white text-slate-500 hover:border-emerald-300"
-                                }`}
+                {/* Row: Shift + Date side by side on larger screens */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Shift dropdown */}
+                    <div className="space-y-1.5">
+                        <Label className="text-sm font-bold text-emerald-900">
+                            Shift <span className="text-red-500">*</span>
+                        </Label>
+                        <div className="relative">
+                            <select
+                                value={shift}
+                                onChange={(e) => setShift(e.target.value)}
+                                required
+                                className="w-full h-10 pl-3 pr-9 text-sm font-medium rounded-xl border border-emerald-200 bg-white text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none appearance-none cursor-pointer transition-all"
                             >
-                                <input type="radio" name="shift" value={s} checked={shift === s} onChange={(e) => setShift(e.target.value)} className="sr-only" />
-                                <span className="font-semibold">{s}</span>
-                            </label>
-                        ))}
+                                <option value="" disabled>Select shift…</option>
+                                <option value="Morning">Morning</option>
+                                <option value="Afternoon">Afternoon</option>
+                                <option value="Night">Night</option>
+                            </select>
+                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        </div>
+                    </div>
+
+                    {/* Date */}
+                    <div className="space-y-1.5">
+                        <Label className="text-sm font-bold text-emerald-900">
+                            Date <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                            type="date"
+                            required
+                            value={selectedDate}
+                            onChange={(e) => setSelectedDate(e.target.value)}
+                            className="h-10 text-sm rounded-xl border-emerald-200 bg-white focus:border-emerald-500 focus:ring-emerald-500/20 font-medium text-slate-700"
+                        />
                     </div>
                 </div>
 
-                {/* Step 2: Date */}
-                <div className="bg-emerald-50/50 p-6 rounded-2xl border border-emerald-100 space-y-4">
-                    <Label className="text-base font-bold text-emerald-950 flex items-center gap-2">
-                        <span className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-black">2</span>
-                        Select Date *
-                    </Label>
-                    <Input
-                        type="date"
-                        required
-                        value={selectedDate}
-                        onChange={(e) => setSelectedDate(e.target.value)}
-                        className="w-full md:w-1/2 p-6 text-base rounded-xl border-emerald-200 bg-white focus:border-emerald-500 focus:ring-emerald-500/20 font-semibold text-emerald-900 shadow-sm"
-                    />
-                </div>
-
-                {/* Step 3: Product Type (if multi-product) */}
+                {/* Product type — compact dropdown (if multi-product) */}
                 {supportsMultiProduct && (
-                    <div className="bg-emerald-50/50 p-6 rounded-2xl border border-emerald-100 space-y-4">
-                        <Label className="text-base font-bold text-emerald-950 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-black">3</span>
-                            Select Product Type(s) *
+                    <div className="space-y-1.5">
+                        <Label className="text-sm font-bold text-emerald-900">
+                            Product Type <span className="text-red-500">*</span>
+                            <span className="ml-1 text-xs font-normal text-slate-400">(select all that apply)</span>
                         </Label>
-                        <p className="text-xs text-emerald-700/70">Select what was produced today (multiple allowed):</p>
-                        <div className="flex gap-4">
+                        <div className="flex flex-wrap gap-2">
                             {availableProducts.map((p) => (
-                                <label key={p} className={`flex-1 flex items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                                    productionTypes.includes(p)
-                                        ? "border-emerald-600 bg-emerald-50 text-emerald-900 shadow-sm"
-                                        : "border-slate-200 bg-white text-slate-500 hover:border-emerald-300"
-                                }`}>
-                                    <input
-                                        type="checkbox"
-                                        checked={productionTypes.includes(p)}
-                                        onChange={() => handleProductionTypeChange(p)}
-                                        className="sr-only"
-                                    />
-                                    <span className="font-semibold">{p}</span>
-                                </label>
+                                <button
+                                    key={p}
+                                    type="button"
+                                    onClick={() => handleProductionTypeChange(p)}
+                                    className={`px-4 h-9 rounded-xl border-2 text-sm font-semibold transition-all ${
+                                        productionTypes.includes(p)
+                                            ? "border-emerald-600 bg-emerald-600 text-white shadow-sm"
+                                            : "border-emerald-200 bg-white text-slate-600 hover:border-emerald-400"
+                                    }`}
+                                >
+                                    {p}
+                                </button>
                             ))}
                         </div>
                     </div>
                 )}
 
-                {/* Stock auto-populate notice */}
+                {/* Previous stock notices */}
                 {isLoadingStock && (
-                    <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200">
-                        <p className="text-sm font-semibold text-blue-700">Loading previous stock data...</p>
+                    <div className="px-4 py-3 rounded-xl bg-blue-50 border border-blue-200">
+                        <p className="text-xs font-semibold text-blue-700">Loading previous stock data…</p>
                     </div>
                 )}
                 {hasPreviousStock && !isLoadingStock && (
-                    <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200">
+                    <div className="px-4 py-3 rounded-xl bg-blue-50 border border-blue-200">
                         {(recordType === "Caramel Stock" || recordType === "Labels Stock") ? (
-                            <div className="space-y-1">
-                                <p className="text-sm font-semibold text-blue-700">Opening stock auto-populated from previous shift:</p>
+                            <div className="space-y-0.5">
+                                <p className="text-xs font-semibold text-blue-700">Opening stock auto-populated from previous shift:</p>
                                 {["Bitters", "Ginger"].map((p) =>
-                                    perProductPreviousStock[p] != null ? (
-                                        <p key={p} className="text-sm text-blue-600">{p}: {perProductPreviousStock[p]}</p>
-                                    ) : null
+                                    perProductPreviousStock[p] != null
+                                        ? <p key={p} className="text-xs text-blue-600">{p}: {perProductPreviousStock[p]}</p>
+                                        : null
                                 )}
                             </div>
                         ) : (
-                            <p className="text-sm font-semibold text-blue-700">
+                            <p className="text-xs font-semibold text-blue-700">
                                 Opening stock auto-populated from previous shift: {previousStock}
                             </p>
                         )}
@@ -831,80 +729,72 @@ export default function RecordEntryForm({
 
                 <hr className="border-emerald-100" />
 
-                {/* Dynamic form fields */}
-                <div className="space-y-6">
-                    <h3 className="text-lg font-bold text-emerald-950">Record Details</h3>
+                {/* Dynamic form body */}
+                <div className="space-y-5">
+                    <h3 className="text-base font-bold text-emerald-950">Record Details</h3>
 
-                    {recordType === "Extraction Monitoring Records" ? (
-                        renderExtractionMonitoringForm()
-                    ) : recordType === "Herbs Stock" ? (
-                        renderHerbsStockForm()
-                    ) : recordType === "Daily Records Alcohol For Concentrate" ? (
-                        renderAlcoholConcentrateForm()
-                    ) : supportsMultiProduct && productionTypes.length > 0 ? (
-                        productionTypes.map((product) => (
-                            <div key={product} className="bg-slate-50 p-6 rounded-2xl border border-emerald-100">
-                                <h4 className="font-bold text-emerald-900 mb-4">{product} Form</h4>
-                                {stockErrors[product] && (
-                                    <div className="p-3 mb-4 rounded-xl bg-red-50 border border-red-200">
-                                        <p className="text-red-600 text-sm font-semibold">⚠️ {stockErrors[product]}</p>
+                    {recordType === "Extraction Monitoring Records" ? renderExtractionMonitoringForm()
+                        : recordType === "Herbs Stock" ? renderHerbsStockForm()
+                        : recordType === "Daily Records Alcohol For Concentrate" ? renderAlcoholConcentrateForm()
+                        : supportsMultiProduct && productionTypes.length > 0 ? (
+                            productionTypes.map((product) => (
+                                <div key={product} className="bg-slate-50 p-5 rounded-2xl border border-emerald-100">
+                                    <h4 className="font-bold text-emerald-900 text-sm mb-3">{product} Form</h4>
+                                    {stockErrors[product] && (
+                                        <div className="px-3 py-2 mb-3 rounded-xl bg-red-50 border border-red-200">
+                                            <p className="text-red-600 text-xs font-semibold">⚠️ {stockErrors[product]}</p>
+                                        </div>
+                                    )}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        {fields.map((field) => (
+                                            <div key={field.label} className="space-y-1">
+                                                <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{field.label}</Label>
+                                                {renderField(field, product)}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))
+                        ) : !supportsMultiProduct ? (
+                            <div>
+                                {stockErrors["default"] && (
+                                    <div className="px-3 py-2 mb-3 rounded-xl bg-red-50 border border-red-200">
+                                        <p className="text-red-600 text-xs font-semibold">⚠️ {stockErrors["default"]}</p>
                                     </div>
                                 )}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     {fields.map((field) => (
-                                        <div key={field.label} className="space-y-2">
-                                            <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">{field.label}</Label>
-                                            {renderField(field, product)}
+                                        <div key={field.label} className="space-y-1">
+                                            <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{field.label}</Label>
+                                            {renderField(field, "default")}
                                         </div>
                                     ))}
                                 </div>
                             </div>
-                        ))
-                    ) : !supportsMultiProduct ? (
-                        <div>
-                            {stockErrors["default"] && (
-                                <div className="p-3 mb-4 rounded-xl bg-red-50 border border-red-200">
-                                    <p className="text-red-600 text-sm font-semibold">⚠️ {stockErrors["default"]}</p>
-                                </div>
-                            )}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                {fields.map((field) => (
-                                    <div key={field.label} className="space-y-2">
-                                        <Label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">{field.label}</Label>
-                                        {renderField(field, "default")}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    ) : (
-                        <p className="text-sm text-slate-500 italic">Select a product type above to begin.</p>
-                    )}
+                        ) : (
+                            <p className="text-sm text-slate-400 italic">Select a product type above to begin.</p>
+                        )}
                 </div>
 
-                {/* Error */}
                 {error && (
-                    <div className="p-4 rounded-2xl bg-red-50 border border-red-200">
+                    <div className="px-4 py-3 rounded-xl bg-red-50 border border-red-200">
                         <p className="text-sm font-semibold text-red-700">⚠️ {error}</p>
                     </div>
                 )}
 
                 {/* Actions */}
-                <div className="pt-4 border-t border-emerald-100 flex items-center justify-end gap-4">
+                <div className="pt-3 border-t border-emerald-100 flex items-center justify-end gap-3">
                     <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => router.back()}
-                        disabled={isSubmitting}
-                        className="px-6 py-6 text-base font-semibold border-emerald-200 text-emerald-700 hover:bg-emerald-50 rounded-xl"
+                        type="button" variant="outline" onClick={() => router.back()} disabled={isSubmitting}
+                        className="h-10 px-5 text-sm font-semibold border-emerald-200 text-emerald-700 hover:bg-emerald-50 rounded-xl"
                     >
                         Cancel
                     </Button>
                     <Button
-                        type="submit"
-                        disabled={isSubmitting}
-                        className="px-8 py-6 text-base font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-lg shadow-emerald-600/20"
+                        type="submit" disabled={isSubmitting}
+                        className="h-10 px-6 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md shadow-emerald-600/20"
                     >
-                        {isSubmitting ? "Submitting..." : "Submit Record"}
+                        {isSubmitting ? "Submitting…" : "Submit Record"}
                     </Button>
                 </div>
             </form>
