@@ -32,7 +32,7 @@ export default async function HistoryPage() {
     const fetchPromises = recordTables.map(async (table) => {
         const { data } = await supabase
             .from(table)
-            .select('id, record_type, date, shift, department, created_at')
+            .select('*')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false })
             .limit(10) // Limit per table to prevent massive overload
@@ -45,6 +45,14 @@ export default async function HistoryPage() {
 
     const results = await Promise.all(fetchPromises)
     allRecords = results.flat().sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+    // Helper to format column names into readable labels
+    const formatLabel = (key: string) => {
+        return key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+    }
+
+    // List of keys to hide in the detailed view
+    const metaKeys = ['id', 'user_id', 'created_at', 'updated_at', 'record_type', 'date', 'shift', 'department', 'supervisor_name', '__table']
 
     return (
         <div className="space-y-8 max-w-5xl mx-auto animate-fade-in-up">
@@ -73,18 +81,34 @@ export default async function HistoryPage() {
                 ) : (
                     <div className="divide-y divide-emerald-50">
                         {allRecords.map((record) => (
-                            <div key={record.id} className="p-6 hover:bg-emerald-50/30 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                <div className="space-y-1">
-                                    <h3 className="font-bold text-emerald-950">{record.record_type}</h3>
-                                    <div className="flex items-center gap-3 text-sm text-slate-500 font-medium">
-                                        <span className="bg-slate-100 px-2 py-1 rounded-md">{record.department}</span>
-                                        <span>{record.shift} Shift</span>
-                                        <span>•</span>
-                                        <span>{new Date(record.date).toLocaleDateString()}</span>
+                            <div key={record.id} className="p-6 hover:bg-emerald-50/30 transition-colors space-y-4">
+                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    <div className="space-y-1">
+                                        <h3 className="font-bold text-emerald-950">{record.record_type}</h3>
+                                        <div className="flex items-center gap-3 text-sm text-slate-500 font-medium">
+                                            <span className="bg-slate-100 px-2 py-1 rounded-md">{record.department}</span>
+                                            {record.product && <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-md">{record.product}</span>}
+                                            <span>{record.shift} Shift</span>
+                                            <span>•</span>
+                                            <span>{new Date(record.date).toLocaleDateString()}</span>
+                                        </div>
+                                    </div>
+                                    <div className="text-right text-xs text-slate-400 font-medium whitespace-nowrap">
+                                        Submitted: {new Date(record.created_at).toLocaleString()}
                                     </div>
                                 </div>
-                                <div className="text-right text-xs text-slate-400 font-medium whitespace-nowrap">
-                                    Submitted: {new Date(record.created_at).toLocaleString()}
+
+                                {/* Dynamic Details Grid */}
+                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 p-4 bg-slate-50/50 rounded-2xl border border-slate-100">
+                                    {Object.entries(record)
+                                        .filter(([key, value]) => !metaKeys.includes(key) && value !== null && value !== undefined && value !== '')
+                                        .map(([key, value]) => (
+                                            <div key={key} className="space-y-1">
+                                                <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">{formatLabel(key)}</p>
+                                                <p className="text-sm font-semibold text-emerald-900">{String(value)}</p>
+                                            </div>
+                                        ))
+                                    }
                                 </div>
                             </div>
                         ))}
