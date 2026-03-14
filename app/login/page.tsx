@@ -22,7 +22,7 @@ export default function LoginPage() {
                         priority
                     />
                     <div className="text-center space-y-2">
-                        <h1 className="text-2xl font-bold text-emerald-950 tracking-tight">Welcome Back</h1>
+                        <h1 className="text-2xl font-bold text-emerald-950 tracking-tight">Welcome, Super!</h1>
                         <p className="text-sm font-medium text-emerald-700/70 tracking-wide">Sign in to your account</p>
                     </div>
                 </div>
