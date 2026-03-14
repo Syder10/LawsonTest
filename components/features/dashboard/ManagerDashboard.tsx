@@ -2,12 +2,12 @@ import { LiveStocksDisplay } from "@/components/live-stocks-display"
 import { ManagerAnalytics } from "@/components/features/dashboard/ManagerAnalytics"
 import { Download } from "lucide-react"
 
-export function ManagerDashboard({ username, userId }: { username: string, userId: string }) {
+export function ManagerDashboard({ userId }: { userId: string }) {
     return (
         <div className="space-y-10 animate-fade-in-up">
             <div className="space-y-3 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                 <div>
-                    <h2 className="text-4xl font-extrabold tracking-tight text-emerald-950">Welcome back, {username}!</h2>
+                    <h2 className="text-4xl font-extrabold tracking-tight text-emerald-950">Welcome, Manager!</h2>
                     <p className="text-lg text-emerald-700/80 font-medium">Here is your manager overview.</p>
                 </div>
                 <a
