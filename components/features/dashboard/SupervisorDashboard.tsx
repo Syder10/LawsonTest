@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { FileText, UserCircle, Download } from 'lucide-react'
 
-export function SupervisorDashboard({ username, userId }: { username: string, userId: string }) {
+export function SupervisorDashboard({ userId }: { userId: string }) {
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
@@ -9,7 +9,7 @@ export function SupervisorDashboard({ username, userId }: { username: string, us
         <div className="space-y-10 animate-fade-in-up">
             <div className="space-y-3 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                 <div>
-                    <h2 className="text-4xl font-extrabold tracking-tight text-emerald-950">Welcome back, {username}!</h2>
+                    <h2 className="text-4xl font-extrabold tracking-tight text-emerald-950">Welcome, Supervisor!</h2>
                     <p className="text-lg text-emerald-700/80 font-medium mt-3">What would you like to do today?</p>
                 </div>
                 <a
