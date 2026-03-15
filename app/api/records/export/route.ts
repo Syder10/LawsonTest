@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js"
+import { createClient } from "@/lib/supabase/server"
 import { type NextRequest, NextResponse } from "next/server"
 
 const recordTypeToTable: Record<string, string> = {
@@ -90,11 +90,28 @@ async function fetchTableData(supabase: any, table: string, userId: string | nul
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+    const supabase = await createClient()
 
     const searchParams = request.nextUrl.searchParams
-    const userId = searchParams.get('userId')
+    const rawUserIdParam = searchParams.get('userId')
     const monthStr = searchParams.get('month') // e.g. "2023-10"
+
+    // If the userId param is passed (which is actually a supervisor_id like BLE_001 in the new UI),
+    // we need to look up their actual UUID to filter the tables correctly.
+    let actualUserIdForFiltering = rawUserIdParam
+
+    if (rawUserIdParam && !rawUserIdParam.includes('-')) {
+      // It's likely a supervisor_id (e.g., BLE_001), not a UUID
+      const { data: profile } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('supervisor_id', rawUserIdParam)
+          .single()
+
+      if (profile) {
+        actualUserIdForFiltering = profile.id
+      }
+    }
 
     let startDate = null
     let endDate = null
@@ -113,7 +130,7 @@ export async function GET(request: NextRequest) {
     let totalRecords = 0
 
     for (const [recordType, table] of Object.entries(recordTypeToTable)) {
-      const data = await fetchTableData(supabase, table, userId, startDate, endDate)
+      const data = await fetchTableData(supabase, table, actualUserIdForFiltering, startDate, endDate)
       if (data.length > 0) {
         allData[recordType] = data
         totalRecords += data.length
@@ -122,7 +139,7 @@ export async function GET(request: NextRequest) {
 
     let excelContent = "PRODUCTION RECORDS EXPORT\n"
     excelContent += `Date Generated: ${new Date().toLocaleString()}\n`
-    if (userId) excelContent += `Filtered by User ID: ${userId}\n`
+    if (rawUserIdParam) excelContent += `Filtered by User ID: ${rawUserIdParam}\n`
     if (monthStr) excelContent += `Filtered by Month: ${monthStr}\n`
     excelContent += `Total Records: ${totalRecords}\n\n`
 
