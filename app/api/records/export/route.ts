@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@supabase/supabase-js"
 import { type NextRequest, NextResponse } from "next/server"
 
 const recordTypeToTable: Record<string, string> = {
@@ -90,7 +90,15 @@ async function fetchTableData(supabase: any, table: string, userId: string | nul
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error("Missing Supabase credentials for export route")
+      return NextResponse.json({ error: "Server Configuration Error" }, { status: 500 })
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     const searchParams = request.nextUrl.searchParams
     const rawUserIdParam = searchParams.get('userId')
