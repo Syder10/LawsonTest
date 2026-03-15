@@ -7,18 +7,29 @@ import { createClient } from '@/lib/supabase/server'
 export async function login(state: any, formData: FormData) {
     const supabase = await createClient()
 
-    // We are using 'username' (which we map to email internally or we setup Supabase to use username)
-    // Standard Supabase Auth uses email. If the user strictly wants a username, we usually spoof the domain for them (e.g. username@lawson.local)
-    // Let's assume standard email auth for now but styled as username, or we append a domain.
-
     const rawUsername = formData.get('username') as string
     const password = formData.get('password') as string
 
-    // Simple trick: if they type 'john', we log them in as 'john@lawson.com' to satisfy Supabase's email requirement
-    const email = rawUsername.includes('@') ? rawUsername : `${rawUsername}@lawson.com`
+    let emailToUse = rawUsername
+
+    // If it's not an email, assume it's a supervisor_id (e.g., BLE_001)
+    if (!rawUsername.includes('@')) {
+        // Query the profiles table to cross-reference the supervisor_id
+        const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('email')
+            .eq('supervisor_id', rawUsername)
+            .single()
+
+        if (profileError || !profile) {
+            return { error: 'Invalid Username or Supervisor ID' }
+        }
+
+        emailToUse = profile.email
+    }
 
     const { error } = await supabase.auth.signInWithPassword({
-        email,
+        email: emailToUse,
         password,
     })
 
