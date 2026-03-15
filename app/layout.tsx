@@ -2,6 +2,7 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
+import { Toaster } from "sonner"
 import "./globals.css"
 
 const geist = Geist({ subsets: ["latin"] })
@@ -24,6 +25,7 @@ export default function RootLayout({
       <body className={`${geist.className} antialiased`}>
         {children}
         <Analytics />
+        <Toaster position="top-right" richColors />
       </body>
     </html>
   )
