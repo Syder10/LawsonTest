@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 
-export async function login(formData: FormData) {
+export async function login(state: any, formData: FormData) {
     const supabase = await createClient()
 
     // We are using 'username' (which we map to email internally or we setup Supabase to use username)
