@@ -35,6 +35,7 @@ export default async function ProfilePage() {
                     userId={user.id}
                     initialData={profile || {}}
                     username={user.email || ''}
+                    supervisorId={profile?.supervisor_id || ''}
                 />
             </div>
         </div>
