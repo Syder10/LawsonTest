@@ -26,7 +26,7 @@ export default function LoginPage() {
                         priority
                     />
                     <div className="text-center space-y-2">
-                        <h1 className="text-2xl font-bold text-emerald-950 tracking-tight">Welcome Super!</h1>
+                        <h1 className="text-2xl font-bold text-emerald-950 tracking-tight">Welcome Back</h1>
                         <p className="text-sm font-medium text-emerald-700/70 tracking-wide">Sign in to your account</p>
                     </div>
                 </div>
@@ -38,7 +38,7 @@ export default function LoginPage() {
                             id="username"
                             name="username"
                             type="text"
-                            placeholder="e.g., john.doe"
+                            placeholder="Username"
                             required
                             disabled={isPending}
                             className="w-full p-6 text-base rounded-xl border-emerald-100 bg-white/50 focus:border-emerald-500 focus:ring-emerald-500/20 transition-all"
