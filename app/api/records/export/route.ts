@@ -48,7 +48,7 @@ function convertToCSV(data: any[]): string {
 
 async function fetchTableData(supabase: any, table: string, userId: string | null, startDate: string | null, endDate: string | null) {
   try {
-    let query = supabase.from(table).select("*").order("created_at", { ascending: false })
+    let query = supabase.from(table).select("*, profiles ( supervisor_id, full_name, email )").order("created_at", { ascending: false })
 
     if (userId) {
       query = query.eq('user_id', userId)
@@ -65,7 +65,23 @@ async function fetchTableData(supabase: any, table: string, userId: string | nul
       return []
     }
 
-    return data || []
+    // Map data to gently hoist the supervisor_id from the joined profiles table
+    return (data || []).map((row: any) => {
+      const { profiles, ...rest } = row
+      
+      let supervisorId = ""
+      if (profiles) {
+        // Fallback to email prefix if supervisor_id is missing
+        supervisorId = profiles.supervisor_id || (profiles.email ? profiles.email.split('@')[0] : '')
+      }
+      
+      // We replace user_id with our preferred short identifier
+      delete rest.user_id
+      return {
+        "Supervisor ID": supervisorId,
+        ...rest
+      }
+    })
   } catch (err) {
     console.error(`Exception fetching from ${table}:`, err)
     return []
