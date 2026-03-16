@@ -46,12 +46,16 @@ function convertToCSV(data: any[]): string {
   return [csvHeaders, ...csvRows].join("\n")
 }
 
-async function fetchTableData(supabase: any, table: string, userId: string | null, startDate: string | null, endDate: string | null) {
+async function fetchTableData(supabase: any, table: string, userId: string | null, supervisorName: string | null, startDate: string | null, endDate: string | null) {
   try {
     let query = supabase.from(table).select("*, profiles ( supervisor_id, full_name, email )").order("created_at", { ascending: false })
 
-    if (userId) {
+    if (userId && supervisorName) {
+      query = query.or(`user_id.eq.${userId},supervisor_name.ilike.%${supervisorName}%`)
+    } else if (userId) {
       query = query.eq('user_id', userId)
+    } else if (supervisorName) {
+      query = query.ilike('supervisor_name', `%${supervisorName}%`)
     }
 
     if (startDate && endDate) {
@@ -104,20 +108,22 @@ export async function GET(request: NextRequest) {
     const rawUserIdParam = searchParams.get('userId')
     const monthStr = searchParams.get('month') // e.g. "2023-10"
 
-    // If the userId param is passed (which is actually a supervisor_id like BLE_001 in the new UI),
-    // we need to look up their actual UUID to filter the tables correctly.
     let actualUserIdForFiltering = rawUserIdParam
+    let mappedSupervisorName = null
+    let displayUserId = rawUserIdParam
 
-    if (rawUserIdParam && !rawUserIdParam.includes('-')) {
-      // It's likely a supervisor_id (e.g., BLE_001), not a UUID
+    if (rawUserIdParam) {
+      const isUUID = rawUserIdParam.includes('-')
       const { data: profile } = await supabase
           .from('profiles')
-          .select('id')
-          .eq('supervisor_id', rawUserIdParam)
+          .select('id, full_name, supervisor_id')
+          .eq(isUUID ? 'id' : 'supervisor_id', rawUserIdParam)
           .single()
 
       if (profile) {
         actualUserIdForFiltering = profile.id
+        mappedSupervisorName = profile.full_name
+        displayUserId = profile.supervisor_id || profile.full_name || rawUserIdParam
       }
     }
 
@@ -138,7 +144,7 @@ export async function GET(request: NextRequest) {
     let totalRecords = 0
 
     for (const [recordType, table] of Object.entries(recordTypeToTable)) {
-      const data = await fetchTableData(supabase, table, actualUserIdForFiltering, startDate, endDate)
+      const data = await fetchTableData(supabase, table, actualUserIdForFiltering, mappedSupervisorName, startDate, endDate)
       if (data.length > 0) {
         allData[recordType] = data
         totalRecords += data.length
@@ -147,7 +153,7 @@ export async function GET(request: NextRequest) {
 
     let excelContent = "PRODUCTION RECORDS EXPORT\n"
     excelContent += `Date Generated: ${new Date().toLocaleString()}\n`
-    if (rawUserIdParam) excelContent += `Filtered by User ID: ${rawUserIdParam}\n`
+    if (displayUserId) excelContent += `Filtered by User Identifier: ${displayUserId}\n`
     if (monthStr) excelContent += `Filtered by Month: ${monthStr}\n`
     excelContent += `Total Records: ${totalRecords}\n\n`
 
