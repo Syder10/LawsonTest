@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { LogOut, User } from "lucide-react"
+import Image from "next/image"
 
 export default async function DashboardLayout({
     children,
@@ -14,17 +15,21 @@ export default async function DashboardLayout({
         redirect("/login")
     }
 
-    // Find their username from their email if needed
-    const displayEmail = user.email || 'User'
-    const username = displayEmail.split('@')[0]
+    // Fetch the user's role so the header label matches their role
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user!.id)
+        .single()
+
+    const role = profile?.role || 'supervisor'
+    const displayName = (role === 'manager' || role === 'admin') ? 'Manager' : 'Supervisor'
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
             <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">
                 <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-emerald-100 text-emerald-700 flex items-center justify-center rounded-xl font-bold text-lg shadow-sm">
-                        L
-                    </div>
+                    <Image src="/logo.png" alt="Lawson LLC Logo" width={40} height={40} className="w-10 h-10 object-contain" />
                     <div>
                         <h1 className="text-xl font-bold text-emerald-950 leading-tight">Lawson Production</h1>
                         <p className="text-xs font-semibold text-emerald-600/70 uppercase tracking-widest hidden sm:block">Management System</p>
@@ -34,7 +39,7 @@ export default async function DashboardLayout({
                     <div className="flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-full border border-slate-200">
                         <User className="w-4 h-4 text-emerald-600" />
                         <span className="text-sm font-semibold text-slate-700">
-                            {username}
+                            {displayName}
                         </span>
                     </div>
                     <form action="/auth/signout" method="post">
