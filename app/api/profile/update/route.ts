@@ -27,7 +27,7 @@ export async function POST(request: Request) {
                 full_name,
                 department,
                 group_number: Number(group_number),
-                username: user.email, // keeping username synced just in case
+                email: user.email, // keeping email synced
                 updated_at: new Date().toISOString()
             }, { onConflict: "id" })
 
