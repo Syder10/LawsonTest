@@ -123,7 +123,8 @@ export async function GET(request: NextRequest) {
       if (profile) {
         actualUserIdForFiltering = profile.id
         mappedSupervisorName = profile.full_name
-        displayUserId = profile.supervisor_id || profile.full_name || rawUserIdParam
+        // Use full_name for the filter text exactly as requested by the user
+        displayUserId = profile.full_name || profile.supervisor_id || rawUserIdParam
       }
     }
 
@@ -153,7 +154,7 @@ export async function GET(request: NextRequest) {
 
     let excelContent = "PRODUCTION RECORDS EXPORT\n"
     excelContent += `Date Generated: ${new Date().toLocaleString()}\n`
-    if (displayUserId) excelContent += `Filtered by User Identifier: ${displayUserId}\n`
+    if (displayUserId) excelContent += `Filtered by User Name: ${displayUserId}\n`
     if (monthStr) excelContent += `Filtered by Month: ${monthStr}\n`
     excelContent += `Total Records: ${totalRecords}\n\n`
 
