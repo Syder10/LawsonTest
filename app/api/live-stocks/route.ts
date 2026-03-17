@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     // Formula: new available_stock = current available_stock + quantity_produced - quantity_loaded
     const { data: rows, error } = await supabase
       .from("packaging_live_stocks")
-      .select("product, available_stock, last_produced, last_loaded, last_updated_at")
+      .select("product, available_stock, last_produced, last_loaded, last_updated_at, minimum_threshold")
 
     if (error) {
       console.error("[v0] Supabase error:", error)
@@ -21,8 +21,8 @@ export async function GET(request: NextRequest) {
     }
 
     const liveStocks: Record<string, any> = {
-      bitters: { quantityProduced: 0, quantityLoaded: 0, available: 0 },
-      ginger:  { quantityProduced: 0, quantityLoaded: 0, available: 0 },
+      bitters: { quantityProduced: 0, quantityLoaded: 0, available: 0, minimumThreshold: 0 },
+      ginger:  { quantityProduced: 0, quantityLoaded: 0, available: 0, minimumThreshold: 0 },
     }
 
     rows?.forEach((row: any) => {
@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
           quantityLoaded:   row.last_loaded     ?? 0,
           available:        row.available_stock ?? 0,
           lastUpdatedAt:    row.last_updated_at ?? null,
+          minimumThreshold: row.minimum_threshold ?? 0,
         }
       }
     })
