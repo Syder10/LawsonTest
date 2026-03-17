@@ -33,15 +33,12 @@ const fieldNameToColumn: Record<string, string> = {
   "Total Stock": "total_stock",
   "Quantity Used": "quantity_used",
   "Remaining Stock Level": "remaining_stock",
-  Destination: "destination",
 
   // Alcohol and Blending - Daily Records for Alcohol and Blending
   "Number of Alcohol Transferred (DRUMS)": "alcohol_transferred_drums",
   "Number of Alcohol Transferred (LITRES)": "alcohol_transferred_litres",
   "Number of Finished Products Transferred (TANKS)": "finished_products_transferred_tanks",
-  "Number of Finished Products Transferred (LITRES)": "finished_products_transferred_litres",
-  "Number of Staff Used": "number_of_staff",
-  "Hourly Work": "hourly_work",
+  "Number of Staff Transferred (LITRES)": "finished_products_transferred_litres",
 
   // Alcohol and Blending - Ginger Production
   "Quantity of Raw Ginger (BAGS)": "quantity_raw_ginger_bags",
@@ -58,7 +55,6 @@ const fieldNameToColumn: Record<string, string> = {
   "Alcohol Percentage": "alcohol_percentage",
   "Expected Maturity Date": "expected_maturity_date",
   "Prepared By": "prepared_by",
-  "Remarks (To be filled)": "remarks",
 
   // Filling Line - Filling Line Daily Records
   Product: "product",
@@ -90,7 +86,11 @@ const fieldNameToColumn: Record<string, string> = {
   "Checked By": "checked_by",
 
   // Common fields
+  "Number of Staff Used": "number_of_staff",
+  "Hourly Work": "hourly_work",
+  Destination: "destination",
   Remarks: "remarks",
+  "Remarks (To be filled)": "remarks",
 }
 
 export async function POST(request: NextRequest) {
@@ -159,44 +159,7 @@ export async function POST(request: NextRequest) {
     console.log("[v0] Successfully inserted record:", data)
 
     // ── Live Stock Update ────────────────────────────────────────────────────
-    if (table === "packaging_daily_records" && dbData.product) {
-      const productKey = dbData.product as string
-
-      const produced = Number(dbData.quantity_cartons_produced) || 0
-      const loaded = Number(dbData.quantity_cartons_loaded) || 0
-
-      const { data: stockRow, error: fetchErr } = await supabase
-        .from("packaging_live_stocks")
-        .select("available_stock")
-        .ilike("product", productKey)
-        .maybeSingle()
-
-      if (fetchErr) {
-        console.error("[v0] Live stock fetch error:", fetchErr)
-      } else {
-        const currentStock = stockRow?.available_stock ?? 0
-        const newStock = currentStock + produced - loaded
-
-        const { error: upsertErr } = await supabase
-          .from("packaging_live_stocks")
-          .upsert(
-            {
-              product: productKey,
-              available_stock: newStock,
-              last_produced: produced,
-              last_loaded: loaded,
-              last_updated_at: new Date().toISOString(),
-            },
-            { onConflict: "product" }
-          )
-
-        if (upsertErr) {
-          console.error("[v0] Live stock upsert error:", upsertErr)
-        } else {
-          console.log(`[v0] Live stock updated for ${productKey}: ${currentStock} + ${produced} - ${loaded} = ${newStock}`)
-        }
-      }
-    }
+    // Now handled automatically via PostgreSQL Database Triggers created in Supabase
     // ────────────────────────────────────────────────────────────────────────
 
     return NextResponse.json({ success: true, data })
