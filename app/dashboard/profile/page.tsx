@@ -16,6 +16,8 @@ export default async function ProfilePage() {
         .eq("id", user.id)
         .single()
 
+    const displayUsername = user.email?.split('@')[0] || ''
+
     return (
         <div className="space-y-8 max-w-4xl mx-auto animate-fade-in-up">
             <div className="flex items-center justify-between">
@@ -34,7 +36,7 @@ export default async function ProfilePage() {
                 <ProfileForm
                     userId={user.id}
                     initialData={profile || {}}
-                    username={user.email || ''}
+                    username={displayUsername}
                     supervisorId={profile?.supervisor_id || ''}
                 />
             </div>
