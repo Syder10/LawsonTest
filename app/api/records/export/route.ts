@@ -51,7 +51,8 @@ async function fetchTableData(supabase: any, table: string, userId: string | nul
     let query = supabase.from(table).select("*, profiles ( supervisor_id, full_name, email )").order("created_at", { ascending: false })
 
     if (userId && supervisorName) {
-      query = query.or(`user_id.eq.${userId},supervisor_name.ilike.%${supervisorName}%`)
+      const safeName = supervisorName.replace(/"/g, '""');
+      query = query.or(`user_id.eq.${userId},supervisor_name.ilike."%${safeName}%"`)
     } else if (userId) {
       query = query.eq('user_id', userId)
     } else if (supervisorName) {
