@@ -12,20 +12,9 @@ export async function login(state: any, formData: FormData) {
 
     let emailToUse = rawUsername
 
-    // If it's not an email, assume it's a supervisor_id (e.g., BLE_001)
+    // If it's not an email, append @llc.com
     if (!rawUsername.includes('@')) {
-        // Query the profiles table to cross-reference the supervisor_id
-        const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('email')
-            .eq('supervisor_id', rawUsername)
-            .single()
-
-        if (profileError || !profile) {
-            return { error: 'Invalid Username or Supervisor ID' }
-        }
-
-        emailToUse = profile.email
+        emailToUse = `${rawUsername}@llc.com`
     }
 
     const { error } = await supabase.auth.signInWithPassword({
