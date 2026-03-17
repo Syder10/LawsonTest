@@ -51,12 +51,15 @@ async function fetchTableData(supabase: any, table: string, userId: string | nul
     let query = supabase.from(table).select("*, profiles ( supervisor_id, full_name, email )").order("created_at", { ascending: false })
 
     if (userId && supervisorName) {
-      const safeName = supervisorName.replace(/"/g, '""');
-      query = query.or(`user_id.eq.${userId},supervisor_name.ilike."%${safeName}%"`)
+      // Provide a highly flexible partial match that ignores exact spacing
+      const matchName = supervisorName.trim().split(' ')[0]
+
+      query = query.or(`user_id.eq.${userId},supervisor_name.ilike.%${matchName}%`)
     } else if (userId) {
       query = query.eq('user_id', userId)
     } else if (supervisorName) {
-      query = query.ilike('supervisor_name', `%${supervisorName}%`)
+      const matchName = supervisorName.trim().split(' ')[0]
+      query = query.ilike('supervisor_name', `%${matchName}%`)
     }
 
     if (startDate && endDate) {
