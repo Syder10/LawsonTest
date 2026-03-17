@@ -13,9 +13,10 @@ interface ProfileFormProps {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     initialData: any
     username: string
+    supervisorId: string
 }
 
-export default function ProfileForm({ userId, initialData, username }: ProfileFormProps) {
+export default function ProfileForm({ userId, initialData, username, supervisorId }: ProfileFormProps) {
     const router = useRouter()
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [formData, setFormData] = useState({
