@@ -2,7 +2,7 @@
 import { LogOut, Download, RefreshCw, Package, Droplet, AlertCircle, TrendingUp, Box, Tag, FlaskConical } from "lucide-react"
 import { useState, useEffect } from "react"
 import Image from "next/image"
-import { createClient } from "@/lib/supabase/client"
+import { createClient } from "@supabase/supabase-js"
 import { useRouter } from "next/navigation"
 import { LiveStocksDisplay } from "@/components/live-stocks-display"
 
@@ -145,7 +145,10 @@ function SectionHeader({ label, badge, badgeColor = "bg-emerald-950 text-white" 
 
 export function ManagerDashboard({ userId }: { userId: string }) {
   const router = useRouter()
-  const supabase = createClient()
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
   const [isExporting, setIsExporting] = useState(false)
   const [kpiData, setKpiData] = useState<KPIData | null>(null)
   const [isLoadingKPIs, setIsLoadingKPIs] = useState(true)
