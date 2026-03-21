@@ -1,120 +1,216 @@
 import { createClient } from "@/lib/supabase/server"
 import Link from "next/link"
-import { ArrowLeft, Calendar } from "lucide-react"
+import { ArrowLeft, Calendar, FileText } from "lucide-react"
 
-// A helper dictionary to loop over all 12 tables and fetch the user's history
-const recordTables = [
-    "blowing_daily_records",
-    "alcohol_stock_level_records",
-    "alcohol_blending_daily_records",
-    "ginger_production_records",
-    "extraction_monitoring_records",
-    "filling_line_daily_records",
-    "packaging_daily_records",
-    "concentrate_alcohol_records",
-    "herbs_stock_records",
-    "caramel_stock_records",
-    "caps_stock_records",
-    "labels_stock_records"
-]
+// Map each department to its tables and record type labels
+const DEPARTMENT_TABLES: Record<string, { table: string; label: string }[]> = {
+  "Blowing": [
+    { table: "blowing_daily_records", label: "Daily Records (Preform Usage)" },
+  ],
+  "Alcohol and Blending": [
+    { table: "alcohol_stock_level_records",      label: "Daily Usage of Alcohol And Stock Level" },
+    { table: "alcohol_blending_daily_records",   label: "Daily Records for Alcohol and Blending" },
+    { table: "ginger_production_records",        label: "Ginger Production" },
+    { table: "extraction_monitoring_records",    label: "Extraction Monitoring Records" },
+    { table: "caramel_stock_records",            label: "Caramel Stock" },
+  ],
+  "Filling Line": [
+    { table: "filling_line_daily_records",       label: "Filling Line Daily Records" },
+    { table: "caps_stock_records",               label: "Caps Stock" },
+    { table: "labels_stock_records",             label: "Labels Stock" },
+  ],
+  "Packaging": [
+    { table: "packaging_daily_records",          label: "Packaging Daily Records" },
+  ],
+  "Concentrate": [
+    { table: "concentrate_alcohol_records",      label: "Daily Records Alcohol For Concentrate" },
+    { table: "herbs_stock_records",              label: "Herbs Stock" },
+  ],
+}
+
+const META_KEYS = new Set([
+  "id", "user_id", "created_at", "updated_at",
+  "record_type", "date", "shift", "department", "supervisor_name",
+])
+
+function formatLabel(key: string) {
+  return key.split("_").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
+}
+
+function formatDate(dateStr: string) {
+  return new Date(dateStr + "T00:00:00").toLocaleDateString(undefined, {
+    weekday: "short", year: "numeric", month: "short", day: "numeric",
+  })
+}
+
+export const dynamic = "force-dynamic"
 
 export default async function HistoryPage() {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
 
-    if (!user) return null
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("department, role, full_name")
+    .eq("id", user.id)
+    .single()
 
-    // In a real robust implementation, we might want to paginate this or filter by date on the server.
-    // For the MVP Phase 3 SAP request, we will fetch the 50 most recent records across all tables for this user.
-    let allRecords: any[] = []
+  const userDept     = profile?.department || null
+  const isManager    = profile?.role === "manager" || profile?.role === "admin"
 
-    // Run queries in parallel for performance since there are 12 tables
-    const fetchPromises = recordTables.map(async (table) => {
-        const { data } = await supabase
-            .from(table)
-            .select('*')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(10) // Limit per table to prevent massive overload
+  // Determine which department's tables to query
+  // Supervisors only see their own department; managers see all
+  let tablesToQuery: { table: string; label: string; department: string }[] = []
 
-        if (data) {
-            return data.map(record => ({ ...record, __table: table }))
-        }
-        return []
+  if (isManager) {
+    Object.entries(DEPARTMENT_TABLES).forEach(([dept, entries]) => {
+      entries.forEach(e => tablesToQuery.push({ ...e, department: dept }))
     })
-
-    const results = await Promise.all(fetchPromises)
-    allRecords = results.flat().sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-
-    // Helper to format column names into readable labels
-    const formatLabel = (key: string) => {
-        return key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
-    }
-
-    // List of keys to hide in the detailed view
-    const metaKeys = ['id', 'user_id', 'created_at', 'updated_at', 'record_type', 'date', 'shift', 'department', 'supervisor_name', '__table']
-
-    return (
-        <div className="space-y-8 max-w-5xl mx-auto animate-fade-in-up">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <Link href="/dashboard" className="p-2 bg-white rounded-full border border-emerald-100 hover:bg-emerald-50 transition-colors text-emerald-700">
-                        <ArrowLeft className="w-5 h-5" />
-                    </Link>
-                    <div>
-                        <h2 className="text-3xl font-bold tracking-tight text-emerald-950">Submission History</h2>
-                        <p className="text-emerald-700/80 font-medium mt-1">View your recently submitted production records.</p>
-                    </div>
-                </div>
-            </div>
-
-            <div className="bg-white rounded-3xl overflow-hidden shadow-sm border border-emerald-100">
-                <div className="bg-emerald-50 px-6 py-4 border-b border-emerald-100 flex items-center gap-2">
-                    <Calendar className="w-5 h-5 text-emerald-700" />
-                    <span className="font-bold text-emerald-900">Recent Activity</span>
-                </div>
-
-                {allRecords.length === 0 ? (
-                    <div className="p-10 text-center text-slate-500 font-medium">
-                        No records found. Submit a new form to see it appear here!
-                    </div>
-                ) : (
-                    <div className="divide-y divide-emerald-50">
-                        {allRecords.map((record) => (
-                            <div key={record.id} className="p-6 hover:bg-emerald-50/30 transition-colors space-y-4">
-                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                    <div className="space-y-1">
-                                        <h3 className="font-bold text-emerald-950">{record.record_type}</h3>
-                                        <div className="flex items-center gap-3 text-sm text-slate-500 font-medium">
-                                            <span className="bg-slate-100 px-2 py-1 rounded-md">{record.department}</span>
-                                            {record.product && <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-md">{record.product}</span>}
-                                            <span>{record.shift} Shift</span>
-                                            <span>•</span>
-                                            <span>{new Date(record.date).toLocaleDateString()}</span>
-                                        </div>
-                                    </div>
-                                    <div className="text-right text-xs text-slate-400 font-medium whitespace-nowrap">
-                                        Submitted: {new Date(record.created_at).toLocaleString()}
-                                    </div>
-                                </div>
-
-                                {/* Dynamic Details Grid */}
-                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 p-4 bg-slate-50/50 rounded-2xl border border-slate-100">
-                                    {Object.entries(record)
-                                        .filter(([key, value]) => !metaKeys.includes(key) && value !== null && value !== undefined && value !== '')
-                                        .map(([key, value]) => (
-                                            <div key={key} className="space-y-1">
-                                                <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">{formatLabel(key)}</p>
-                                                <p className="text-sm font-semibold text-emerald-900">{String(value)}</p>
-                                            </div>
-                                        ))
-                                    }
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-        </div>
+  } else if (userDept && DEPARTMENT_TABLES[userDept]) {
+    DEPARTMENT_TABLES[userDept].forEach(e =>
+      tablesToQuery.push({ ...e, department: userDept })
     )
+  }
+
+  // Fetch each table — supervisors filtered by user_id
+  const fetchPromises = tablesToQuery.map(async ({ table, label, department }) => {
+    let query = supabase
+      .from(table)
+      .select("*")
+      .order("date",       { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(20)
+
+    // Supervisors only see their own records
+    if (!isManager) query = query.eq("user_id", user.id)
+
+    const { data } = await query
+    return (data || []).map(r => ({ ...r, __table: table, __label: label, __department: department }))
+  })
+
+  const results    = await Promise.all(fetchPromises)
+  const allRecords = results.flat().sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  )
+
+  // Group by record type label
+  const grouped: Record<string, typeof allRecords> = {}
+  for (const record of allRecords) {
+    const key = record.__label
+    if (!grouped[key]) grouped[key] = []
+    grouped[key].push(record)
+  }
+
+  const hasRecords = allRecords.length > 0
+
+  return (
+    <div className="space-y-8 max-w-5xl mx-auto animate-fade-in-up">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link
+            href="/dashboard"
+            className="p-2 bg-white rounded-full border border-emerald-100 hover:bg-emerald-50 transition-colors text-emerald-700"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight text-emerald-950">Submission History</h2>
+            <p className="text-emerald-700/80 font-medium mt-1">
+              {isManager
+                ? "All departments — most recent 20 per record type"
+                : userDept
+                ? `${userDept} department — your submissions`
+                : "Your submitted production records"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {!hasRecords && (
+        <div className="bg-white rounded-3xl p-12 text-center border border-emerald-100 shadow-sm">
+          <FileText className="w-12 h-12 text-emerald-200 mx-auto mb-4" />
+          <p className="text-slate-500 font-medium">No records found.</p>
+          <p className="text-slate-400 text-sm mt-1">Submit a form to see it appear here.</p>
+          <Link
+            href="/dashboard/forms"
+            className="inline-flex items-center gap-2 mt-6 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-semibold transition-colors text-sm"
+          >
+            Submit a Record
+          </Link>
+        </div>
+      )}
+
+      {/* One section per record type */}
+      {Object.entries(grouped).map(([label, records]) => (
+        <div key={label} className="bg-white rounded-3xl overflow-hidden shadow-sm border border-emerald-100">
+          {/* Section header */}
+          <div className="bg-emerald-50 px-6 py-4 border-b border-emerald-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-emerald-700" />
+              <span className="font-bold text-emerald-900 text-sm">{label}</span>
+            </div>
+            <span className="text-xs font-semibold text-emerald-600 bg-emerald-100 px-2.5 py-1 rounded-full">
+              {records.length} record{records.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+
+          <div className="divide-y divide-emerald-50">
+            {records.map((record) => {
+              const details = Object.entries(record).filter(
+                ([key, value]) =>
+                  !META_KEYS.has(key) &&
+                  !key.startsWith("__") &&
+                  value !== null &&
+                  value !== undefined &&
+                  value !== ""
+              )
+
+              return (
+                <div key={record.id} className="p-5 hover:bg-emerald-50/30 transition-colors space-y-3">
+                  {/* Record meta row */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <span className="font-bold text-emerald-950">{formatDate(record.date)}</span>
+                      <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md text-xs font-semibold">
+                        {record.shift} Shift
+                      </span>
+                      {record.product && (
+                        <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-md text-xs font-semibold">
+                          {record.product}
+                        </span>
+                      )}
+                      {isManager && (
+                        <span className="text-xs text-slate-400 font-medium">
+                          {record.supervisor_name}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs text-slate-400 font-medium whitespace-nowrap">
+                      Submitted {new Date(record.created_at).toLocaleString()}
+                    </span>
+                  </div>
+
+                  {/* Dynamic details grid */}
+                  {details.length > 0 && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 p-4 bg-slate-50/60 rounded-2xl border border-slate-100">
+                      {details.map(([key, value]) => (
+                        <div key={key} className="space-y-0.5">
+                          <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
+                            {formatLabel(key)}
+                          </p>
+                          <p className="text-sm font-semibold text-emerald-900">{String(value)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 }
