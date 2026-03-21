@@ -1,10 +1,10 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { createClient } from "@/lib/supabase-client"
+import { getSupabaseClient } from "@/lib/supabase-client"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, ClipboardList, CheckCircle2, Circle, AlertTriangle, ChevronDown } from "lucide-react"
+import { ArrowLeft, ClipboardList, CheckCircle2, AlertTriangle, ChevronDown } from "lucide-react"
 import { toast } from "sonner"
 
 const DEPARTMENTS: { name: string; records: string[] }[] = [
@@ -73,7 +73,7 @@ interface Profile {
 
 export default function RecordSelectionPage() {
   const router = useRouter()
-  const supabase = createClient()
+  const supabase = getSupabaseClient()
 
   const [profile, setProfile]           = useState<Profile | null>(null)
   const [userId, setUserId]             = useState<string | null>(null)
