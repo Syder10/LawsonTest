@@ -1,188 +1,117 @@
+import { createClient as createSSRClient } from "@/lib/supabase/server"
 import { createClient } from "@supabase/supabase-js"
 import { type NextRequest, NextResponse } from "next/server"
+import { generateExcelWorkbook } from "@/lib/excel-generator"
 
 const recordTypeToTable: Record<string, string> = {
-  "Daily Records (Preform Usage)": "blowing_daily_records",
+  "Daily Records (Preform Usage)":          "blowing_daily_records",
   "Daily Usage of Alcohol And Stock Level": "alcohol_stock_level_records",
   "Daily Records for Alcohol and Blending": "alcohol_blending_daily_records",
-  "Ginger Production": "ginger_production_records",
-  "Extraction Monitoring Records": "extraction_monitoring_records",
-  "Filling Line Daily Records": "filling_line_daily_records",
-  "Packaging Daily Records": "packaging_daily_records",
-  "Daily Records Alcohol For Concentrate": "concentrate_alcohol_records",
-  "Herbs Stock": "herbs_stock_records",
-  "Caramel Stock": "caramel_stock_records",
-  "Caps Stock": "caps_stock_records",
-  "Labels Stock": "labels_stock_records"
+  "Ginger Production":                      "ginger_production_records",
+  "Extraction Monitoring Records":          "extraction_monitoring_records",
+  "Filling Line Daily Records":             "filling_line_daily_records",
+  "Packaging Daily Records":                "packaging_daily_records",
+  "Daily Records Alcohol For Concentrate":  "concentrate_alcohol_records",
+  "Herbs Stock":                            "herbs_stock_records",
+  "Caramel Stock":                          "caramel_stock_records",
+  "Caps Stock":                             "caps_stock_records",
+  "Labels Stock":                           "labels_stock_records",
 }
 
-function convertToCSV(data: any[]): string {
-  if (data.length === 0) return ""
-
-  const headers = Object.keys(data[0])
-  const csvHeaders = headers
-    .map((h) =>
-      h
-        .replace(/_/g, " ")
-        .split(" ")
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-        .join(" "),
-    )
-    .join(",")
-
-  const csvRows = data.map((row) =>
-    headers
-      .map((header) => {
-        const value = row[header]
-        if (value === null || value === undefined) return ""
-        if (typeof value === "string" && value.includes(",")) {
-          return `"${value.replace(/"/g, '""')}"`
-        }
-        return value
-      })
-      .join(","),
-  )
-
-  return [csvHeaders, ...csvRows].join("\n")
-}
-
-async function fetchTableData(supabase: any, table: string, userId: string | null, supervisorName: string | null, startDate: string | null, endDate: string | null) {
+async function fetchTableData(
+  supabase: ReturnType<typeof createClient>,
+  table: string,
+  userId: string | null,
+  startDate: string | null,
+  endDate: string | null
+) {
   try {
-    let query = supabase.from(table).select("*, profiles ( supervisor_id, full_name, email )").order("created_at", { ascending: false })
+    let query = supabase
+      .from(table)
+      .select("*")
+      .order("date",       { ascending: false })
+      .order("created_at", { ascending: false })
 
-    if (userId && supervisorName) {
-      // Provide a highly flexible partial match that ignores exact spacing
-      const matchName = supervisorName.trim().split(' ')[0]
-
-      query = query.or(`user_id.eq.${userId},supervisor_name.ilike.%${matchName}%`)
-    } else if (userId) {
-      query = query.eq('user_id', userId)
-    } else if (supervisorName) {
-      const matchName = supervisorName.trim().split(' ')[0]
-      query = query.ilike('supervisor_name', `%${matchName}%`)
-    }
-
-    if (startDate && endDate) {
-      query = query.gte('date', startDate).lte('date', endDate)
-    }
+    if (userId) query = query.eq("user_id", userId)
+    if (startDate) query = query.gte("date", startDate)
+    if (endDate)   query = query.lte("date", endDate)
 
     const { data, error } = await query
-
     if (error) {
-      console.error(`Error fetching from ${table}:`, error.message)
+      console.error(`Error fetching ${table}:`, error.message)
       return []
     }
-
-    // Map data to gently hoist the supervisor_id from the joined profiles table
-    return (data || []).map((row: any) => {
-      const { profiles, ...rest } = row
-      
-      let supervisorId = ""
-      if (profiles) {
-        // Fallback to email prefix if supervisor_id is missing
-        supervisorId = profiles.supervisor_id || (profiles.email ? profiles.email.split('@')[0] : '')
-      }
-      
-      // We replace user_id with our preferred short identifier
-      delete rest.user_id
-      return {
-        "Supervisor ID": supervisorId,
-        ...rest
-      }
-    })
+    return data || []
   } catch (err) {
-    console.error(`Exception fetching from ${table}:`, err)
+    console.error(`Exception fetching ${table}:`, err)
     return []
   }
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      console.error("Missing Supabase credentials for export route")
-      return NextResponse.json({ error: "Server Configuration Error" }, { status: 500 })
+    // Auth check — only logged-in users can export
+    const ssrClient = await createSSRClient()
+    const { data: { user } } = await ssrClient.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const { searchParams } = new URL(request.url)
+    const requestedUserId = searchParams.get("userId")
+    const month           = searchParams.get("month") // format: YYYY-MM
 
-    const searchParams = request.nextUrl.searchParams
-    const rawUserIdParam = searchParams.get('userId')
-    const monthStr = searchParams.get('month') // e.g. "2023-10"
+    // Managers/admins can export anyone; supervisors only their own data
+    const { data: profile } = await ssrClient
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single()
 
-    let actualUserIdForFiltering = rawUserIdParam
-    let mappedSupervisorName = null
-    let displayUserId = rawUserIdParam
+    const isManagerOrAdmin = profile?.role === "manager" || profile?.role === "admin"
+    const exportUserId = isManagerOrAdmin
+      ? (requestedUserId || null)   // null = all users
+      : user.id                      // supervisors always get own data only
 
-    if (rawUserIdParam) {
-      const isUUID = rawUserIdParam.includes('-')
-      const { data: profile } = await supabase
-          .from('profiles')
-          .select('id, full_name, supervisor_id')
-          .eq(isUUID ? 'id' : 'supervisor_id', rawUserIdParam)
-          .single()
-
-      if (profile) {
-        actualUserIdForFiltering = profile.id
-        mappedSupervisorName = profile.full_name
-        // Use full_name for the filter text exactly as requested by the user
-        displayUserId = profile.full_name || profile.supervisor_id || rawUserIdParam
-      }
+    let startDate: string | null = null
+    let endDate: string | null = null
+    if (month) {
+      const [y, m] = month.split("-").map(Number)
+      startDate = new Date(y, m - 1, 1).toISOString().split("T")[0]
+      endDate   = new Date(y, m,     0).toISOString().split("T")[0]
     }
 
-    let startDate = null
-    let endDate = null
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
 
-    if (monthStr) {
-      const [year, month] = monthStr.split('-')
-      if (year && month) {
-        startDate = `${year}-${month}-01`
-        // Get last day of month
-        const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate()
-        endDate = `${year}-${month}-${lastDay}`
-      }
+    // Fetch all tables in parallel
+    const entries  = Object.entries(recordTypeToTable)
+    const results  = await Promise.all(
+      entries.map(([, table]) => fetchTableData(supabase, table, exportUserId, startDate, endDate))
+    )
+
+    const recordsByType: Record<string, any[]> = {}
+    entries.forEach(([recordType], i) => {
+      if (results[i].length > 0) recordsByType[recordType] = results[i]
+    })
+
+    if (Object.keys(recordsByType).length === 0) {
+      return NextResponse.json({ error: "No records found for this period." }, { status: 404 })
     }
 
-    const allData: Record<string, any[]> = {}
-    let totalRecords = 0
+    // Generate real .xlsx file
+    const workbook = await generateExcelWorkbook(recordsByType)
+    const buffer   = await workbook.xlsx.writeBuffer()
 
-    for (const [recordType, table] of Object.entries(recordTypeToTable)) {
-      const data = await fetchTableData(supabase, table, actualUserIdForFiltering, mappedSupervisorName, startDate, endDate)
-      if (data.length > 0) {
-        allData[recordType] = data
-        totalRecords += data.length
-      }
-    }
+    const label    = month ? `_${month}` : ""
+    const filename = `lawson_production_records${label}_${new Date().toISOString().split("T")[0]}.xlsx`
 
-    let excelContent = "PRODUCTION RECORDS EXPORT\n"
-    excelContent += `Date Generated: ${new Date().toLocaleString()}\n`
-    if (displayUserId) excelContent += `Filtered by User Name: ${displayUserId}\n`
-    if (monthStr) excelContent += `Filtered by Month: ${monthStr}\n`
-    excelContent += `Total Records: ${totalRecords}\n\n`
-
-    excelContent += "SUMMARY BY RECORD TYPE\n"
-    excelContent += "Record Type,Count\n"
-    for (const [recordType, data] of Object.entries(allData)) {
-      excelContent += `"${recordType}",${data.length}\n`
-    }
-    excelContent += "\n\n"
-
-    for (const [recordType, data] of Object.entries(allData)) {
-      excelContent += `\n\n${"=".repeat(100)}\n`
-      excelContent += `${recordType} (${data.length} records)\n`
-      excelContent += `${"=".repeat(100)}\n\n`
-      excelContent += convertToCSV(data)
-      excelContent += "\n"
-    }
-
-    const buffer = Buffer.from(excelContent, "utf-8")
-
-    return new NextResponse(buffer, {
+    return new NextResponse(buffer as Buffer, {
       headers: {
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="production_records_${new Date().toISOString().split("T")[0]}.csv"`,
+        "Content-Type":        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Disposition": `attachment; filename="${filename}"`,
       },
     })
   } catch (error) {
@@ -190,4 +119,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Failed to export records" }, { status: 500 })
   }
 }
-
