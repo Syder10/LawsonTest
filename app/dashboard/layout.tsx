@@ -27,30 +27,28 @@ export default async function DashboardLayout({
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
-            <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">
-                <div className="flex items-center gap-4">
-                    <Image src="/logo.png" alt="Lawson LLC Logo" width={40} height={40} className="w-10 h-10 object-contain" />
-                    <div>
-                        <h1 className="text-xl font-bold text-emerald-950 leading-tight">Lawson Production</h1>
+            <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm">
+                <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+                    <Image src="/logo.png" alt="Lawson LLC Logo" width={36} height={36} className="w-9 h-9 shrink-0 object-contain" />
+                    <div className="min-w-0">
+                        <h1 className="text-base sm:text-xl font-bold text-emerald-950 leading-tight truncate">Lawson Production</h1>
                         <p className="text-xs font-semibold text-emerald-600/70 uppercase tracking-widest hidden sm:block">Management System</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-6">
-                    <div className="flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-full border border-slate-200">
-                        <User className="w-4 h-4 text-emerald-600" />
-                        <span className="text-sm font-semibold text-slate-700">
-                            {displayName}
-                        </span>
+                <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+                    <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200">
+                        <User className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span className="text-xs sm:text-sm font-semibold text-slate-700">{displayName}</span>
                     </div>
                     <form action="/auth/signout" method="post">
-                        <button className="p-2 text-slate-500 hover:text-red-600 transition-colors rounded-lg hover:bg-red-50 flex items-center gap-2 group cursor-pointer">
-                            <LogOut className="w-4 h-4" />
+                        <button className="p-2 text-slate-500 hover:text-red-600 transition-colors rounded-lg hover:bg-red-50 flex items-center gap-1.5 cursor-pointer">
+                            <LogOut className="w-4 h-4 shrink-0" />
                             <span className="text-sm font-medium hidden sm:inline">Sign Out</span>
                         </button>
                     </form>
                 </div>
             </header>
-            <main className="flex-1 p-6 md:p-10 max-w-7xl mx-auto w-full">
+            <main className="flex-1 p-4 sm:p-6 md:p-10 max-w-7xl mx-auto w-full">
                 {children}
             </main>
         </div>
