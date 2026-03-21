@@ -298,26 +298,26 @@ export default function RecordSelectionPage() {
 
       {/* ── Record type cards ─────────────────────────────────────────────── */}
       {!noWorkChecked && shift && visibleDepartments.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {visibleDepartments.map((dept) => (
             <div
               key={dept.name}
-              className="bg-white rounded-3xl border border-emerald-100 overflow-hidden shadow-sm flex flex-col"
+              className="bg-white rounded-2xl sm:rounded-3xl border border-emerald-100 overflow-hidden shadow-sm flex flex-col"
             >
-              <div className="bg-emerald-50 px-6 py-4 border-b border-emerald-100">
-                <h3 className="font-bold text-emerald-900">{dept.name}</h3>
+              <div className="bg-emerald-50 px-4 sm:px-6 py-3 sm:py-4 border-b border-emerald-100">
+                <h3 className="font-bold text-emerald-900 text-sm">{dept.name}</h3>
               </div>
-              <div className="p-4 flex-1 flex flex-col gap-2">
+              <div className="p-3 sm:p-4 flex-1 flex flex-col gap-1.5 sm:gap-2">
                 {dept.records.map((record) => {
                   const isDone = submittedTypes.has(record)
                   return (
                     <Link
                       key={record}
                       href={formHref(record)}
-                      className={`flex items-center gap-3 p-3 rounded-2xl transition-colors group ${
+                      className={`flex items-center gap-3 px-3 py-3 sm:p-3 rounded-xl sm:rounded-2xl transition-colors group active:scale-[0.98] ${
                         isDone
                           ? "bg-emerald-50 border border-emerald-200"
-                          : "hover:bg-emerald-50"
+                          : "hover:bg-emerald-50 active:bg-emerald-50"
                       }`}
                     >
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors ${
