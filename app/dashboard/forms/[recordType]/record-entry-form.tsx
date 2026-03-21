@@ -535,7 +535,7 @@ export default function RecordEntryForm({
                         {selectedHerbs.map((herb) => (
                             <div key={herb} className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm">
                                 <p className="font-bold text-emerald-900 text-sm mb-3">{herb}</p>
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                                     {stockFieldLabels.map((fieldLabel) => {
                                         const isAutoCalc = ["Total Qty", "Remaining Qty"].includes(fieldLabel)
                                         const isLocked = fieldLabel === "Available Stock" && herbsPreviousStock[herb] != null
@@ -779,16 +779,16 @@ export default function RecordEntryForm({
                 )}
 
                 {/* Actions */}
-                <div className="pt-3 border-t border-emerald-100 flex items-center justify-end gap-3">
+                <div className="pt-3 border-t border-emerald-100 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-3">
                     <Button
                         type="button" variant="outline" onClick={() => router.back()} disabled={isSubmitting}
-                        className="h-10 px-5 text-sm font-semibold border-emerald-200 text-emerald-700 hover:bg-emerald-50 rounded-xl"
+                        className="h-11 sm:h-10 px-5 text-sm font-semibold border-emerald-200 text-emerald-700 hover:bg-emerald-50 rounded-xl w-full sm:w-auto"
                     >
                         Cancel
                     </Button>
                     <Button
                         type="submit" disabled={isSubmitting}
-                        className="h-10 px-6 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md shadow-emerald-600/20"
+                        className="h-11 sm:h-10 px-6 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl shadow-md shadow-emerald-600/20 w-full sm:w-auto"
                     >
                         {isSubmitting ? "Submitting…" : "Submit Record"}
                     </Button>
