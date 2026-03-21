@@ -4,11 +4,6 @@ import { ArrowLeft } from "lucide-react"
 import { notFound } from "next/navigation"
 import RecordEntryForm from "./record-entry-form"
 
-// ── NO imports from formConfig here ──────────────────────────────────────────
-// formConfig contains serialisable functions (calculation: ...) which Next.js
-// cannot pass across the Server→Client boundary.  The client form imports it
-// directly instead.  We only keep a plain string list for the notFound() guard.
-
 const VALID_RECORD_TYPES = new Set([
     "Daily Records (Preform Usage)",
     "Daily Usage of Alcohol And Stock Level",
@@ -27,10 +22,14 @@ const VALID_RECORD_TYPES = new Set([
 export const dynamic = "force-dynamic"
 
 export default async function RecordTypePage(
-    props: { params: Promise<{ recordType: string }> }
+    props: {
+        params: Promise<{ recordType: string }>
+        searchParams: Promise<{ date?: string; shift?: string }>
+    }
 ) {
-    const { recordType: raw } = await props.params
-    const recordType = decodeURIComponent(raw)
+    const { recordType: raw }    = await props.params
+    const { date, shift }        = await props.searchParams
+    const recordType             = decodeURIComponent(raw)
 
     if (!VALID_RECORD_TYPES.has(recordType)) notFound()
 
@@ -44,10 +43,18 @@ export default async function RecordTypePage(
         .eq("id", user.id)
         .single()
 
-    // Only plain serialisable values are passed as props
     const supervisorName: string = profile?.full_name ?? user.email?.split("@")[0] ?? "Supervisor"
     const department: string     = profile?.department ?? "General"
     const groupNumber: number    = profile?.group_number ?? 1
+
+    // Fallbacks if query params not supplied (e.g. direct navigation)
+    const initialDate  = date  || new Date().toISOString().split("T")[0]
+    const initialShift = shift || (() => {
+        const h = new Date().getHours()
+        if (h < 12) return "Morning"
+        if (h < 18) return "Afternoon"
+        return "Night"
+    })()
 
     return (
         <div className="space-y-8 max-w-4xl mx-auto animate-fade-in-up">
@@ -60,16 +67,22 @@ export default async function RecordTypePage(
                 </Link>
                 <div>
                     <h2 className="text-2xl font-bold tracking-tight text-emerald-950">{recordType}</h2>
-                    <p className="text-emerald-700/80 font-medium mt-1">{department} · {supervisorName}</p>
+                    <p className="text-emerald-700/80 font-medium mt-1">
+                        {department} · {supervisorName} · {initialShift} Shift ·{" "}
+                        {new Date(initialDate + "T00:00:00").toLocaleDateString(undefined, {
+                            weekday: "short", month: "short", day: "numeric",
+                        })}
+                    </p>
                 </div>
             </div>
 
-            {/* RecordEntryForm is "use client" and imports formConfig itself */}
             <RecordEntryForm
                 recordType={recordType}
                 supervisorName={supervisorName}
                 department={department}
                 groupNumber={groupNumber}
+                initialDate={initialDate}
+                initialShift={initialShift}
             />
         </div>
     )
