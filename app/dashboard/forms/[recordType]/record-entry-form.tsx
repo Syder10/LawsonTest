@@ -15,13 +15,15 @@ import {
 } from "@/components/ui/dialog"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
-import { Plus, ChevronDown } from "lucide-react"
+import { Plus } from "lucide-react"
 
 interface RecordEntryFormProps {
     recordType: string
     supervisorName: string
     department: string
     groupNumber: number
+    initialDate:  string   // passed from the forms page via query param
+    initialShift: string   // passed from the forms page via query param
 }
 
 interface ExtractionTankData {
@@ -46,6 +48,8 @@ export default function RecordEntryForm({
     supervisorName,
     department,
     groupNumber,
+    initialDate,
+    initialShift,
 }: RecordEntryFormProps) {
     const router = useRouter()
 
@@ -53,10 +57,12 @@ export default function RecordEntryForm({
     const availableProducts: string[] = PRODUCT_TYPE_FORMS[recordType] || []
     const supportsMultiProduct = availableProducts.length > 0
 
+    // date and shift are now set by the forms page and passed as props — not editable here
+    const shift        = initialShift
+    const selectedDate = initialDate
+
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const [shift, setShift] = useState("")
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0])
 
     const [productionTypes, setProductionTypes] = useState<string[]>([])
     const [formDataByProduct, setFormDataByProduct] = useState<Record<string, Record<string, string>>>({})
@@ -77,6 +83,29 @@ export default function RecordEntryForm({
     const [herbsPreviousStock, setHerbsPreviousStock] = useState<Record<string, number | null>>({})
     const [showCreateHerbDialog, setShowCreateHerbDialog] = useState(false)
     const [newHerbName, setNewHerbName] = useState("")
+
+    // ── Draft: restore from localStorage on mount ────────────────────────────
+    useEffect(() => {
+        const key = `draft_${recordType}_${initialDate}_${initialShift}`
+        try {
+            const saved = localStorage.getItem(key)
+            if (saved) {
+                const parsed = JSON.parse(saved)
+                if (parsed.formDataByProduct) setFormDataByProduct(parsed.formDataByProduct)
+                if (parsed.productionTypes)   setProductionTypes(parsed.productionTypes)
+                toast.info("Draft restored from your previous session.")
+            }
+        } catch { /* ignore corrupt data */ }
+    }, [recordType, initialDate, initialShift])
+
+    // ── Draft: save to localStorage whenever form data changes ───────────────
+    useEffect(() => {
+        const key = `draft_${recordType}_${initialDate}_${initialShift}`
+        if (Object.keys(formDataByProduct).length === 0) return
+        try {
+            localStorage.setItem(key, JSON.stringify({ formDataByProduct, productionTypes }))
+        } catch { /* storage full — ignore */ }
+    }, [formDataByProduct, productionTypes, recordType, initialDate, initialShift])
 
     useEffect(() => {
         const load = async () => {
@@ -560,7 +589,6 @@ export default function RecordEntryForm({
     // ── Submit ──────────────────────────────────────────────────────────────────
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (!shift) { toast.error("Please select a shift before submitting."); return }
         setIsSubmitting(true)
         setError(null)
 
@@ -576,7 +604,9 @@ export default function RecordEntryForm({
                     })
                     if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Failed to save") }
                 }
-                toast.success("Extraction records submitted!"); router.push("/dashboard/forms"); return
+                toast.success("Extraction records submitted!")
+                try { localStorage.removeItem(`draft_${recordType}_${initialDate}_${initialShift}`) } catch { /* ignore */ }
+                router.push("/dashboard/forms"); return
             }
 
             if (recordType === "Herbs Stock") {
@@ -591,7 +621,9 @@ export default function RecordEntryForm({
                     })
                     if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Failed to save") }
                 }
-                toast.success("Herbs stock submitted!"); router.push("/dashboard/forms"); return
+                toast.success("Herbs stock submitted!")
+                try { localStorage.removeItem(`draft_${recordType}_${initialDate}_${initialShift}`) } catch { /* ignore */ }
+                router.push("/dashboard/forms"); return
             }
 
             if (supportsMultiProduct && productionTypes.length === 0) {
@@ -624,7 +656,9 @@ export default function RecordEntryForm({
                 if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Failed to save") }
             }
 
-            toast.success("Record submitted successfully!"); router.push("/dashboard/forms")
+            toast.success("Record submitted successfully!")
+            try { localStorage.removeItem(`draft_${recordType}_${initialDate}_${initialShift}`) } catch { /* ignore */ }
+            router.push("/dashboard/forms")
         } catch (err) {
             toast.error("There was a problem submitting.")
             setError(err instanceof Error ? err.message : "Failed to save record")
@@ -637,44 +671,6 @@ export default function RecordEntryForm({
     return (
         <div className="bg-white rounded-3xl p-5 md:p-8 shadow-sm border border-emerald-100">
             <form onSubmit={handleSubmit} className="space-y-6">
-
-                {/* Row: Shift + Date side by side on larger screens */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Shift dropdown */}
-                    <div className="space-y-1.5">
-                        <Label className="text-sm font-bold text-emerald-900">
-                            Shift <span className="text-red-500">*</span>
-                        </Label>
-                        <div className="relative">
-                            <select
-                                value={shift}
-                                onChange={(e) => setShift(e.target.value)}
-                                required
-                                className="w-full h-10 pl-3 pr-9 text-sm font-medium rounded-xl border border-emerald-200 bg-white text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none appearance-none cursor-pointer transition-all"
-                            >
-                                <option value="" disabled>Select shift…</option>
-                                <option value="Morning">Morning</option>
-                                <option value="Afternoon">Afternoon</option>
-                                <option value="Night">Night</option>
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                        </div>
-                    </div>
-
-                    {/* Date */}
-                    <div className="space-y-1.5">
-                        <Label className="text-sm font-bold text-emerald-900">
-                            Date <span className="text-red-500">*</span>
-                        </Label>
-                        <Input
-                            type="date"
-                            required
-                            value={selectedDate}
-                            onChange={(e) => setSelectedDate(e.target.value)}
-                            className="h-10 text-sm rounded-xl border-emerald-200 bg-white focus:border-emerald-500 focus:ring-emerald-500/20 font-medium text-slate-700"
-                        />
-                    </div>
-                </div>
 
                 {/* Product type — compact dropdown (if multi-product) */}
                 {supportsMultiProduct && (
