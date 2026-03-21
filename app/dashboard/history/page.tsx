@@ -205,7 +205,7 @@ export default async function HistoryPage({
               )
 
               return (
-                <div key={record.id} className="p-5 hover:bg-emerald-50/30 transition-colors space-y-3">
+                <div key={record.id} className="p-4 sm:p-5 hover:bg-emerald-50/30 transition-colors space-y-3">
 
                   {/* Record meta row */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -232,7 +232,7 @@ export default async function HistoryPage({
 
                   {/* Dynamic details grid */}
                   {details.length > 0 && (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 p-4 bg-slate-50/60 rounded-2xl border border-slate-100">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 p-3 sm:p-4 bg-slate-50/60 rounded-xl sm:rounded-2xl border border-slate-100">
                       {details.map(([key, value]) => (
                         <div key={key} className="space-y-0.5">
                           <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
