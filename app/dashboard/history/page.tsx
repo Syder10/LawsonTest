@@ -1,11 +1,12 @@
 import { createClient } from "@/lib/supabase/server"
 import Link from "next/link"
 import { ArrowLeft, Calendar, FileText } from "lucide-react"
+import { Suspense } from "react"
+import HistoryDateFilter from "./HistoryDateFilter"
 
-// Map each department to its tables and record type labels
 const DEPARTMENT_TABLES: Record<string, { table: string; label: string }[]> = {
   "Blowing": [
-    { table: "blowing_daily_records", label: "Daily Records (Preform Usage)" },
+    { table: "blowing_daily_records",            label: "Daily Records (Preform Usage)" },
   ],
   "Alcohol and Blending": [
     { table: "alcohol_stock_level_records",      label: "Daily Usage of Alcohol And Stock Level" },
@@ -45,7 +46,13 @@ function formatDate(dateStr: string) {
 
 export const dynamic = "force-dynamic"
 
-export default async function HistoryPage() {
+export default async function HistoryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string; shift?: string }>
+}) {
+  const { date: filterDate, shift: filterShift } = await searchParams
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
@@ -56,13 +63,11 @@ export default async function HistoryPage() {
     .eq("id", user.id)
     .single()
 
-  const userDept     = profile?.department || null
-  const isManager    = profile?.role === "manager" || profile?.role === "admin"
+  const userDept  = profile?.department || null
+  const isManager = profile?.role === "manager" || profile?.role === "admin"
 
-  // Determine which department's tables to query
-  // Supervisors only see their own department; managers see all
+  // Build list of tables to query based on role/department
   let tablesToQuery: { table: string; label: string; department: string }[] = []
-
   if (isManager) {
     Object.entries(DEPARTMENT_TABLES).forEach(([dept, entries]) => {
       entries.forEach(e => tablesToQuery.push({ ...e, department: dept }))
@@ -73,17 +78,20 @@ export default async function HistoryPage() {
     )
   }
 
-  // Fetch each table — supervisors filtered by user_id
+  // Fetch records — apply user_id, date, and shift filters
   const fetchPromises = tablesToQuery.map(async ({ table, label, department }) => {
     let query = supabase
       .from(table)
       .select("*")
       .order("date",       { ascending: false })
       .order("created_at", { ascending: false })
-      .limit(20)
 
-    // Supervisors only see their own records
-    if (!isManager) query = query.eq("user_id", user.id)
+    if (!isManager)  query = query.eq("user_id", user.id)
+    if (filterDate)  query = query.eq("date", filterDate)
+    if (filterShift) query = query.eq("shift", filterShift)
+
+    // Limit per table only when no specific date is selected — keep results manageable
+    if (!filterDate) query = query.limit(20)
 
     const { data } = await query
     return (data || []).map(r => ({ ...r, __table: table, __label: label, __department: department }))
@@ -102,49 +110,78 @@ export default async function HistoryPage() {
     grouped[key].push(record)
   }
 
-  const hasRecords = allRecords.length > 0
+  const hasRecords  = allRecords.length > 0
+  const hasFilter   = !!filterDate || !!filterShift
+  const totalCount  = allRecords.length
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto animate-fade-in-up">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link
-            href="/dashboard"
-            className="p-2 bg-white rounded-full border border-emerald-100 hover:bg-emerald-50 transition-colors text-emerald-700"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </Link>
-          <div>
-            <h2 className="text-3xl font-bold tracking-tight text-emerald-950">Submission History</h2>
-            <p className="text-emerald-700/80 font-medium mt-1">
-              {isManager
-                ? "All departments — most recent 20 per record type"
-                : userDept
-                ? `${userDept} department — your submissions`
-                : "Your submitted production records"}
-            </p>
-          </div>
+    <div className="space-y-6 max-w-5xl mx-auto animate-fade-in-up">
+
+      {/* Page header */}
+      <div className="flex items-center gap-4">
+        <Link
+          href="/dashboard"
+          className="p-2 bg-white rounded-full border border-emerald-100 hover:bg-emerald-50 transition-colors text-emerald-700"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </Link>
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight text-emerald-950">Submission History</h2>
+          <p className="text-emerald-700/80 font-medium mt-1">
+            {isManager
+              ? "All departments"
+              : userDept
+              ? `${userDept} department — your submissions`
+              : "Your submitted production records"}
+          </p>
         </div>
       </div>
 
+      {/* Date + Shift filter — wrapped in Suspense because it uses useSearchParams */}
+      <Suspense fallback={<div className="h-20 bg-white rounded-2xl border border-emerald-100 animate-pulse" />}>
+        <HistoryDateFilter
+          selectedDate={filterDate || null}
+          selectedShift={filterShift || null}
+        />
+      </Suspense>
+
+      {/* Result count when a filter is active */}
+      {hasFilter && (
+        <p className="text-sm font-semibold text-slate-500">
+          {hasRecords
+            ? `${totalCount} record${totalCount !== 1 ? "s" : ""} found`
+            : "No records match this filter"}
+        </p>
+      )}
+
+      {/* Empty state */}
       {!hasRecords && (
         <div className="bg-white rounded-3xl p-12 text-center border border-emerald-100 shadow-sm">
           <FileText className="w-12 h-12 text-emerald-200 mx-auto mb-4" />
-          <p className="text-slate-500 font-medium">No records found.</p>
-          <p className="text-slate-400 text-sm mt-1">Submit a form to see it appear here.</p>
-          <Link
-            href="/dashboard/forms"
-            className="inline-flex items-center gap-2 mt-6 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-semibold transition-colors text-sm"
-          >
-            Submit a Record
-          </Link>
+          {hasFilter ? (
+            <>
+              <p className="text-slate-500 font-medium">No records found for this date.</p>
+              <p className="text-slate-400 text-sm mt-1">Try a different date or clear the filter.</p>
+            </>
+          ) : (
+            <>
+              <p className="text-slate-500 font-medium">No records found.</p>
+              <p className="text-slate-400 text-sm mt-1">Submit a form to see it appear here.</p>
+              <Link
+                href="/dashboard/forms"
+                className="inline-flex items-center gap-2 mt-6 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-semibold transition-colors text-sm"
+              >
+                Submit a Record
+              </Link>
+            </>
+          )}
         </div>
       )}
 
-      {/* One section per record type */}
+      {/* Records grouped by type */}
       {Object.entries(grouped).map(([label, records]) => (
         <div key={label} className="bg-white rounded-3xl overflow-hidden shadow-sm border border-emerald-100">
+
           {/* Section header */}
           <div className="bg-emerald-50 px-6 py-4 border-b border-emerald-100 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -169,6 +206,7 @@ export default async function HistoryPage() {
 
               return (
                 <div key={record.id} className="p-5 hover:bg-emerald-50/30 transition-colors space-y-3">
+
                   {/* Record meta row */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
