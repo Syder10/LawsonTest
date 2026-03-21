@@ -116,7 +116,7 @@ export default function ProfileForm({ userId, initialData, username, supervisorI
                         <Input
                             disabled
                             value={username}
-                            className="w-full p-6 text-base rounded-xl border-emerald-100 bg-emerald-50/50 text-emerald-800"
+                            className="w-full px-4 py-3 text-base rounded-xl border-emerald-100 bg-emerald-50/50 text-emerald-800"
                         />
                         <p className="text-xs text-slate-500">Your login identifier cannot be changed.</p>
                     </div>
@@ -130,7 +130,7 @@ export default function ProfileForm({ userId, initialData, username, supervisorI
                             onChange={handleChange}
                             placeholder="John Doe"
                             required
-                            className="w-full p-6 text-base rounded-xl border-emerald-100 bg-white focus:border-emerald-500 focus:ring-emerald-500/20 transition-all text-slate-900 font-medium"
+                            className="w-full px-4 py-3 text-base rounded-xl border-emerald-100 bg-white focus:border-emerald-500 focus:ring-emerald-500/20 transition-all text-slate-900 font-medium"
                         />
                     </div>
 
@@ -142,7 +142,7 @@ export default function ProfileForm({ userId, initialData, username, supervisorI
                             value={formData.department}
                             onChange={handleChange}
                             required
-                            className="w-full p-4 h-[58px] text-base rounded-xl border border-emerald-100 bg-white focus:border-emerald-500 focus:ring-emerald-500/20 transition-all text-slate-900 font-medium"
+                            className="w-full px-4 py-3 h-12 text-base rounded-xl border border-emerald-100 bg-white focus:border-emerald-500 focus:ring-emerald-500/20 transition-all text-slate-900 font-medium"
                         >
                             <option value="" disabled>Select Department</option>
                             <option value="Blowing">Blowing</option>
@@ -161,7 +161,7 @@ export default function ProfileForm({ userId, initialData, username, supervisorI
                             value={formData.group_number}
                             onChange={handleChange}
                             required
-                            className="w-full p-4 h-[58px] text-base rounded-xl border border-emerald-100 bg-white focus:border-emerald-500 focus:ring-emerald-500/20 transition-all text-slate-900 font-medium"
+                            className="w-full px-4 py-3 h-12 text-base rounded-xl border border-emerald-100 bg-white focus:border-emerald-500 focus:ring-emerald-500/20 transition-all text-slate-900 font-medium"
                         >
                             <option value={1}>Group 1</option>
                             <option value={2}>Group 2</option>
@@ -174,7 +174,7 @@ export default function ProfileForm({ userId, initialData, username, supervisorI
                     <Button
                         type="submit"
                         disabled={isSubmitting}
-                        className="px-8 py-6 text-base font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-lg shadow-emerald-600/20 transition-all w-full md:w-auto"
+                        className="px-6 py-3 text-base font-bold bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl shadow-lg shadow-emerald-600/20 transition-all w-full sm:w-auto"
                     >
                         {isSubmitting ? "Saving Changes..." : "Save Profile"}
                     </Button>
@@ -207,7 +207,7 @@ export default function ProfileForm({ userId, initialData, username, supervisorI
                                     placeholder="Enter new password"
                                     required
                                     minLength={6}
-                                    className="w-full p-6 pr-14 text-base rounded-xl border-emerald-100 bg-white focus:border-emerald-500 focus:ring-emerald-500/20 transition-all text-slate-900 font-medium"
+                                    className="w-full px-4 py-3 pr-12 text-base rounded-xl border-emerald-100 bg-white focus:border-emerald-500 focus:ring-emerald-500/20 transition-all text-slate-900 font-medium"
                                 />
                                 <button
                                     type="button"
@@ -232,7 +232,7 @@ export default function ProfileForm({ userId, initialData, username, supervisorI
                                     placeholder="Confirm new password"
                                     required
                                     minLength={6}
-                                    className="w-full p-6 pr-14 text-base rounded-xl border-emerald-100 bg-white focus:border-emerald-500 focus:ring-emerald-500/20 transition-all text-slate-900 font-medium"
+                                    className="w-full px-4 py-3 pr-12 text-base rounded-xl border-emerald-100 bg-white focus:border-emerald-500 focus:ring-emerald-500/20 transition-all text-slate-900 font-medium"
                                 />
                                 <button
                                     type="button"
@@ -256,7 +256,7 @@ export default function ProfileForm({ userId, initialData, username, supervisorI
                         <Button
                             type="submit"
                             disabled={isChangingPassword}
-                            className="px-8 py-6 text-base font-bold bg-slate-800 hover:bg-slate-900 text-white rounded-xl shadow-lg shadow-slate-800/20 transition-all w-full md:w-auto"
+                            className="px-6 py-3 text-base font-bold bg-slate-800 hover:bg-slate-900 active:bg-slate-950 text-white rounded-xl shadow-lg shadow-slate-800/20 transition-all w-full sm:w-auto"
                         >
                             {isChangingPassword ? "Updating Password..." : "Update Password"}
                         </Button>
