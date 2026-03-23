@@ -25,7 +25,7 @@ const recordTypeToDepartment: Record<string, string> = {
   "Ginger Production":                      "Alcohol and Blending",
   "Extraction Monitoring Records":          "Alcohol and Blending",
   "Caramel Stock":                          "Alcohol and Blending",
-  "Daily Records Alcohol For Concentrate":  "Alcohol and Blending"
+  "Daily Records Alcohol For Concentrate":  "Alcohol and Blending",
   "Filling Line Daily Records":             "Filling Line",
   "Caps Stock":                             "Filling Line",
   "Labels Stock":                           "Filling Line",
