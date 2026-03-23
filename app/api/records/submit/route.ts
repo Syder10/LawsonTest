@@ -121,6 +121,8 @@ export async function POST(request: NextRequest) {
     }
 
     // ── 2. Rate limit ──────────────────────────────────────────────────────────
+    // We check here but only COMMIT the timestamp after a successful insert,
+    // so that multi-tank submissions (Extraction) don't trip the limit mid-loop.
     const now = Date.now()
     const last = lastSubmitTime.get(user.id) ?? 0
     if (now - last < RATE_LIMIT_MS) {
@@ -129,7 +131,6 @@ export async function POST(request: NextRequest) {
         { status: 429 }
       )
     }
-    lastSubmitTime.set(user.id, now)
 
     const body = await request.json()
     const { date, supervisorName, shift, group, department, recordType, productType, formData } = body
@@ -206,6 +207,9 @@ export async function POST(request: NextRequest) {
       console.error("[submit] Supabase error:", error.message)
       return NextResponse.json({ error: `Database error: ${error.message}` }, { status: 500 })
     }
+
+    // Commit the rate limit timestamp only on success
+    lastSubmitTime.set(user.id, now)
 
     return NextResponse.json({ success: true, data })
   } catch (error) {
