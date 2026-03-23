@@ -77,8 +77,8 @@ export default function RecordSelectionPage() {
 
   const [profile, setProfile]           = useState<Profile | null>(null)
   const [userId, setUserId]             = useState<string | null>(null)
-  const [selectedDate, setSelectedDate] = useState(todayStr())
-  const [shift, setShift]               = useState(autoShift())
+  const [selectedDate, setSelectedDate] = useState("")
+  const [shift, setShift]               = useState("")
 
   // Submitted record types for this date+shift
   const [submittedTypes, setSubmittedTypes] = useState<Set<string>>(new Set())
@@ -109,6 +109,10 @@ export default function RecordSelectionPage() {
   // Re-check submitted records whenever date or shift changes
   useEffect(() => {
     if (!userId) return
+    if (!selectedDate || !shift) {
+      setSubmittedTypes(new Set())
+      return
+    }
     const check = async () => {
       setLoadingChecks(true)
       setSubmittedTypes(new Set())
@@ -168,7 +172,10 @@ export default function RecordSelectionPage() {
     check()
   }, [userId, selectedDate, shift, profile])
 
+  const bothSelected = !!selectedDate && !!shift
+
   const isToday = selectedDate === todayStr()
+  const isPastDate = selectedDate && selectedDate < todayStr()
   const userDept = profile?.department || null
   const isManager = profile?.role === "manager" || profile?.role === "admin"
 
@@ -185,6 +192,7 @@ export default function RecordSelectionPage() {
     const reasonValue = noWorkReason === "Other" ? otherReason.trim() : noWorkReason
     if (!reasonValue) { toast.error("Please select a reason for no work."); return }
     if (!shift)       { toast.error("Please select a shift."); return }
+    if (!selectedDate) { toast.error("Please select a date."); return }
 
     setIsSubmittingNoWork(true)
     try {
@@ -254,8 +262,7 @@ export default function RecordSelectionPage() {
               max={todayStr()}
               onChange={(e) => setSelectedDate(e.target.value)}
               className="w-full h-10 px-3 text-sm font-medium rounded-xl border border-emerald-200 bg-white text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none transition-all"
-            />
-          </div>
+            />          </div>
 
           {/* Shift */}
           <div className="space-y-1.5">
@@ -278,7 +285,7 @@ export default function RecordSelectionPage() {
           </div>
         </div>
 
-        {!isToday && (
+        {isPastDate && (
           <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 font-semibold">
             You are submitting for a previous date: {new Date(selectedDate + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
           </p>
@@ -297,7 +304,7 @@ export default function RecordSelectionPage() {
       )}
 
       {/* ── Record type cards ─────────────────────────────────────────────── */}
-      {!noWorkChecked && shift && visibleDepartments.length > 0 && (
+      {!noWorkChecked && bothSelected && visibleDepartments.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {visibleDepartments.map((dept) => (
             <div
@@ -352,9 +359,9 @@ export default function RecordSelectionPage() {
         </div>
       )}
 
-      {!shift && visibleDepartments.length > 0 && (
+      {!bothSelected && visibleDepartments.length > 0 && (
         <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 text-center text-slate-500 font-medium text-sm">
-          Please select a shift above to see your record types.
+          Please select a date and shift above to see your record types.
         </div>
       )}
 
@@ -448,7 +455,8 @@ export default function RecordSelectionPage() {
                   isSubmittingNoWork ||
                   !noWorkReason ||
                   (noWorkReason === "Other" && !otherReason.trim()) ||
-                  !shift
+                  !shift ||
+                  !selectedDate
                 }
                 className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
