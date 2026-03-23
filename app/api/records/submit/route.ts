@@ -18,20 +18,22 @@ const recordTypeToTable: Record<string, string> = {
 }
 
 // Map each record type to the department it belongs to
-const recordTypeToDepartment: Record<string, string> = {
-  "Daily Records (Preform Usage)":          "Blowing",
-  "Daily Usage of Alcohol And Stock Level": "Alcohol and Blending",
-  "Daily Records for Alcohol and Blending": "Alcohol and Blending",
-  "Ginger Production":                      "Alcohol and Blending",
-  "Extraction Monitoring Records":          "Alcohol and Blending",
-  "Caramel Stock":                          "Alcohol and Blending",
-  "Daily Records Alcohol For Concentrate":  "Alcohol and Blending",
-  "Filling Line Daily Records":             "Filling Line",
-  "Caps Stock":                             "Filling Line",
-  "Labels Stock":                           "Filling Line",
-  "Packaging Daily Records":                "Packaging",
-  "Daily Records Alcohol For Concentrate":  "Concentrate",
-  "Herbs Stock":                            "Concentrate",
+// Maps each record type to ALL departments whose supervisors are allowed to submit it.
+// Use an array so a record type can belong to more than one department.
+const recordTypeAllowedDepts: Record<string, string[]> = {
+  "Daily Records (Preform Usage)":          ["Blowing"],
+  "Daily Usage of Alcohol And Stock Level": ["Alcohol and Blending"],
+  "Daily Records for Alcohol and Blending": ["Alcohol and Blending"],
+  "Ginger Production":                      ["Alcohol and Blending"],
+  "Extraction Monitoring Records":          ["Alcohol and Blending"],
+  "Caramel Stock":                          ["Alcohol and Blending"],
+  "Filling Line Daily Records":             ["Filling Line"],
+  "Caps Stock":                             ["Filling Line"],
+  "Labels Stock":                           ["Filling Line"],
+  "Packaging Daily Records":                ["Packaging"],
+  // Shared between Concentrate AND Alcohol and Blending
+  "Daily Records Alcohol For Concentrate":  ["Concentrate", "Alcohol and Blending"],
+  "Herbs Stock":                            ["Concentrate"],
 }
 
 const fieldNameToColumn: Record<string, string> = {
@@ -70,14 +72,6 @@ const fieldNameToColumn: Record<string, string> = {
   "Alcohol Percentage":             "alcohol_percentage",
   "Expected Maturity Date":         "expected_maturity_date",
   "Prepared By":                    "prepared_by",
-
-  "Number of Tanks (70)":           "number_tanks_70",
-  "Alcohol Used (L) (70)":          "alcohol_used_70_litres",
-  "Water (L) (70)":                 "water_70_litres",
-  "Number of Tanks (80)":           "number_tanks_80",
-  "Alcohol Used (L) (80)":          "alcohol_used_80_litres",
-  "Water (L) (80)":                 "water_80_litres",
-  "Total Alcohol Used (L)":         "total_alcohol_used_litres",
 
   // Filling Line
   "Product":                        "product",
@@ -142,20 +136,24 @@ export async function POST(request: NextRequest) {
       .single()
 
     const isManagerOrAdmin = profile?.role === "manager" || profile?.role === "admin"
-    const allowedDept = profile?.department?.toLowerCase()
-    const submittedDept = department?.toLowerCase()
-    const expectedDept = recordTypeToDepartment[recordType]?.toLowerCase()
 
     if (!isManagerOrAdmin) {
-      if (allowedDept && allowedDept !== submittedDept) {
+      // Always read the user's department from the DB — never trust the frontend
+      const userDept = profile?.department || null
+
+      if (!userDept) {
         return NextResponse.json(
-          { error: "You can only submit records for your own department." },
+          { error: "Your profile has no department assigned. Please contact your manager." },
           { status: 403 }
         )
       }
-      if (expectedDept && allowedDept && allowedDept !== expectedDept) {
+
+      const allowedDepts = recordTypeAllowedDepts[recordType] || []
+      const normalised    = allowedDepts.map(d => d.toLowerCase())
+
+      if (!normalised.includes(userDept.toLowerCase())) {
         return NextResponse.json(
-          { error: `This record type belongs to the ${recordTypeToDepartment[recordType]} department.` },
+          { error: `Your department (${userDept}) is not authorised to submit "${recordType}".` },
           { status: 403 }
         )
       }
