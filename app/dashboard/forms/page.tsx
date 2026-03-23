@@ -20,6 +20,7 @@ const DEPARTMENTS: { name: string; records: string[] }[] = [
       "Ginger Production",
       "Extraction Monitoring Records",
       "Caramel Stock",
+      "Daily Records Alcohol For Concentrate",
     ],
   },
   {
