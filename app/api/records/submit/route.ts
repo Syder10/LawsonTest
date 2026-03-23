@@ -25,6 +25,7 @@ const recordTypeToDepartment: Record<string, string> = {
   "Ginger Production":                      "Alcohol and Blending",
   "Extraction Monitoring Records":          "Alcohol and Blending",
   "Caramel Stock":                          "Alcohol and Blending",
+  "Daily Records Alcohol For Concentrate":  "Alcohol and Blending"
   "Filling Line Daily Records":             "Filling Line",
   "Caps Stock":                             "Filling Line",
   "Labels Stock":                           "Filling Line",
@@ -69,6 +70,14 @@ const fieldNameToColumn: Record<string, string> = {
   "Alcohol Percentage":             "alcohol_percentage",
   "Expected Maturity Date":         "expected_maturity_date",
   "Prepared By":                    "prepared_by",
+
+  "Number of Tanks (70)":           "number_tanks_70",
+  "Alcohol Used (L) (70)":          "alcohol_used_70_litres",
+  "Water (L) (70)":                 "water_70_litres",
+  "Number of Tanks (80)":           "number_tanks_80",
+  "Alcohol Used (L) (80)":          "alcohol_used_80_litres",
+  "Water (L) (80)":                 "water_80_litres",
+  "Total Alcohol Used (L)":         "total_alcohol_used_litres",
 
   // Filling Line
   "Product":                        "product",
