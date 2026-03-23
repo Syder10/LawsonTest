@@ -4,7 +4,7 @@ import { type NextRequest, NextResponse } from "next/server"
 
 // ── Simple in-memory rate limiter: max 1 submission per user per 5 seconds ──
 const lastSubmitTime = new Map<string, number>()
-const RATE_LIMIT_MS = 5000
+const RATE_LIMIT_MS = 20000
 
 const recordTypeToTable: Record<string, string> = {
   "Daily Records (Preform Usage)":          "blowing_daily_records",
