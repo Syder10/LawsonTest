@@ -2,10 +2,6 @@ import { createClient as createSSRClient } from "@/lib/supabase/server"
 import { createClient } from "@supabase/supabase-js"
 import { type NextRequest, NextResponse } from "next/server"
 
-// ── Simple in-memory rate limiter: max 1 submission per user per 5 seconds ──
-const lastSubmitTime = new Map<string, number>()
-const RATE_LIMIT_MS = 20000
-
 const recordTypeToTable: Record<string, string> = {
   "Daily Records (Preform Usage)":          "blowing_daily_records",
   "Daily Usage of Alcohol And Stock Level": "alcohol_stock_level_records",
@@ -120,28 +116,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // ── 2. Rate limit ──────────────────────────────────────────────────────────
-    // We check here but only COMMIT the timestamp after a successful insert,
-    // so that multi-tank submissions (Extraction) don't trip the limit mid-loop.
-    const now = Date.now()
-    const last = lastSubmitTime.get(user.id) ?? 0
-    if (now - last < RATE_LIMIT_MS) {
-      return NextResponse.json(
-        { error: "Please wait a moment before submitting again." },
-        { status: 429 }
-      )
-    }
-
     const body = await request.json()
     const { date, supervisorName, shift, group, department, recordType, productType, formData } = body
 
-    // ── 3. Validate record type ────────────────────────────────────────────────
+    // ── 2. Validate record type ────────────────────────────────────────────────
     const table = recordTypeToTable[recordType]
     if (!table) {
       return NextResponse.json({ error: "Invalid record type" }, { status: 400 })
     }
 
-    // ── 4. Department guard — supervisors can only submit for their own dept ───
+    // ── 3. Department guard — supervisors can only submit for their own dept ───
     const { data: profile } = await ssrClient
       .from("profiles")
       .select("department, role")
@@ -168,7 +152,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ── 5. Build the DB row ────────────────────────────────────────────────────
+    // ── 4. Build the DB row ────────────────────────────────────────────────────
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -207,9 +191,6 @@ export async function POST(request: NextRequest) {
       console.error("[submit] Supabase error:", error.message)
       return NextResponse.json({ error: `Database error: ${error.message}` }, { status: 500 })
     }
-
-    // Commit the rate limit timestamp only on success
-    lastSubmitTime.set(user.id, now)
 
     return NextResponse.json({ success: true, data })
   } catch (error) {
