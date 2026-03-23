@@ -22,11 +22,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { date, supervisorName, shift, group, department, reason } = body
+    const { date, supervisorName, shift, group, reason } = body
 
-    if (!date || !supervisorName || !shift || !department || !reason) {
+    if (!date || !supervisorName || !shift || !reason) {
       return NextResponse.json(
-        { error: "Missing required fields: date, supervisorName, shift, department, reason" },
+        { error: "Missing required fields: date, supervisorName, shift, reason" },
         { status: 400 }
       )
     }
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid reason" }, { status: 400 })
     }
 
-    // Fetch the user's real department from profiles — never trust the client
+    // Always fetch department from DB — never trust the client
     const { data: profile } = await ssrClient
       .from("profiles")
       .select("department, role, full_name")
@@ -43,9 +43,17 @@ export async function POST(request: NextRequest) {
       .single()
 
     const isManagerOrAdmin = profile?.role === "manager" || profile?.role === "admin"
-    if (!isManagerOrAdmin && profile?.department?.toLowerCase() !== department.toLowerCase()) {
-      return NextResponse.json({ error: "You can only submit records for your own department" }, { status: 403 })
+    const userDept = profile?.department || null
+
+    if (!isManagerOrAdmin && !userDept) {
+      return NextResponse.json(
+        { error: "Your profile has no department assigned. Please contact your manager." },
+        { status: 403 }
+      )
     }
+
+    // Use the DB department — ignore whatever the frontend sent
+    const effectiveDept = isManagerOrAdmin ? (body.department || userDept) : userDept
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -60,7 +68,7 @@ export async function POST(request: NextRequest) {
         supervisor_name: supervisorName,
         shift,
         group_number:    group ?? null,
-        department,
+        department:      effectiveDept,
         reason:          reason.trim(),
       }])
       .select()
