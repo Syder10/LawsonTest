@@ -24,9 +24,10 @@ export default async function DashboardLayout({
 
     const role = profile?.role || 'supervisor'
     const displayName =
-        role === 'admin'   ? 'Administrator' :
-        role === 'manager' ? 'Manager'        :
-                             'Supervisor'
+        role === 'admin'       ? 'Administrator' :
+        role === 'manager'     ? 'Manager'        :
+        role === 'procurement' ? 'Stock Office'   :
+                                 'Supervisor'
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
