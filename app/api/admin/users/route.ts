@@ -6,7 +6,7 @@ import { NextResponse } from "next/server"
 async function requireAdmin() {
     const ssrClient = await createSSRClient()
     const { data: { user } } = await ssrClient.auth.getUser()
-    if (!user) return { error: "Unauthorized", status: 401, user: null, ssrClient: null }
+    if (!user) return { error: "Unauthorized", status: 401 }
 
     const { data: profile } = await ssrClient
         .from("profiles")
@@ -15,17 +15,24 @@ async function requireAdmin() {
         .single()
 
     if (profile?.role !== "admin") {
-        return { error: "Forbidden — admin only", status: 403, user: null, ssrClient: null }
+        return { error: "Forbidden — admin only", status: 403 }
     }
-    return { error: null, status: 200, user, ssrClient }
+    return { error: null, status: 200 }
 }
 
 // GET /api/admin/users — list all users with their profiles
 export async function GET() {
-    const { error, status, ssrClient } = await requireAdmin()
+    const { error, status } = await requireAdmin()
     if (error) return NextResponse.json({ error }, { status })
 
-    const { data: profiles, error: dbError } = await ssrClient!
+    // Must use the service role client here — the anon/SSR client is subject to
+    // RLS which restricts users to reading only their own profile row.
+    const serviceClient = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+
+    const { data: profiles, error: dbError } = await serviceClient
         .from("profiles")
         .select("id, email, full_name, role, department, group_number, supervisor_id, created_at")
         .order("created_at", { ascending: false })
