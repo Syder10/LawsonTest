@@ -59,7 +59,7 @@ export async function POST(request: Request) {
         )
     }
 
-    if (!["supervisor", "manager", "admin"].includes(role)) {
+    if (!["supervisor", "manager", "admin", "procurement"].includes(role)) {
         return NextResponse.json({ error: "Invalid role" }, { status: 400 })
     }
 
