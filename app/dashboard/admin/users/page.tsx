@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { redirect } from "next/navigation"
 import UserManagement from "./UserManagement"
 
@@ -17,12 +18,16 @@ export default async function AdminUsersPage() {
 
     if (profile?.role !== "admin") redirect("/dashboard")
 
-    // Fetch all user profiles
-    const { data: users } = await supabase
+    // Use service role client to bypass RLS — admins must see all profiles
+    const serviceClient = createServiceClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+
+    const { data: users } = await serviceClient
         .from("profiles")
         .select("id, email, full_name, role, department, group_number, supervisor_id, created_at")
         .order("created_at", { ascending: false })
 
     return <UserManagement initialUsers={users || []} />
 }
-
