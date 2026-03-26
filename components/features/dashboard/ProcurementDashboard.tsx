@@ -1,293 +1,277 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { RefreshCw, Package, Droplet, Tag, FlaskConical, Box, AlertTriangle, Activity } from "lucide-react"
+import { useState, useEffect, useCallback } from "react"
+import { RefreshCw, Package, Droplet, Tag, FlaskConical, Box, AlertTriangle, Activity, TrendingDown, ArrowRight } from "lucide-react"
 
 // ── Colour tokens ──────────────────────────────────────────────────────────
-const BITTERS_BORDER  = "border-black"
-const BITTERS_BADGE   = "bg-black text-white"
-const BITTERS_TEXT    = "text-black"
-const GINGER_BORDER   = "border-yellow-400"
-const GINGER_BADGE    = "bg-yellow-400 text-black"
-const GINGER_TEXT     = "text-yellow-600"
-const GENERAL_BORDER  = "border-emerald-300"
+const BITTERS = { border: "border-zinc-900", bg: "bg-zinc-900",  text: "text-zinc-900",   light: "bg-zinc-50",    badge: "bg-zinc-900 text-white",       dot: "bg-zinc-900" }
+const GINGER  = { border: "border-amber-400", bg: "bg-amber-400", text: "text-amber-700",  light: "bg-amber-50",   badge: "bg-amber-400 text-zinc-900",   dot: "bg-amber-400" }
+const GENERAL = { border: "border-emerald-200", bg: "bg-emerald-600", text: "text-emerald-700", light: "bg-emerald-50", badge: "bg-emerald-100 text-emerald-800", dot: "bg-emerald-500" }
 
 interface KPIData {
-  current_alcohol_balance:   number
-  current_preform_balance:   number
-  total_alcohol_used_litres: number
-  total_preforms_used:       number
-  total_caps_used:           number
-  caps_remaining:            number
-  labels_bitters_remaining:  number
-  labels_ginger_remaining:   number
-  caramel_bitters_remaining: number
-  caramel_ginger_remaining:  number
-  total_labels_bitters_used: number
-  total_labels_ginger_used:  number
-  live_bitters_stock:        number
-  live_ginger_stock:         number
-  last_updated:              string
+  current_alcohol_balance: number; current_preform_balance: number
+  total_alcohol_used_litres: number; total_preforms_used: number; total_caps_used: number
+  caps_remaining: number; labels_bitters_remaining: number; labels_ginger_remaining: number
+  caramel_bitters_remaining: number; caramel_ginger_remaining: number
+  total_labels_bitters_used: number; total_labels_ginger_used: number
+  live_bitters_stock: number; live_ginger_stock: number
+  last_updated: string
 }
 
 interface LiveStock {
-  available:        number
-  quantityProduced: number
-  quantityLoaded:   number
-  minimumThreshold: number
+  available: number; quantityProduced: number; quantityLoaded: number; minimumThreshold: number
 }
 
-// ── Reusable stat card ─────────────────────────────────────────────────────
-function StatCard({
-  label, value, unit, icon: Icon,
-  borderClass = GENERAL_BORDER,
-  valueClass  = "text-emerald-900",
-  alert = false,
-}: {
-  label: string; value: number; unit?: string
-  icon?: React.ElementType; borderClass?: string; valueClass?: string; alert?: boolean
-}) {
+// ── Horizontal gauge ───────────────────────────────────────────────────────
+function Gauge({ value, max, color }: { value: number; max: number; color: string }) {
+  const pct = Math.min((value / Math.max(max, 1)) * 100, 100)
   return (
-    <div className={`bg-white rounded-2xl border-2 ${borderClass} p-4 space-y-2 ${alert ? "bg-red-50 border-red-400" : ""}`}>
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 leading-tight">{label}</p>
-        {Icon && <Icon className="w-4 h-4 text-slate-400 shrink-0" />}
-        {alert && <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 animate-pulse" />}
-      </div>
-      <p className={`text-2xl font-black tabular-nums ${alert ? "text-red-700" : valueClass}`}>
-        {value.toLocaleString()}
-      </p>
-      {unit && <p className="text-[10px] font-semibold text-slate-400">{unit}</p>}
+    <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden mt-2">
+      <div className={`h-full rounded-full transition-all duration-700 ${color}`} style={{ width: `${pct}%` }} />
     </div>
   )
 }
 
-// ── Live stock card ────────────────────────────────────────────────────────
-function LiveCard({ name, data }: { name: "Bitters" | "Ginger"; data: LiveStock }) {
-  const isBitters    = name === "Bitters"
-  const threshold    = data.minimumThreshold > 0 ? data.minimumThreshold : 50
-  const isLow        = data.available <= threshold
-  const isEmpty      = data.available <= 0
-  const borderClass  = isEmpty || isLow ? "border-red-400" : isBitters ? BITTERS_BORDER : GINGER_BORDER
-  const dotColor     = isEmpty ? "bg-red-600" : isLow ? "bg-red-500 animate-pulse" : isBitters ? "bg-black" : "bg-yellow-400"
+// ── Stock card (for live inventory) ───────────────────────────────────────
+function StockCard({ name, data }: { name: "Bitters" | "Ginger"; data: LiveStock }) {
+  const tok       = name === "Bitters" ? BITTERS : GINGER
+  const threshold = data.minimumThreshold > 0 ? data.minimumThreshold : 50
+  const isLow     = data.available <= threshold
+  const isEmpty   = data.available <= 0
+  const alert     = isEmpty || isLow
+  const statusColor = isEmpty ? "bg-red-500" : isLow ? "bg-red-400 animate-pulse" : tok.dot
 
   return (
-    <div className={`bg-white rounded-2xl border-2 ${borderClass} p-5 space-y-3 ${isEmpty || isLow ? "bg-red-50" : ""}`}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className={`w-2.5 h-2.5 rounded-full ${dotColor}`} />
-          <span className={`text-sm font-bold ${isBitters ? BITTERS_TEXT : GINGER_TEXT}`}>{name}</span>
-          {(isEmpty || isLow) && (
-            <span className="text-[10px] font-bold uppercase tracking-wide text-red-600 bg-red-100 px-2 py-0.5 rounded-full animate-pulse">
-              {isEmpty ? "Out of Stock" : "Low Stock"}
-            </span>
-          )}
+    <div className={`relative bg-white rounded-2xl border-2 overflow-hidden transition-all duration-300 ${alert ? "border-red-400" : tok.border}`}>
+      {/* Top accent */}
+      <div className={`absolute top-0 left-0 right-0 h-1 ${alert ? "bg-red-500" : tok.bg}`} />
+
+      <div className="p-5 pt-6">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className={`w-2.5 h-2.5 rounded-full ${statusColor} shrink-0`} />
+            <span className={`text-sm font-black uppercase tracking-widest ${alert ? "text-red-700" : tok.text}`}>{name}</span>
+            {alert && (
+              <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-red-600 bg-red-100 px-2 py-0.5 rounded-full">
+                <AlertTriangle className="w-2.5 h-2.5" />
+                {isEmpty ? "Out" : "Low"}
+              </span>
+            )}
+          </div>
+          <span className={`text-[10px] font-black px-2.5 py-1 rounded-full ${alert ? "bg-red-100 text-red-700" : tok.badge}`}>
+            {name}
+          </span>
         </div>
-        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isBitters ? BITTERS_BADGE : GINGER_BADGE}`}>
-          {name}
+
+        {/* Big number */}
+        <div className="mb-1">
+          <span className={`text-5xl font-black tabular-nums tracking-tight ${alert ? "text-red-700" : tok.text}`}>
+            {data.available.toLocaleString()}
+          </span>
+          <span className="text-sm text-slate-300 font-semibold ml-2">ctns</span>
+        </div>
+        <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Live cartons available</p>
+
+        {/* Gauge */}
+        {data.minimumThreshold > 0 && (
+          <Gauge value={data.available} max={data.minimumThreshold * 4} color={alert ? "bg-red-400" : tok.bg} />
+        )}
+
+        {/* Footer breakdown */}
+        {(data.quantityProduced > 0 || data.quantityLoaded > 0) && (
+          <div className="mt-4 pt-3 border-t border-slate-50 flex gap-4">
+            {data.quantityProduced > 0 && (
+              <div>
+                <p className="text-[9px] text-slate-300 uppercase tracking-wider font-bold">Last in</p>
+                <p className="text-sm font-black text-emerald-600 tabular-nums">+{data.quantityProduced}</p>
+              </div>
+            )}
+            {data.quantityLoaded > 0 && (
+              <div>
+                <p className="text-[9px] text-slate-300 uppercase tracking-wider font-bold">Last out</p>
+                <p className="text-sm font-black text-slate-500 tabular-nums">−{data.quantityLoaded}</p>
+              </div>
+            )}
+            {data.minimumThreshold > 0 && (
+              <div className="ml-auto">
+                <p className="text-[9px] text-slate-300 uppercase tracking-wider font-bold">Min. threshold</p>
+                <p className="text-sm font-black text-slate-400 tabular-nums">{data.minimumThreshold}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Material row (for remaining + used) ───────────────────────────────────
+function MatRow({ label, remaining, used, unit, icon: Icon, tok }: {
+  label: string; remaining: number; used: number; unit: string
+  icon?: React.ElementType; tok: typeof GENERAL
+}) {
+  const total = remaining + used
+  const pct   = total > 0 ? Math.round((remaining / total) * 100) : 0
+  const isLow = pct < 20
+  return (
+    <div className={`bg-white rounded-2xl border-2 ${tok.border} p-4 space-y-3`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          {Icon && <Icon className={`w-3.5 h-3.5 ${tok.text} shrink-0 opacity-60`} />}
+          <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-400 truncate">{label}</p>
+        </div>
+        <span className={`text-[9px] font-black px-2 py-0.5 rounded-full shrink-0 ${isLow ? "bg-red-100 text-red-600" : tok.badge}`}>
+          {pct}% left
         </span>
       </div>
 
-      <p className={`text-4xl font-black tabular-nums ${isEmpty || isLow ? "text-red-700" : isBitters ? "text-black" : "text-yellow-600"}`}>
-        {data.available.toLocaleString()}
-        <span className="text-sm font-semibold text-slate-400 ml-1">ctns</span>
-      </p>
-
-      {data.minimumThreshold > 0 && (
-        <p className="text-xs text-slate-400 font-medium">Minimum threshold: {data.minimumThreshold}</p>
-      )}
-
-      {(data.quantityProduced > 0 || data.quantityLoaded > 0) && (
-        <div className="border-t border-slate-100 pt-2 space-y-1">
-          {data.quantityProduced > 0 && (
-            <div className="flex justify-between text-xs font-medium text-slate-500">
-              <span>Last produced</span>
-              <span className="font-bold text-emerald-600">+{data.quantityProduced}</span>
-            </div>
-          )}
-          {data.quantityLoaded > 0 && (
-            <div className="flex justify-between text-xs font-medium text-slate-500">
-              <span>Last loaded out</span>
-              <span className="font-bold text-slate-600">−{data.quantityLoaded}</span>
-            </div>
-          )}
+      {/* Remaining vs used */}
+      <div className="flex items-end gap-3">
+        <div className="flex-1">
+          <p className={`text-xl font-black tabular-nums ${tok.text}`}>{remaining.toLocaleString()}</p>
+          <p className="text-[9px] text-slate-300 font-semibold uppercase tracking-wider">Remaining {unit}</p>
         </div>
-      )}
+        <div className="flex items-center gap-1 text-slate-200">
+          <ArrowRight className="w-3 h-3" />
+        </div>
+        <div className="flex-1 text-right">
+          <p className="text-xl font-black tabular-nums text-slate-400">{used.toLocaleString()}</p>
+          <p className="text-[9px] text-slate-300 font-semibold uppercase tracking-wider">Used {unit}</p>
+        </div>
+      </div>
+
+      {/* Bar */}
+      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-700 ${isLow ? "bg-red-400" : tok.bg}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
     </div>
   )
 }
 
-// ── Main component ─────────────────────────────────────────────────────────
+// ── Section header ─────────────────────────────────────────────────────────
+function Sec({ title, icon: Icon, children }: { title: string; icon?: React.ElementType; children: React.ReactNode }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        {Icon && <Icon className="w-3.5 h-3.5 text-slate-400" />}
+        <h3 className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">{title}</h3>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+// ── Main ───────────────────────────────────────────────────────────────────
 export function ProcurementDashboard() {
-  const [kpi, setKpi]           = useState<KPIData | null>(null)
-  const [live, setLive]         = useState<{ bitters: LiveStock; ginger: LiveStock } | null>(null)
+  const [kpi, setKpi]       = useState<KPIData | null>(null)
+  const [live, setLive]     = useState<{ bitters: LiveStock; ginger: LiveStock } | null>(null)
   const [loading, setLoading]   = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [error, setError]       = useState<string | null>(null)
+  const [error, setError]   = useState<string | null>(null)
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
 
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     try {
-      setRefreshing(true)
-      setError(null)
-      const [kpiRes, liveRes] = await Promise.all([
-        fetch("/api/analytics/kpis"),
-        fetch("/api/live-stocks"),
-      ])
-      if (!kpiRes.ok || !liveRes.ok) throw new Error("Failed to fetch data")
-      const [kpiData, liveData] = await Promise.all([kpiRes.json(), liveRes.json()])
-      setKpi(kpiData)
-      setLive(liveData)
-    } catch (e) {
-      setError("Unable to load stock data. Please refresh.")
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
-  }
+      setRefreshing(true); setError(null)
+      const [kr, lr] = await Promise.all([fetch("/api/analytics/kpis"), fetch("/api/live-stocks")])
+      if (!kr.ok || !lr.ok) throw new Error("Failed to fetch data")
+      const [kd, ld] = await Promise.all([kr.json(), lr.json()])
+      setKpi(kd); setLive(ld); setLastRefresh(new Date())
+    } catch { setError("Unable to load. Check your connection and retry.") }
+    finally { setLoading(false); setRefreshing(false) }
+  }, [])
 
   useEffect(() => {
     fetchAll()
     const iv = setInterval(fetchAll, 60_000)
     return () => clearInterval(iv)
-  }, [])
+  }, [fetchAll])
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="min-h-screen bg-slate-50/60 -m-4 sm:-m-6 md:-m-10 p-4 sm:p-6 md:p-8 animate-fade-in-up">
+      <div className="max-w-5xl mx-auto space-y-6">
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-emerald-950">
-            Stock Overview
-          </h2>
-          <p className="text-sm text-emerald-700/70 font-medium mt-1">
-            Live inventory · remaining materials · usage
-          </p>
-          {kpi && (
-            <p className="text-[10px] text-slate-400 mt-0.5">
-              Updated: {new Date(kpi.last_updated).toLocaleString()}
-            </p>
-          )}
+        {/* ── Header ───────────────────────────────────────────────────── */}
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-emerald-600 flex items-center justify-center shrink-0">
+                  <TrendingDown className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-lg sm:text-xl font-black tracking-tight text-slate-900">Stock Overview</h1>
+                  <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-widest">Procurement & Stock Office</p>
+                </div>
+              </div>
+              {lastRefresh && (
+                <p className="text-[10px] text-slate-300 mt-2 ml-11">
+                  Refreshed {lastRefresh.toLocaleTimeString()} · auto-updates every 60s
+                </p>
+              )}
+            </div>
+            <button onClick={fetchAll} disabled={refreshing}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all disabled:opacity-60 shadow-sm shadow-emerald-600/20 self-start sm:self-auto">
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
+          </div>
         </div>
-        <button
-          onClick={fetchAll}
-          disabled={refreshing}
-          className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition-all disabled:opacity-60 self-start sm:self-auto"
-        >
-          <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
+
+        {/* Error */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center gap-3">
+            <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+            <p className="text-red-700 font-semibold text-sm flex-1">{error}</p>
+            <button onClick={fetchAll} className="text-xs font-bold text-red-600 hover:text-red-800 underline shrink-0">Retry</button>
+          </div>
+        )}
+
+        {/* Loading */}
+        {loading && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {[0, 1].map(i => (
+              <div key={i} className="bg-white rounded-2xl border border-slate-100 p-5 h-48 animate-pulse">
+                <div className="h-2 w-16 bg-slate-100 rounded mb-4" />
+                <div className="h-12 w-32 bg-slate-100 rounded mb-2" />
+                <div className="h-1.5 bg-slate-100 rounded-full mt-6" />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!loading && !error && kpi && live && (
+          <div className="space-y-6">
+
+            {/* ── 1. Live Inventory ─────────────────────────────────────── */}
+            <Sec title="Live Inventory — Cartons Available" icon={Activity}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <StockCard name="Bitters" data={live.bitters} />
+                <StockCard name="Ginger"  data={live.ginger}  />
+              </div>
+            </Sec>
+
+            {/* ── 2. Remaining vs Used ──────────────────────────────────── */}
+            <Sec title="Remaining vs Used — Raw Materials" icon={Package}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <MatRow label="Alcohol"         remaining={kpi.current_alcohol_balance}    used={kpi.total_alcohol_used_litres}    unit="L"     icon={Droplet}     tok={GENERAL}  />
+                <MatRow label="Preforms"        remaining={kpi.current_preform_balance}    used={kpi.total_preforms_used}          unit="bags"  icon={Package}     tok={GENERAL}  />
+                <MatRow label="Caps"            remaining={kpi.caps_remaining}             used={kpi.total_caps_used}              unit="units" icon={Box}         tok={GENERAL}  />
+                <MatRow label="Labels — Bitters" remaining={kpi.labels_bitters_remaining}  used={kpi.total_labels_bitters_used}    unit="units" icon={Tag}         tok={BITTERS}  />
+                <MatRow label="Labels — Ginger"  remaining={kpi.labels_ginger_remaining}   used={kpi.total_labels_ginger_used}     unit="units" icon={Tag}         tok={GINGER}   />
+                <MatRow label="Caramel — Bitters" remaining={kpi.caramel_bitters_remaining} used={0}                              unit=""      icon={FlaskConical} tok={BITTERS} />
+                <MatRow label="Caramel — Ginger"  remaining={kpi.caramel_ginger_remaining}  used={0}                              unit=""      icon={FlaskConical} tok={GINGER}  />
+              </div>
+            </Sec>
+
+          </div>
+        )}
+
       </div>
-
-      {loading && (
-        <div className="bg-white rounded-3xl border border-emerald-100 p-16 text-center">
-          <div className="w-10 h-10 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-slate-400 font-medium text-sm">Loading stock data…</p>
-        </div>
-      )}
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-2xl p-6 flex items-center gap-3">
-          <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
-          <p className="text-red-700 font-semibold text-sm">{error}</p>
-        </div>
-      )}
-
-      {!loading && !error && kpi && live && (
-        <>
-          {/* ── 1. Live Inventory ─────────────────────────────────────────── */}
-          <section>
-            <div className="flex items-center gap-2 mb-3">
-              <Activity className="w-4 h-4 text-emerald-600" />
-              <h3 className="text-xs font-black uppercase tracking-widest text-emerald-900">
-                Live Inventory (Cartons Available)
-              </h3>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <LiveCard name="Bitters" data={live.bitters} />
-              <LiveCard name="Ginger"  data={live.ginger}  />
-            </div>
-          </section>
-
-          {/* ── 2. Remaining Materials ────────────────────────────────────── */}
-          <section>
-            <h3 className="text-xs font-black uppercase tracking-widest text-emerald-900 mb-3">
-              Remaining Raw Materials
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              <StatCard
-                label="Alcohol Stock"   value={kpi.current_alcohol_balance}
-                unit="Remaining"        icon={Droplet}
-                borderClass={GENERAL_BORDER}
-              />
-              <StatCard
-                label="Preforms"        value={kpi.current_preform_balance}
-                unit="Bags remaining"   icon={Package}
-                borderClass={GENERAL_BORDER}
-              />
-              <StatCard
-                label="Caps"            value={kpi.caps_remaining}
-                unit="Units remaining"  icon={Box}
-                borderClass={GENERAL_BORDER}
-              />
-              <StatCard
-                label="Labels — Bitters" value={kpi.labels_bitters_remaining}
-                unit="Units remaining"   icon={Tag}
-                borderClass={BITTERS_BORDER} valueClass={BITTERS_TEXT}
-              />
-              <StatCard
-                label="Labels — Ginger"  value={kpi.labels_ginger_remaining}
-                unit="Units remaining"   icon={Tag}
-                borderClass={GINGER_BORDER} valueClass={GINGER_TEXT}
-              />
-              <StatCard
-                label="Caramel — Bitters" value={kpi.caramel_bitters_remaining}
-                unit="Remaining"          icon={FlaskConical}
-                borderClass={BITTERS_BORDER} valueClass={BITTERS_TEXT}
-              />
-              <StatCard
-                label="Caramel — Ginger"  value={kpi.caramel_ginger_remaining}
-                unit="Remaining"           icon={FlaskConical}
-                borderClass={GINGER_BORDER} valueClass={GINGER_TEXT}
-              />
-            </div>
-          </section>
-
-          {/* ── 3. Quantity Used ──────────────────────────────────────────── */}
-          <section>
-            <h3 className="text-xs font-black uppercase tracking-widest text-emerald-900 mb-3">
-              Quantity Used (All Time)
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              <StatCard
-                label="Alcohol Used"    value={kpi.total_alcohol_used_litres}
-                unit="Litres"           icon={Droplet}
-                borderClass={GENERAL_BORDER}
-              />
-              <StatCard
-                label="Preforms Used"   value={kpi.total_preforms_used}
-                unit="Bags"             icon={Package}
-                borderClass={GENERAL_BORDER}
-              />
-              <StatCard
-                label="Caps Used"       value={kpi.total_caps_used}
-                unit="Units"            icon={Box}
-                borderClass={GENERAL_BORDER}
-              />
-              <StatCard
-                label="Labels — Bitters" value={kpi.total_labels_bitters_used}
-                unit="Units"             icon={Tag}
-                borderClass={BITTERS_BORDER} valueClass={BITTERS_TEXT}
-              />
-              <StatCard
-                label="Labels — Ginger"  value={kpi.total_labels_ginger_used}
-                unit="Units"             icon={Tag}
-                borderClass={GINGER_BORDER} valueClass={GINGER_TEXT}
-              />
-            </div>
-          </section>
-        </>
-      )}
     </div>
   )
 }
