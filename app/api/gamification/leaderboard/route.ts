@@ -2,10 +2,29 @@ import { createClient as createSSRClient } from "@/lib/supabase/server"
 import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
 
-// ── On-time window: 1-hour grace period after shift ends (Ghana = UTC) ─────
-// Morning   ends 14:00 → on-time 14:00–14:59
-// Afternoon ends 21:00 → on-time 21:00–21:59
-// Night     ends 05:00 → on-time 05:00–05:59
+// ── Compulsory tables per department ──────────────────────────────────────
+// A team scores 1 point per shift where ALL their compulsory tables
+// have at least one on-time record. This is fair across departments:
+//   Blowing (1 table) = 1 point per shift
+//   Filling Line (3 tables) = 1 point per shift (only if all 3 submitted)
+const COMPULSORY: Record<string, string[]> = {
+  "Blowing":              ["blowing_daily_records"],
+  "Packaging":            ["packaging_daily_records"],
+  "Filling Line":         ["filling_line_daily_records", "caps_stock_records", "labels_stock_records"],
+  "Alcohol and Blending": ["alcohol_stock_level_records", "alcohol_blending_daily_records"],
+}
+
+const ALL_TABLES = [
+  "blowing_daily_records",
+  "packaging_daily_records",
+  "filling_line_daily_records",
+  "caps_stock_records",
+  "labels_stock_records",
+  "alcohol_stock_level_records",
+  "alcohol_blending_daily_records",
+]
+
+// On-time: submitted in the 1-hour grace window after shift ends (Ghana = UTC)
 function isOnTime(createdAt: string, shift: string): boolean {
   const hour = new Date(createdAt).getUTCHours()
   if (shift === "Morning")   return hour === 14
@@ -14,11 +33,11 @@ function isOnTime(createdAt: string, shift: string): boolean {
   return false
 }
 
-// Skip Sunday records entirely (everyone off) and Saturday Night records.
+// Weekend rules
 function isWeekendOff(dateStr: string, shift: string): boolean {
-  const day = new Date(dateStr + "T12:00:00Z").getUTCDay() // 0=Sun, 6=Sat
-  if (day === 0) return true                              // Sunday — all groups off
-  if (day === 6 && shift === "Night") return true         // Saturday — Night groups off
+  const day = new Date(dateStr + "T12:00:00Z").getUTCDay()
+  if (day === 0) return true                        // Sunday — everyone off
+  if (day === 6 && shift === "Night") return true   // Saturday — Night groups off
   return false
 }
 
@@ -33,17 +52,17 @@ export async function GET() {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
-    // Try Postgres view first (fastest)
-    const { data, error } = await serviceClient
+    // Try Postgres view first (fastest path)
+    const { data: viewData, error: viewError } = await serviceClient
       .from("leaderboard_weekly")
       .select("*")
       .order("on_time_count", { ascending: false })
       .limit(20)
 
-    if (!error) return NextResponse.json({ leaderboard: data || [] })
+    if (!viewError) return NextResponse.json({ leaderboard: viewData || [] })
 
-    // Fallback: compute in JS
-    console.warn("[leaderboard] View not found, falling back:", error.message)
+    // Fallback: compute in JS (runs if view hasn't been created yet)
+    console.warn("[leaderboard] View unavailable, falling back:", viewError.message)
     return await computeLeaderboard(serviceClient)
   } catch (e) {
     console.error("[leaderboard]", e)
@@ -53,28 +72,19 @@ export async function GET() {
 
 async function computeLeaderboard(serviceClient: ReturnType<typeof createClient>) {
   const now       = new Date()
+  // Monday of current ISO week
   const weekStart = new Date(now)
-  // ISO Monday: (getUTCDay() + 6) % 7 gives days-since-Monday (0=Mon … 6=Sun)
   weekStart.setUTCDate(now.getUTCDate() - ((now.getUTCDay() + 6) % 7))
   weekStart.setUTCHours(0, 0, 0, 0)
   const weekStartStr = weekStart.toISOString().split("T")[0]
-  // week_end = Saturday (Sunday always excluded anyway)
+  // Saturday (Sunday excluded — everyone off)
   const weekEnd = new Date(weekStart)
-  weekEnd.setUTCDate(weekStart.getUTCDate() + 5) // Mon + 5 = Sat
+  weekEnd.setUTCDate(weekStart.getUTCDate() + 5)
   const weekEndStr = weekEnd.toISOString().split("T")[0]
 
-  const TABLES = [
-    "blowing_daily_records",
-    "packaging_daily_records",
-    "filling_line_daily_records",
-    "caps_stock_records",
-    "labels_stock_records",
-    "alcohol_stock_level_records",
-    "alcohol_blending_daily_records",
-  ]
-
-  const results = await Promise.all(
-    TABLES.map(table =>
+  // Fetch all compulsory records for this week, one query per table
+  const tableResults = await Promise.all(
+    ALL_TABLES.map(table =>
       serviceClient
         .from(table)
         .select("user_id, department, group_number, date, shift, created_at")
@@ -83,47 +93,69 @@ async function computeLeaderboard(serviceClient: ReturnType<typeof createClient>
     )
   )
 
-  const all = results.flatMap(r => r.data || [])
+  // ── Build per-table set of on-time (dept|group|date|shift) combos ─────────
+  // Key: "department|group_number|date|shift"
+  type ShiftKey = string
+  const tableOnTime = new Map<string, Set<ShiftKey>>()
+  // Also track team metadata and last submission time
+  const teamMeta = new Map<string, { dept: string; group: number; lastSub: string }>()
 
-  // Track which dept+group is on Night shift this week (for Saturday exemption)
-  const nightGroups = new Set<string>()
-  for (const row of all) {
-    if (row.shift === "Night" && row.department && row.group_number) {
-      nightGroups.add(`${row.department}|${row.group_number}`)
+  for (let i = 0; i < ALL_TABLES.length; i++) {
+    const table = ALL_TABLES[i]
+    const rows  = tableResults[i].data || []
+    const onTimeSet = new Set<ShiftKey>()
+
+    for (const row of rows) {
+      if (!row.department || !row.group_number) continue
+      if (isWeekendOff(row.date, row.shift)) continue
+      if (!isOnTime(row.created_at, row.shift)) continue
+
+      const sk = `${row.department}|${row.group_number}|${row.date}|${row.shift}`
+      onTimeSet.add(sk)
+
+      const teamKey = `${row.department}|${row.group_number}`
+      const existing = teamMeta.get(teamKey)
+      if (!existing || row.created_at > existing.lastSub) {
+        teamMeta.set(teamKey, { dept: row.department, group: row.group_number, lastSub: row.created_at })
+      }
+    }
+    tableOnTime.set(table, onTimeSet)
+  }
+
+  // ── Collect all unique (dept|group|date|shift) shift keys ─────────────────
+  const allShiftKeys = new Set<ShiftKey>()
+  for (const set of tableOnTime.values()) {
+    for (const sk of set) allShiftKeys.add(sk)
+  }
+
+  // ── Score: 1 point per shift where the team completed ALL required tables ──
+  const teamScore = new Map<string, number>()
+
+  for (const sk of allShiftKeys) {
+    const [dept, group] = sk.split("|")
+    const teamKey  = `${dept}|${group}`
+    const required = COMPULSORY[dept] || []
+    if (required.length === 0) continue
+
+    const allComplete = required.every(table => tableOnTime.get(table)?.has(sk))
+    if (allComplete) {
+      teamScore.set(teamKey, (teamScore.get(teamKey) || 0) + 1)
     }
   }
 
-  const onTimeMap = new Map<string, { dept: string; group: number; count: number; lastSubmission: string }>()
-
-  for (const row of all) {
-    if (!row.department || !row.group_number) continue
-
-    // Skip Sunday (everyone off) and Saturday Night (night groups off)
-    if (isWeekendOff(row.date, row.shift)) continue
-
-    if (!isOnTime(row.created_at, row.shift)) continue
-
-    const teamKey  = `${row.department}|${row.group_number}`
-    const existing = onTimeMap.get(teamKey)
-    if (existing) {
-      existing.count++
-      if (row.created_at > existing.lastSubmission) existing.lastSubmission = row.created_at
-    } else {
-      onTimeMap.set(teamKey, {
-        dept: row.department, group: row.group_number,
-        count: 1, lastSubmission: row.created_at,
-      })
-    }
-  }
-
-  const leaderboard = Array.from(onTimeMap.values())
-    .map(v => ({
-      department:      v.dept,
-      group_number:    v.group,
-      team_label:      `${v.dept} — Group ${v.group}`,
-      on_time_count:   v.count,
-      last_submission: v.lastSubmission,
-    }))
+  // ── Build leaderboard ──────────────────────────────────────────────────────
+  const leaderboard = Array.from(teamScore.entries())
+    .map(([teamKey, score]) => {
+      const meta = teamMeta.get(teamKey)
+      const [dept, group] = teamKey.split("|")
+      return {
+        department:      dept,
+        group_number:    Number(group),
+        team_label:      `${dept} — Group ${group}`,
+        on_time_count:   score,          // completed shifts (1 per shift, fair for all depts)
+        last_submission: meta?.lastSub || "",
+      }
+    })
     .sort((a, b) => b.on_time_count - a.on_time_count)
     .slice(0, 20)
 
