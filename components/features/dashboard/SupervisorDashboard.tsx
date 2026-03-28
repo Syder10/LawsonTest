@@ -6,174 +6,348 @@ import {
   FileText, UserCircle, Download, History,
   Trophy, Medal, Star, Zap, Target, Award,
   CheckCircle2, Clock, Moon, Sunrise, Shuffle, Flame as FlameIcon,
-  X, ChevronRight, Sparkles
+  X, ChevronRight
 } from "lucide-react"
 
-// --- Types & Constants ---
-interface BadgeMeta { label: string; desc: string; icon: React.ElementType; color: string; bg: string; ring: string }
+// ── Badge catalogue ────────────────────────────────────────────────────────
+interface BadgeMeta { label: string; desc: string; icon: React.ElementType; color: string; bg: string; border: string }
 
 const BADGE_META: Record<string, BadgeMeta> = {
-  first_submit:      { label: "First Step",       desc: "Initial submission",           icon: Star,      color: "text-emerald-500", bg: "bg-emerald-500/10",  ring: "border-emerald-500/20" },
-  submissions_50:    { label: "Warm Up",          desc: "50 submissions",               icon: Star,      color: "text-teal-500",    bg: "bg-teal-500/10",     ring: "border-teal-500/20"    },
-  submissions_100:   { label: "Century",          desc: "100 submissions",              icon: Medal,     color: "text-amber-500",   bg: "bg-amber-500/10",    ring: "border-amber-500/20"   },
-  submissions_1000:  { label: "1K Elite",          desc: "1,000 submissions",            icon: Zap,       color: "text-yellow-400",  bg: "bg-zinc-900",        ring: "border-yellow-400/50"  },
-  streak_5:          { label: "On a Roll",         desc: "5-shift streak",               icon: FlameIcon, color: "text-orange-500",  bg: "bg-orange-500/10",   ring: "border-orange-500/20"  },
-  night_owl:         { label: "Night Owl",         desc: "On-time Night shift",          icon: Moon,      color: "text-indigo-400",  bg: "bg-indigo-500/10",   ring: "border-indigo-500/20"  },
+  first_submit:      { label: "First Step",       desc: "Your very first submission",              icon: Star,      color: "text-emerald-600", bg: "bg-emerald-50",  border: "border-emerald-100" },
+  submissions_50:    { label: "Warm Up",          desc: "50 submissions",                          icon: Star,      color: "text-teal-600",    bg: "bg-teal-50",     border: "border-teal-100"    },
+  submissions_100:   { label: "Century",          desc: "100 submissions",                         icon: Medal,     color: "text-amber-600",   bg: "bg-amber-50",    border: "border-amber-100"   },
+  submissions_200:   { label: "Double Century",   desc: "200 submissions",                         icon: Medal,     color: "text-orange-600",  bg: "bg-orange-50",   border: "border-orange-100"  },
+  submissions_300:   { label: "Triple Crown",     desc: "300 submissions",                         icon: Trophy,    color: "text-yellow-600",  bg: "bg-yellow-50",   border: "border-yellow-100"  },
+  submissions_400:   { label: "400 Club",         desc: "400 submissions",                         icon: Trophy,    color: "text-cyan-600",    bg: "bg-cyan-50",     border: "border-cyan-100"    },
+  submissions_500:   { label: "Half-K Legend",    desc: "500 submissions",                         icon: Award,     color: "text-violet-600",  bg: "bg-violet-50",   border: "border-violet-100"  },
+  submissions_750:   { label: "750 Warrior",      desc: "750 submissions",                         icon: Award,     color: "text-rose-600",    bg: "bg-rose-50",     border: "border-rose-100"    },
+  submissions_1000:  { label: "1K Elite",         desc: "1,000 submissions",                       icon: Zap,       color: "text-yellow-500",  bg: "bg-slate-900",   border: "border-slate-800"  },
+  submissions_1500:  { label: "1.5K Master",      desc: "1,500 submissions",                       icon: Zap,       color: "text-purple-400",  bg: "bg-slate-900",   border: "border-slate-800"  },
+  submissions_2000:  { label: "2K Immortal",      desc: "2,000 submissions — hall of fame",        icon: Zap,       color: "text-red-400",     bg: "bg-slate-900",   border: "border-slate-800"      },
+  streak_5:          { label: "On a Roll",        desc: "5-shift streak",                          icon: FlameIcon, color: "text-orange-600",  bg: "bg-orange-50",   border: "border-orange-100"  },
+  streak_10:         { label: "Unstoppable",      desc: "10-shift streak",                         icon: FlameIcon, color: "text-orange-600",  bg: "bg-orange-100",  border: "border-orange-200"  },
+  streak_20:         { label: "Machine",          desc: "20-shift streak",                         icon: FlameIcon, color: "text-red-600",     bg: "bg-red-50",      border: "border-red-100"      },
+  streak_30:         { label: "Iron Will",        desc: "30-shift streak",                         icon: FlameIcon, color: "text-red-600",     bg: "bg-red-100",     border: "border-red-200"      },
+  streak_50:         { label: "Legendary Run",    desc: "50-shift streak",                         icon: FlameIcon, color: "text-rose-600",    bg: "bg-rose-100",    border: "border-rose-200"    },
+  streak_100:        { label: "Eternal Flame",    desc: "100-shift streak — extraordinary",        icon: FlameIcon, color: "text-yellow-400",  bg: "bg-slate-900",   border: "border-slate-800"  },
+  perfect_week:      { label: "Perfect Week",     desc: "All shifts on time for a full week",      icon: Target,    color: "text-emerald-600", bg: "bg-emerald-50",  border: "border-emerald-100" },
+  night_owl:         { label: "Night Owl",        desc: "Submitted a Night shift on time",         icon: Moon,      color: "text-indigo-600",  bg: "bg-indigo-50",   border: "border-indigo-100"  },
+  early_bird:        { label: "Early Bird",       desc: "Submitted before 8am on a Morning shift", icon: Sunrise,   color: "text-amber-600",   bg: "bg-amber-50",    border: "border-amber-100"   },
+  all_rounder:       { label: "All-Rounder",      desc: "Submitted on all 3 shift types",          icon: Shuffle,   color: "text-teal-600",    bg: "bg-teal-50",     border: "border-teal-100"    },
 }
 
-const SHIFT_THEMES: Record<string, { bg: string, text: string, icon: any }> = {
-  Morning:   { bg: "bg-orange-50", text: "text-orange-700", icon: Sunrise },
-  Afternoon: { bg: "bg-sky-50", text: "text-sky-700", icon: Sparkles },
-  Night:     { bg: "bg-indigo-50", text: "text-indigo-700", icon: Moon },
+const SHIFT_COLORS: Record<string, string> = {
+  Morning:   "bg-amber-50 text-amber-700 border-amber-200",
+  Afternoon: "bg-blue-50 text-blue-700 border-blue-200",
+  Night:     "bg-indigo-50 text-indigo-700 border-indigo-200",
 }
 
-// --- Component: Streak Fire ---
-function StreakDisplay({ n, done }: { n: number; done: boolean }) {
+interface GStats {
+  currentStreak: number; longestStreak: number; currentShiftComplete: boolean
+  currentShift: string; totalSubmissions: number; department: string | null
+  groupNumber: number | null; fullName: string | null
+  badges: { badge_type: string; earned_at: string }[]
+  saturdayOff?: boolean
+  dayOff?: boolean
+}
+interface LEntry { team_label: string; department: string; group_number: number; on_time_count: number }
+interface MVPData { userId: string; fullName: string; department: string | null; groupNumber: number | null; onTimeCount: number; month: string; isMe: boolean; showPopup: boolean }
+
+// ── Streak fire ────────────────────────────────────────────────────────────
+function Fire({ n, done }: { n: number; done: boolean }) {
+  const isZero = n === 0;
   return (
-    <div className="relative flex flex-col items-center">
+    <div className="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 rounded-2xl min-w-[100px] shadow-sm">
       <div className="relative">
-        <span className={`text-6xl transition-all duration-700 ${n === 0 ? "grayscale opacity-30" : "drop-shadow-[0_0_15px_rgba(249,115,22,0.4)]"}`}>
-          🔥
-        </span>
+        <span className={`text-4xl select-none transition-all duration-300 ${isZero ? "grayscale opacity-30" : "scale-110"}`}>🔥</span>
         {done && (
-          <div className="absolute -right-1 -top-1 bg-emerald-500 rounded-full p-1 border-2 border-white shadow-lg">
-            <CheckCircle2 className="w-3 h-3 text-white" />
+          <div className="absolute -bottom-1 -right-2 bg-white rounded-full p-0.5 shadow-sm">
+            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
           </div>
         )}
       </div>
-      <div className="mt-2 text-center">
-        <span className="block text-3xl font-black text-slate-800 tabular-nums leading-none">{n}</span>
-        <span className="text-[10px] font-bold uppercase tracking-tighter text-slate-400">Streak</span>
-      </div>
+      <p className={`text-2xl font-black mt-1 tracking-tight ${isZero ? "text-slate-300" : "text-slate-900"}`}>{n}</p>
+      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Streak</p>
     </div>
   )
 }
 
-// --- Component: Leaderboard Row ---
-function LeaderboardRow({ e, rank, isMe }: { e: any; rank: number; isMe: boolean }) {
+// ── Badge card ─────────────────────────────────────────────────────────────
+function BadgeCard({ type, earnedAt }: { type: string; earnedAt: string }) {
+  const m = BADGE_META[type]
+  if (!m) return null
+  const Icon = m.icon
   return (
-    <div className={`group flex items-center gap-4 p-3 rounded-2xl transition-all ${isMe ? "bg-emerald-50/50 ring-1 ring-emerald-100" : "hover:bg-slate-50"}`}>
-      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-white shadow-sm border border-slate-100 font-black text-xs text-slate-500">
-        {rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : rank}
+    <div className={`flex flex-col items-center justify-center p-4 rounded-2xl border ${m.bg} ${m.border} transition-all hover:scale-[1.02]`}>
+      <Icon className={`w-6 h-6 ${m.color} mb-2`} />
+      <p className={`text-[10px] font-black uppercase tracking-wider text-center leading-tight ${m.color}`}>{m.label}</p>
+      <p className="text-[9px] text-slate-500 font-medium text-center mt-1 leading-snug line-clamp-2">{m.desc}</p>
+    </div>
+  )
+}
+
+// ── Leaderboard row ────────────────────────────────────────────────────────
+function LRow({ e, rank, isMe }: { e: LEntry; rank: number; isMe: boolean }) {
+  const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : null
+  return (
+    <div className={`flex items-center gap-4 px-4 py-3 rounded-xl border ${isMe ? "bg-emerald-50 border-emerald-200" : "bg-white border-transparent hover:bg-slate-50 hover:border-slate-100"} transition-colors`}>
+      <div className="w-6 flex justify-center items-center shrink-0">
+        {medal ? <span className="text-lg">{medal}</span> : <span className="text-xs font-bold text-slate-400">{rank}</span>}
       </div>
-      <div className="flex-1">
-        <p className={`text-sm font-bold ${isMe ? "text-emerald-900" : "text-slate-700"}`}>
-          {e.team_label} {isMe && " (You)"}
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm font-bold truncate ${isMe ? "text-emerald-900" : "text-slate-900"}`}>
+          {e.team_label} {isMe && <span className="ml-1 text-[10px] font-black text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded-md uppercase">You</span>}
         </p>
-        <p className="text-[10px] text-slate-400 font-medium uppercase">{e.department}</p>
       </div>
-      <div className="text-right">
-        <p className="text-sm font-black text-slate-900">{e.on_time_count}</p>
-        <p className="text-[9px] font-bold text-emerald-500 uppercase">Score</p>
+      <div className="text-right shrink-0">
+        <p className={`text-base font-black tracking-tight ${isMe ? "text-emerald-700" : "text-slate-700"}`}>{e.on_time_count}</p>
       </div>
     </div>
   )
 }
 
+// ── MVP Modal ──────────────────────────────────────────────────────────────
+function MVPModal({ mvp, onClose }: { mvp: MVPData; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={onClose}>
+      <div className="bg-white rounded-3xl shadow-xl border border-slate-100 max-w-sm w-full overflow-hidden animate-in zoom-in-95 duration-300" onClick={e => e.stopPropagation()}>
+        <div className="p-8 text-center bg-gradient-to-b from-amber-50 to-white">
+          <span className="text-6xl block mb-4 drop-shadow-sm">👑</span>
+          <p className="text-[10px] font-black uppercase tracking-widest text-amber-600 mb-1">{mvp.month} MVP</p>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">{mvp.fullName}</h2>
+          {mvp.department && (
+            <p className="text-sm font-medium text-slate-500 mt-1">{mvp.department} {mvp.groupNumber ? `· Group ${mvp.groupNumber}` : ""}</p>
+          )}
+        </div>
+        <div className="px-8 pb-8 text-center space-y-6">
+          <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+            <p className="text-4xl font-black text-slate-900 tracking-tight">{mvp.onTimeCount}</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mt-1">On-Time Shifts</p>
+          </div>
+          {mvp.isMe ? (
+            <p className="text-sm font-bold text-emerald-600">🎉 Outstanding work! You earned this.</p>
+          ) : (
+            <p className="text-sm font-medium text-slate-500">Keep it up—you could be next! 💪</p>
+          )}
+          <button onClick={onClose} className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold transition-colors">
+            Continue to Dashboard
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Main ───────────────────────────────────────────────────────────────────
 export function SupervisorDashboard({ userId }: { userId: string }) {
-  const [stats, setStats] = useState<any>(null)
-  const [lb, setLb] = useState<any[]>([])
+  const now = new Date()
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+
+  const [stats, setStats] = useState<GStats | null>(null)
+  const [lb, setLb] = useState<LEntry[]>([])
+  const [mvp, setMvp] = useState<MVPData | null>(null)
+  const [showMvp, setShowMvp] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  const greeting = new Date().getHours() < 12 ? "Good morning" : "Good afternoon"
+  const fetchAll = useCallback(async () => {
+    try {
+      const [sr, lr, mr] = await Promise.all([
+        fetch("/api/gamification/stats"),
+        fetch("/api/gamification/leaderboard"),
+        fetch("/api/gamification/mvp"),
+      ])
+      if (sr.ok) setStats(await sr.json())
+      if (lr.ok) { const d = await lr.json(); setLb(d.leaderboard || []) }
+      if (mr.ok) {
+        const d = await mr.json()
+        if (d.mvp) {
+            setMvp(d.mvp)
+            if (d.mvp.showPopup) {
+              const seenKey = `mvp_popup_${d.mvp.month.replace(/\s/g, "_")}_${userId}`
+              if (!sessionStorage.getItem(seenKey)) {
+                setShowMvp(true)
+                sessionStorage.setItem(seenKey, "1")
+              }
+            }
+          }
+      }
+    } catch { /* silent */ } finally { setLoading(false) }
+  }, [userId])
+
+  useEffect(() => {
+    fetchAll()
+    const iv = setInterval(fetchAll, 5 * 60_000)
+    return () => clearInterval(iv)
+  }, [fetchAll])
+
+  const myTeam = stats?.department && stats?.groupNumber ? `${stats.department} — Group ${stats.groupNumber}` : null
+  const myRank = myTeam ? lb.findIndex(e => e.team_label === myTeam) + 1 : 0
+  const greeting = now.getHours() < 12 ? "Good morning" : now.getHours() < 18 ? "Good afternoon" : "Good evening"
 
   return (
-    <div className="max-w-md mx-auto min-h-screen bg-[#F8FAFC] pb-20 animate-in fade-in duration-500">
-      
-      {/* --- Header / Hero Section --- */}
-      <div className="relative overflow-hidden bg-slate-900 px-6 pt-12 pb-24 rounded-b-[40px] shadow-2xl shadow-slate-200">
-        {/* Decorative Aura */}
-        <div className="absolute top-[-50%] left-[-10%] w-80 h-80 bg-emerald-500/20 blur-[100px] rounded-full" />
-        <div className="absolute bottom-[-20%] right-[-10%] w-60 h-60 bg-blue-500/10 blur-[80px] rounded-full" />
-        
-        <div className="relative flex justify-between items-start">
-          <div className="space-y-1">
-            <p className="text-emerald-400 text-[10px] font-black uppercase tracking-[0.2em]">{greeting}</p>
-            <h1 className="text-2xl font-black text-white tracking-tight">
-              {stats?.fullName?.split(' ')[0] || "Supervisor"}
+    <div className="min-h-screen bg-slate-50/50 pb-20 font-sans text-slate-900">
+      {showMvp && mvp && <MVPModal mvp={mvp} onClose={() => setShowMvp(false)} />}
+
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 sm:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+
+        {/* ── Hero header ──────────────────────────────────────────────── */}
+        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm">
+          <div className="space-y-2 flex-1">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{greeting}</p>
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">
+              {loading ? <div className="h-8 w-48 bg-slate-100 rounded animate-pulse" /> : (stats?.fullName || "Supervisor")}
             </h1>
-            <div className="flex items-center gap-2 pt-2">
-              <div className="px-2 py-1 rounded-lg bg-white/10 backdrop-blur-md border border-white/10 text-[10px] font-bold text-white/80">
-                Group {stats?.groupNumber || "—"}
+            
+            {!loading && (
+              <div className="flex flex-wrap items-center gap-2 pt-2">
+                {stats?.department && (
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 text-[10px] font-bold uppercase tracking-wide">
+                    {stats.department}{stats.groupNumber ? ` · Group ${stats.groupNumber}` : ""}
+                  </span>
+                )}
+                {stats?.currentShift && !stats?.dayOff && (
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[10px] font-bold uppercase tracking-wide ${SHIFT_COLORS[stats.currentShift]}`}>
+                    <Clock className="w-3 h-3" /> {stats.currentShift}
+                  </span>
+                )}
+                {stats?.dayOff && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 text-slate-500 text-[10px] font-bold uppercase tracking-wide">
+                    🌴 {new Date().getUTCDay() === 0 ? "Sunday" : "Saturday Off"}
+                  </span>
+                )}
               </div>
-              {stats?.currentShift && (
-                <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-[10px] font-black text-emerald-400">
-                  <Clock className="w-3 h-3" /> {stats.currentShift}
+            )}
+          </div>
+
+          <div className="shrink-0">
+            {loading ? <div className="w-[100px] h-[100px] bg-slate-100 rounded-2xl animate-pulse" /> : <Fire n={stats?.currentStreak || 0} done={stats?.currentShiftComplete || false} />}
+          </div>
+        </header>
+
+        {/* ── Quick Stats & Actions ─────────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+          <Link href="/dashboard/forms" className="col-span-2 md:col-span-1 flex flex-col items-center justify-center p-5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl shadow-sm transition-colors group">
+            <FileText className="w-6 h-6 mb-2 opacity-90 group-hover:scale-110 transition-transform" />
+            <span className="text-sm font-bold">New Entry</span>
+          </Link>
+          
+          <div className="flex flex-col justify-center p-4 bg-white border border-slate-200 rounded-2xl text-center shadow-sm">
+            <p className="text-2xl font-black text-slate-900">{loading ? "—" : stats?.totalSubmissions?.toLocaleString()}</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Total</p>
+          </div>
+          
+          <div className="flex flex-col justify-center p-4 bg-white border border-slate-200 rounded-2xl text-center shadow-sm">
+            <p className="text-2xl font-black text-slate-900">{loading ? "—" : stats?.badges?.length || 0}</p>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Badges</p>
+          </div>
+
+          <Link href="/dashboard/history" className="flex flex-col items-center justify-center p-4 bg-white border border-slate-200 hover:bg-slate-50 rounded-2xl text-slate-700 shadow-sm transition-colors">
+            <History className="w-5 h-5 mb-2 text-slate-400" />
+            <span className="text-xs font-bold uppercase tracking-wide">History</span>
+          </Link>
+        </div>
+
+        {/* ── MVP Banners ─────────────────────────────────────── */}
+        {!loading && mvp && (
+          <div className={`p-5 rounded-2xl border flex items-center gap-4 ${mvp.isMe ? "bg-amber-50 border-amber-200" : "bg-white border-slate-200 shadow-sm"}`}>
+            <span className="text-4xl">{mvp.isMe ? "🏆" : "👑"}</span>
+            <div className="flex-1 min-w-0">
+              <p className={`text-[10px] font-black uppercase tracking-widest ${mvp.isMe ? "text-amber-600" : "text-slate-400"}`}>
+                {mvp.isMe ? "You are the MVP!" : `MVP of ${mvp.month}`}
+              </p>
+              <p className="text-base font-black tracking-tight text-slate-900 truncate">
+                {mvp.isMe ? `Incredible work this month.` : mvp.fullName}
+              </p>
+            </div>
+            <button onClick={() => setShowMvp(true)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${mvp.isMe ? "bg-amber-200 text-amber-800 hover:bg-amber-300" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+              View
+            </button>
+          </div>
+        )}
+
+        {/* ── Main Content Grid ─────────────────────────────────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
+          
+          {/* Leaderboard */}
+          <section className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div>
+                <h3 className="text-sm font-black text-slate-900 tracking-tight">Leaderboard</h3>
+                <p className="text-[10px] font-medium text-slate-500 mt-0.5">Top teams this week</p>
+              </div>
+              <Trophy className="w-5 h-5 text-slate-300" />
+            </div>
+            
+            <div className="p-2 flex-1">
+              {loading ? (
+                <div className="space-y-2 p-2">{[1,2,3,4].map(i => <div key={i} className="h-12 bg-slate-50 rounded-xl animate-pulse" />)}</div>
+              ) : lb.length === 0 ? (
+                <div className="py-12 flex flex-col items-center justify-center text-center px-4">
+                  <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mb-3">
+                    <Trophy className="w-5 h-5 text-slate-300" />
+                  </div>
+                  <p className="text-sm font-bold text-slate-600">No rankings yet</p>
+                  <p className="text-xs text-slate-400 mt-1">Submit your first on-time shift to appear here.</p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {lb.slice(0, 6).map((e, i) => <LRow key={e.team_label} e={e} rank={i + 1} isMe={e.team_label === myTeam} />)}
+                  
+                  {myRank > 6 && myTeam && lb[myRank - 1] && (
+                    <>
+                      <div className="mx-4 my-2 border-t border-slate-100" />
+                      <LRow e={lb[myRank - 1]} rank={myRank} isMe={true} />
+                    </>
+                  )}
                 </div>
               )}
             </div>
-          </div>
-          <div className="bg-white/5 p-4 rounded-[32px] backdrop-blur-xl border border-white/10 shadow-inner">
-            <StreakDisplay n={stats?.currentStreak || 0} done={!!stats?.currentShiftComplete} />
-          </div>
-        </div>
-      </div>
+          </section>
 
-      {/* --- Main Content Bento Grid --- */}
-      <div className="px-4 -mt-12 space-y-4">
-        
-        {/* Stats Row */}
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: "Total", val: stats?.totalSubmissions || 0, icon: Target, color: "text-emerald-600" },
-            { label: "Badges", val: stats?.badges?.length || 0, icon: Award, color: "text-violet-600" },
-            { label: "Rank", val: `#${lb.findIndex(x => x.isMe) + 1 || '-'}`, icon: Trophy, color: "text-amber-600" },
-          ].map((item, i) => (
-            <div key={i} className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center gap-1">
-              <item.icon className={`w-4 h-4 ${item.color} mb-1`} />
-              <span className="text-lg font-black text-slate-800 tabular-nums">{item.val}</span>
-              <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider">{item.label}</span>
+          {/* Badges */}
+          <section className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div>
+                <h3 className="text-sm font-black text-slate-900 tracking-tight">Achievements</h3>
+                <p className="text-[10px] font-medium text-slate-500 mt-0.5">
+                  {stats ? `${stats.badges.length} Unlocked` : 'Loading...'}
+                </p>
+              </div>
+              <Award className="w-5 h-5 text-slate-300" />
             </div>
-          ))}
+            
+            <div className="p-6 flex-1">
+              {loading ? (
+                <div className="grid grid-cols-2 gap-3">{[1,2,3,4].map(i => <div key={i} className="h-28 bg-slate-50 rounded-2xl animate-pulse" />)}</div>
+              ) : stats?.badges.length === 0 ? (
+                <div className="py-8 flex flex-col items-center justify-center text-center">
+                  <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mb-3">
+                    <Star className="w-5 h-5 text-slate-300" />
+                  </div>
+                  <p className="text-sm font-bold text-slate-600">No badges yet</p>
+                  <p className="text-xs text-slate-400 mt-1">Complete shifts to start earning.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  {stats!.badges.map(b => <BadgeCard key={b.badge_type} type={b.badge_type} earnedAt={b.earned_at} />)}
+                </div>
+              )}
+            </div>
+          </section>
+
         </div>
 
-        {/* Action Grid */}
-        <div className="grid grid-cols-2 gap-3">
-          <Link href="/dashboard/forms" className="group relative overflow-hidden bg-emerald-600 p-5 rounded-[32px] shadow-lg shadow-emerald-200 active:scale-95 transition-all">
-            <div className="absolute -right-4 -top-4 w-20 h-20 bg-white/10 rounded-full transition-transform group-hover:scale-150" />
-            <FileText className="text-white w-6 h-6 mb-3 opacity-80" />
-            <p className="text-white font-black text-lg">Submit</p>
-            <p className="text-emerald-100 text-[10px] font-medium italic">New entry</p>
+        {/* ── Footer Actions ─────────────────────────────────────── */}
+        <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
+          <Link href="/dashboard/profile" className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-900 transition-colors">
+            <UserCircle className="w-4 h-4" /> Account Settings
           </Link>
-          
-          <div className="grid grid-rows-2 gap-3">
-            <Link href="/dashboard/history" className="flex items-center justify-between px-5 bg-white border border-slate-100 rounded-2xl shadow-sm active:scale-95 transition-all">
-              <span className="text-sm font-bold text-slate-700">History</span>
-              <History className="w-4 h-4 text-slate-400" />
-            </Link>
-            <Link href="/dashboard/profile" className="flex items-center justify-between px-5 bg-white border border-slate-100 rounded-2xl shadow-sm active:scale-95 transition-all">
-              <span className="text-sm font-bold text-slate-700">Account</span>
-              <UserCircle className="w-4 h-4 text-slate-400" />
-            </Link>
-          </div>
-        </div>
-
-        {/* Leaderboard Card */}
-        <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
-          <div className="p-5 flex items-center justify-between border-b border-slate-50">
-            <div>
-              <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Leaderboard</h3>
-              <p className="text-[10px] text-slate-400 font-bold uppercase">This Week's Top Performers</p>
-            </div>
-            <Trophy className="w-5 h-5 text-amber-400" />
-          </div>
-          <div className="p-3 space-y-1">
-            {lb.slice(0, 3).map((e, i) => (
-              <LeaderboardRow key={i} e={e} rank={i + 1} isMe={e.isMe} />
-            ))}
-          </div>
-          <button className="w-full p-4 text-[11px] font-black text-slate-400 uppercase tracking-widest border-t border-slate-50 hover:bg-slate-50 transition-colors">
-            View Full Standings
-          </button>
+          <a href={`/api/records/export?userId=${userId}&month=${currentMonth}`} className="flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-900 transition-colors">
+            <Download className="w-4 h-4" /> Export Data
+          </a>
         </div>
 
       </div>
-
-      {/* Floating Export Button */}
-      <a href={`/api/records/export?userId=${userId}`} className="fixed bottom-6 right-6 bg-slate-900 text-white p-4 rounded-2xl shadow-2xl flex items-center gap-2 active:scale-90 transition-all z-40">
-        <Download className="w-5 h-5" />
-        <span className="text-xs font-black uppercase tracking-wider">Export PDF</span>
-      </a>
     </div>
   )
 }
