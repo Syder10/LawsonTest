@@ -390,7 +390,7 @@ export function SupervisorDashboard({ userId }: { userId: string }) {
               )}
             </div>
             <div className="px-4 pb-3">
-              <p className="text-[8px] text-slate-300 text-center">Resets every Monday · 3-shift schedule (6–14 / 14–21 / 21–5)</p>
+              <p className="text-[8px] text-slate-300 text-center">Resets every Monday · Rankings shown Mon–Sat · 3-shift schedule</p>
             </div>
           </div>
         </div>
