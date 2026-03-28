@@ -54,7 +54,7 @@ interface GStats {
   dayOff?: boolean
 }
 interface LEntry { team_label: string; department: string; group_number: number; on_time_count: number }
-interface MVPData { userId: string; fullName: string; department: string | null; groupNumber: number | null; onTimeCount: number; month: string; isMe: boolean }
+interface MVPData { userId: string; fullName: string; department: string | null; groupNumber: number | null; onTimeCount: number; month: string; isMe: boolean; showPopup: boolean }
 
 // ── Streak fire ────────────────────────────────────────────────────────────
 function Fire({ n, done }: { n: number; done: boolean }) {
@@ -161,7 +161,7 @@ function MVPModal({ mvp, onClose }: { mvp: MVPData; onClose: () => void }) {
 
             <div className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl px-5 py-3 inline-block">
               <p className="text-3xl font-black text-emerald-700 tabular-nums">{mvp.onTimeCount}</p>
-              <p className="text-[9px] font-black uppercase tracking-widest text-emerald-400">on-time submissions</p>
+              <p className="text-[9px] font-black uppercase tracking-widest text-emerald-400">on-time shifts completed</p>
             </div>
 
             {mvp.isMe && (
@@ -220,14 +220,17 @@ export function SupervisorDashboard({ userId }: { userId: string }) {
       if (mr.ok) {
         const d = await mr.json()
         if (d.mvp) {
-          setMvp(d.mvp)
-          // Only show the pop-up once per session
-          const seenKey = `mvp_seen_${d.mvp.month.replace(/\s/g, "_")}_${userId}`
-          if (!sessionStorage.getItem(seenKey)) {
-            setShowMvp(true)
-            sessionStorage.setItem(seenKey, "1")
+            setMvp(d.mvp)
+            // Pop-up only shows on the last day of the month (API sets showPopup=true)
+            // and only once per session
+            if (d.mvp.showPopup) {
+              const seenKey = `mvp_popup_${d.mvp.month.replace(/\s/g, "_")}_${userId}`
+              if (!sessionStorage.getItem(seenKey)) {
+                setShowMvp(true)
+                sessionStorage.setItem(seenKey, "1")
+              }
+            }
           }
-        }
       }
     } catch { /* silent */ } finally { setLoading(false) }
   }, [userId])
@@ -395,7 +398,7 @@ export function SupervisorDashboard({ userId }: { userId: string }) {
           </div>
         </div>
 
-        {/* Monthly MVP teaser (if not the winner — shows who the current MVP is) */}
+        {/* Monthly MVP banner — last day of month + first 5 days of next month */}
         {!loading && mvp && !mvp.isMe && (
           <button
             onClick={() => setShowMvp(true)}
@@ -405,13 +408,13 @@ export function SupervisorDashboard({ userId }: { userId: string }) {
             <div className="flex-1 min-w-0">
               <p className="text-xs font-black uppercase tracking-widest text-amber-600">MVP of {mvp.month}</p>
               <p className="text-sm font-black text-slate-800 truncate">{mvp.fullName}</p>
-              <p className="text-[10px] text-amber-600/70 font-semibold">{mvp.onTimeCount} on-time submissions</p>
+              <p className="text-[10px] text-amber-600/70 font-semibold">{mvp.onTimeCount} on-time shifts completed</p>
             </div>
             <span className="text-[10px] font-bold text-amber-500 shrink-0">View →</span>
           </button>
         )}
 
-        {/* MVP winner banner (if the logged-in user IS the MVP) */}
+        {/* MVP winner banner */}
         {!loading && mvp?.isMe && (
           <button
             onClick={() => setShowMvp(true)}
@@ -421,6 +424,7 @@ export function SupervisorDashboard({ userId }: { userId: string }) {
             <div className="flex-1 min-w-0">
               <p className="text-[10px] font-black uppercase tracking-widest text-amber-900">You are the</p>
               <p className="text-base font-black text-amber-950">MVP of {mvp.month}!</p>
+              <p className="text-[10px] text-amber-800/70 font-semibold">{mvp.onTimeCount} on-time shifts</p>
             </div>
             <span className="text-[10px] font-bold text-amber-800 shrink-0">🎉</span>
           </button>
