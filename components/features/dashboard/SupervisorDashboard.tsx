@@ -50,6 +50,8 @@ interface GStats {
   currentShift: string; totalSubmissions: number; department: string | null
   groupNumber: number | null; fullName: string | null
   badges: { badge_type: string; earned_at: string }[]
+  saturdayOff?: boolean
+  dayOff?: boolean
 }
 interface LEntry { team_label: string; department: string; group_number: number; on_time_count: number }
 interface MVPData { userId: string; fullName: string; department: string | null; groupNumber: number | null; onTimeCount: number; month: string; isMe: boolean }
@@ -261,9 +263,14 @@ export function SupervisorDashboard({ userId }: { userId: string }) {
                     {stats.department}{stats.groupNumber ? ` · Group ${stats.groupNumber}` : ""}
                   </p>
                 )}
-                {stats?.currentShift && (
+                {stats?.currentShift && !stats?.dayOff && (
                   <span className={`inline-flex items-center gap-1 mt-2 text-[9px] font-black px-2 py-0.5 rounded-full border ${SHIFT_COLORS[stats.currentShift]}`}>
                     <Clock className="w-2.5 h-2.5" />{stats.currentShift} Shift
+                  </span>
+                )}
+                {stats?.dayOff && (
+                  <span className="inline-flex items-center gap-1 mt-2 text-[9px] font-black px-2 py-0.5 rounded-full border bg-slate-100 text-slate-500 border-slate-200">
+                    {new Date().getUTCDay() === 0 ? "🌴 Sunday — rest day" : "🌴 Saturday off (Night rotation)"}
                   </span>
                 )}
                 {(stats?.longestStreak || 0) > 0 && (
