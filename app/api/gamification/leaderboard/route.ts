@@ -54,10 +54,14 @@ export async function GET() {
 async function computeLeaderboard(serviceClient: ReturnType<typeof createClient>) {
   const now       = new Date()
   const weekStart = new Date(now)
-  // Monday of current week
+  // ISO Monday: (getUTCDay() + 6) % 7 gives days-since-Monday (0=Mon … 6=Sun)
   weekStart.setUTCDate(now.getUTCDate() - ((now.getUTCDay() + 6) % 7))
   weekStart.setUTCHours(0, 0, 0, 0)
   const weekStartStr = weekStart.toISOString().split("T")[0]
+  // week_end = Saturday (Sunday always excluded anyway)
+  const weekEnd = new Date(weekStart)
+  weekEnd.setUTCDate(weekStart.getUTCDate() + 5) // Mon + 5 = Sat
+  const weekEndStr = weekEnd.toISOString().split("T")[0]
 
   const TABLES = [
     "blowing_daily_records",
@@ -75,6 +79,7 @@ async function computeLeaderboard(serviceClient: ReturnType<typeof createClient>
         .from(table)
         .select("user_id, department, group_number, date, shift, created_at")
         .gte("date", weekStartStr)
+        .lte("date", weekEndStr)
     )
   )
 
