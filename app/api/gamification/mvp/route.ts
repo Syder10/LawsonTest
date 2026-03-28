@@ -12,11 +12,20 @@ const COMPULSORY_TABLES = [
   "alcohol_blending_daily_records",
 ]
 
+// On-time: 1-hour grace window after shift ends (Ghana = UTC)
 function isOnTime(createdAt: string, shift: string): boolean {
   const hour = new Date(createdAt).getUTCHours()
-  if (shift === "Morning")   return hour < 14
-  if (shift === "Afternoon") return hour < 21
-  return hour < 5 // Night
+  if (shift === "Morning")   return hour === 14
+  if (shift === "Afternoon") return hour === 21
+  if (shift === "Night")     return hour === 5
+  return false
+}
+
+// Is today the last day of the current month (Ghana time)?
+function isLastDayOfMonth(now: Date): boolean {
+  const tomorrow = new Date(now)
+  tomorrow.setUTCDate(now.getUTCDate() + 1)
+  return tomorrow.getUTCMonth() !== now.getUTCMonth()
 }
 
 export async function GET() {
@@ -25,17 +34,25 @@ export async function GET() {
     const { data: { user } } = await ssrClient.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+    const now = new Date()
+
+    // ── Only reveal MVP on the last day of the month ───────────────────────
+    // (still return mvp:null other days so the dashboard shows nothing)
+    if (!isLastDayOfMonth(now)) {
+      return NextResponse.json({ mvp: null, reason: "not_last_day" })
+    }
+
     const serviceClient = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
-    // Month bounds
-    const now        = new Date()
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0]
-    const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0]
+    // Full month bounds
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+      .toISOString().split("T")[0]
+    const monthEnd = now.toISOString().split("T")[0] // today (last day)
 
-    // Fetch this month's compulsory records across all tables
+    // Fetch all on-time compulsory records for this month
     const results = await Promise.all(
       COMPULSORY_TABLES.map(table =>
         serviceClient
@@ -48,7 +65,7 @@ export async function GET() {
 
     const all = results.flatMap(r => r.data || [])
 
-    // Count on-time submissions per user
+    // Count on-time per user
     const userCounts = new Map<string, { count: number; supervisorName: string }>()
     for (const row of all) {
       if (!row.user_id) continue
@@ -61,18 +78,14 @@ export async function GET() {
       }
     }
 
-    if (userCounts.size === 0) {
-      return NextResponse.json({ mvp: null })
-    }
+    if (userCounts.size === 0) return NextResponse.json({ mvp: null })
 
     // Find the top user
-    let mvpId    = ""
-    let mvpCount = 0
-    for (const [uid, data] of userCounts.entries()) {
-      if (data.count > mvpCount) { mvpCount = data.count; mvpId = uid }
+    let mvpId = "", mvpCount = 0
+    for (const [uid, d] of userCounts.entries()) {
+      if (d.count > mvpCount) { mvpCount = d.count; mvpId = uid }
     }
 
-    // Get their full profile
     const { data: profile } = await serviceClient
       .from("profiles")
       .select("full_name, department, group_number")
@@ -81,14 +94,11 @@ export async function GET() {
 
     const monthLabel = now.toLocaleString("default", { month: "long", year: "numeric" })
 
-    // Award MVP badge if it's a new month's MVP
-    const mvpBadgeType = `mvp_${now.getFullYear()}_${now.getMonth() + 1}`
+    // Award MVP badge for this month
+    const mvpBadgeType = `mvp_${now.getUTCFullYear()}_${now.getUTCMonth() + 1}`
     await serviceClient
       .from("supervisor_badges")
       .upsert({ user_id: mvpId, badge_type: mvpBadgeType }, { onConflict: "user_id,badge_type" })
-
-    // Is the requesting user the MVP?
-    const isMe = mvpId === user.id
 
     return NextResponse.json({
       mvp: {
@@ -98,7 +108,7 @@ export async function GET() {
         groupNumber: profile?.group_number || null,
         onTimeCount: mvpCount,
         month:       monthLabel,
-        isMe,
+        isMe:        mvpId === user.id,
       }
     })
   } catch (e) {
