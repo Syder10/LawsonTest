@@ -103,7 +103,8 @@ async function computeLeaderboard(serviceClient: ReturnType<typeof createClient>
 
     if (!isOnTime(row.created_at, row.shift)) continue
 
-    const teamKey = `${row.department}|${row.group_number}`
+    const teamKey  = `${row.department}|${row.group_number}`
+    const existing = onTimeMap.get(teamKey)
     if (existing) {
       existing.count++
       if (row.created_at > existing.lastSubmission) existing.lastSubmission = row.created_at
