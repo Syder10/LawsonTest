@@ -3,41 +3,28 @@
 import { useState, useEffect, useCallback } from "react"
 import {
   RefreshCw, Download, Package, Droplet, Tag, FlaskConical,
-  Box, AlertCircle, ChevronDown, Filter,
+  Box, AlertCircle, ChevronDown, Filter, TrendingUp,
 } from "lucide-react"
 import Image from "next/image"
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Brand tokens
-//  Bitters = near-black  |  Ginger = amber-gold
+//  Brand tokens — Bitters: obsidian black | Ginger: amber gold
 // ─────────────────────────────────────────────────────────────────────────────
 const BIT = {
-  bg:       "bg-[#111827]",
-  bgHover:  "hover:bg-[#1f2937]",
-  border:   "border-[#111827]",
-  text:     "text-[#111827]",
-  textOn:   "text-white",
-  muted:    "text-slate-400",
   accent:   "#111827",
-  bar:      "bg-[#111827]",
   soft:     "bg-slate-100",
-  softText: "text-slate-700",
-  ring:     "ring-[#111827]/20",
-  label:    "Bitters",
+  textMid:  "text-slate-500",
+  textVal:  "text-slate-900",
+  iconClr:  "text-slate-400",
+  dot:      "#111827",
 }
 const GIN = {
-  bg:       "bg-amber-500",
-  bgHover:  "hover:bg-amber-600",
-  border:   "border-amber-500",
-  text:     "text-amber-600",
-  textOn:   "text-white",
-  muted:    "text-amber-800",
   accent:   "#d97706",
-  bar:      "bg-amber-500",
   soft:     "bg-amber-50",
-  softText: "text-amber-900",
-  ring:     "ring-amber-500/20",
-  label:    "Ginger",
+  textMid:  "text-amber-700",
+  textVal:  "text-amber-950",
+  iconClr:  "text-amber-400",
+  dot:      "#d97706",
 }
 
 type Product = "all" | "Bitters" | "Ginger"
@@ -82,115 +69,297 @@ interface KPIData {
 interface DeptActivity { table: string; label: string; count: number; lastDate: string | null }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Inline chart — tight, no external libs
+//  Section heading
 // ─────────────────────────────────────────────────────────────────────────────
-function LineChart({
-  data, filter,
-}: {
-  data: KPIData["monthly_trend"]
-  filter: Product
-}) {
-  const [hover, setHover] = useState<number | null>(null)
-  if (data.length < 2) return (
-    <p className="text-xs text-slate-400 font-medium text-center py-8">Not enough data</p>
-  )
-
-  const W = 680, H = 160, PL = 40, PR = 12, PT = 12, PB = 24
-  const cW = W - PL - PR, cH = H - PT - PB
-
-  const bitS = data.map(d => d.bitters)
-  const ginS = data.map(d => d.ginger)
-  const allVals = [
-    ...(filter !== "Ginger" ? bitS : []),
-    ...(filter !== "Bitters" ? ginS : []),
-  ]
-  const maxV = Math.max(...allVals, 1)
-
-  const xp = (i: number) => PL + (i / (data.length - 1)) * cW
-  const yp = (v: number) => PT + cH - (v / maxV) * cH
-
-  const line = (vals: number[], clr: string) => {
-    const d = vals.map((v, i) => `${i === 0 ? "M" : "L"}${xp(i).toFixed(1)},${yp(v).toFixed(1)}`).join(" ")
-    return <path d={d} fill="none" stroke={clr} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-  }
-
+function SectionLabel({ title, sub }: { title: string; sub?: string }) {
   return (
-    <div className="relative">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 280 }}>
-        {/* Gridlines */}
-        {[0, 0.5, 1].map((f, i) => (
-          <line key={i}
-            x1={PL} y1={PT + f * cH} x2={W - PR} y2={PT + f * cH}
-            stroke="#e2e8f0" strokeWidth="1" strokeDasharray="4 3"
-          />
-        ))}
-        {/* X labels */}
-        {data.map((d, i) => (
-          <text key={i} x={xp(i)} y={H - 4}
-            textAnchor="middle" fontSize="9" fontWeight="600"
-            fill={hover === i ? "#0f172a" : "#94a3b8"}>
-            {d.month}
-          </text>
-        ))}
-        {/* Lines */}
-        {filter !== "Ginger"  && line(bitS, BIT.accent)}
-        {filter !== "Bitters" && line(ginS, GIN.accent)}
-        {/* Hit areas + dots */}
-        {data.map((d, i) => (
-          <g key={i}
-            onMouseEnter={() => setHover(i)}
-            onMouseLeave={() => setHover(null)}
-            className="cursor-default"
-          >
-            <rect x={xp(i) - 16} y={PT} width={32} height={cH} fill="transparent" />
-            {filter !== "Ginger" && (
-              <circle cx={xp(i)} cy={yp(bitS[i])} r={hover === i ? 5 : 3}
-                fill={BIT.accent} stroke="#fff" strokeWidth="2" />
-            )}
-            {filter !== "Bitters" && (
-              <circle cx={xp(i)} cy={yp(ginS[i])} r={hover === i ? 5 : 3}
-                fill={GIN.accent} stroke="#fff" strokeWidth="2" />
-            )}
-            {hover === i && (
-              <line x1={xp(i)} y1={PT} x2={xp(i)} y2={PT + cH}
-                stroke="#e2e8f0" strokeWidth="1" strokeDasharray="3 2" />
-            )}
-          </g>
-        ))}
-      </svg>
-
-      {/* Tooltip */}
-      {hover !== null && (
-        <div
-          className="absolute top-0 pointer-events-none bg-slate-900 text-white rounded-xl px-3 py-2 text-xs shadow-xl z-10"
-          style={{
-            left: `clamp(4px, calc(${(hover / (data.length - 1)) * 100}% - 52px), calc(100% - 112px))`,
-            minWidth: 100,
-          }}
-        >
-          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">
-            {data[hover].month}
-          </p>
-          {filter !== "Ginger" && (
-            <div className="flex justify-between gap-3">
-              <span className="text-slate-400 font-semibold">Bitters</span>
-              <span className="font-black tabular-nums">{data[hover].bitters.toLocaleString()}</span>
-            </div>
-          )}
-          {filter !== "Bitters" && (
-            <div className="flex justify-between gap-3">
-              <span className="text-amber-400 font-semibold">Ginger</span>
-              <span className="font-black tabular-nums">{data[hover].ginger.toLocaleString()}</span>
-            </div>
-          )}
-        </div>
-      )}
+    <div className="mb-3">
+      {sub && <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">{sub}</p>}
+      <h2 className="text-sm font-black text-slate-900 mt-0.5 leading-none">{title}</h2>
     </div>
   )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Stat cell — compact, used inside product panels
+//  Stat tile
+// ─────────────────────────────────────────────────────────────────────────────
+function Tile({
+  label, sub, value, unit, variant = "white",
+}: {
+  label: string; sub?: string; value: number; unit: string
+  variant?: "white" | "bitters" | "ginger" | "slate" | "amber-soft"
+}) {
+  const styles: Record<string, string> = {
+    white:        "bg-white border border-slate-200",
+    bitters:      "bg-[#111827]",
+    ginger:       "bg-amber-500",
+    slate:        "bg-slate-100",
+    "amber-soft": "bg-amber-50 border border-amber-100",
+  }
+  const lClr: Record<string, string> = {
+    white: "text-slate-400", bitters: "text-slate-400", ginger: "text-amber-100",
+    slate: "text-slate-500", "amber-soft": "text-amber-600",
+  }
+  const sClr: Record<string, string> = {
+    white: "text-slate-400", bitters: "text-slate-500", ginger: "text-amber-100",
+    slate: "text-slate-400", "amber-soft": "text-amber-500",
+  }
+  const vClr: Record<string, string> = {
+    white: "text-slate-900", bitters: "text-white", ginger: "text-white",
+    slate: "text-slate-900", "amber-soft": "text-amber-950",
+  }
+  const uClr: Record<string, string> = {
+    white: "text-slate-400", bitters: "text-slate-500", ginger: "text-amber-100",
+    slate: "text-slate-400", "amber-soft": "text-amber-400",
+  }
+
+  return (
+    <div className={`rounded-2xl px-5 py-4 shadow-sm flex flex-col justify-between gap-3 ${styles[variant]}`}>
+      <div>
+        <p className={`text-[9px] font-black uppercase tracking-[0.18em] ${lClr[variant]}`}>{label}</p>
+        {sub && <p className={`text-[9px] font-black uppercase tracking-wider mt-0.5 ${sClr[variant]}`}>{sub}</p>}
+      </div>
+      <div>
+        <p className={`text-3xl font-black tabular-nums leading-none ${vClr[variant]}`}>
+          {value.toLocaleString()}
+        </p>
+        <p className={`text-[9px] font-bold uppercase tracking-wider mt-1 ${uClr[variant]}`}>{unit}</p>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Trend chart
+//  isMonthly=true  → X axis shows day numbers (1–31), "Daily trend" heading
+//  isMonthly=false → X axis shows month abbreviations, "Monthly trend" heading
+//  Area fill below lines gives the "reflection" effect
+// ─────────────────────────────────────────────────────────────────────────────
+function TrendChart({
+  data, filter, isMonthly, selMonth, selYear,
+}: {
+  data: KPIData["monthly_trend"]
+  filter: Product
+  isMonthly: boolean
+  selMonth: number
+  selYear: number
+}) {
+  const [hover, setHover] = useState<number | null>(null)
+
+  if (data.length < 2) return (
+    <div className="py-12 text-center">
+      <p className="text-xs text-slate-400 font-semibold">Not enough data for this period</p>
+    </div>
+  )
+
+  const W = 700, H = 210, PL = 44, PR = 16, PT = 16, PB = 34
+  const cW = W - PL - PR
+  const cH = H - PT - PB
+  const n  = data.length
+
+  const bitS = data.map(d => d.bitters)
+  const ginS = data.map(d => d.ginger)
+  const totS = data.map(d => d.total)
+
+  const domainVals = [
+    ...(filter !== "Ginger"  ? bitS : []),
+    ...(filter !== "Bitters" ? ginS : []),
+    ...(filter === "all"     ? totS : []),
+  ]
+  const maxV = Math.max(...domainVals, 1)
+
+  const xp = (i: number) => PL + (n > 1 ? i / (n - 1) : 0.5) * cW
+  const yp = (v: number) => PT + cH - (v / maxV) * cH
+  const base = PT + cH   // bottom of chart area
+
+  const mkLine = (vals: number[]) =>
+    vals.map((v, i) => `${i === 0 ? "M" : "L"}${xp(i).toFixed(1)},${yp(v).toFixed(1)}`).join(" ")
+
+  const mkArea = (vals: number[]) =>
+    `${mkLine(vals)} L${xp(n - 1).toFixed(1)},${base} L${xp(0).toFixed(1)},${base} Z`
+
+  // Which x-labels to show (avoid crowding for daily data)
+  const showLabel = (i: number) => {
+    if (!isMonthly || n <= 10) return true
+    if (n <= 16) return i % 2 === 0
+    return i % 5 === 0 || i === n - 1
+  }
+
+  // Label text: day number for monthly view, month name for all-time
+  const xLabelText = (d: { month: string }, i: number): string => {
+    if (isMonthly) {
+      const num = parseInt(d.month, 10)
+      return isNaN(num) ? d.month : String(num)
+    }
+    return d.month
+  }
+
+  const titleStr = isMonthly
+    ? `Daily Trend — ${MONTHS[selMonth - 1]} ${selYear}`
+    : "Monthly Trend"
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Production</p>
+          <h3 className="text-sm font-black text-slate-900 mt-0.5">{titleStr}</h3>
+        </div>
+        <div className="flex items-center gap-4">
+          {filter !== "Ginger" && (
+            <span className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-500">
+              <span className="w-4 h-[2px] rounded bg-[#111827] inline-block" />Bitters
+            </span>
+          )}
+          {filter !== "Bitters" && (
+            <span className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-600">
+              <span className="w-4 h-[2px] rounded bg-amber-500 inline-block" />Ginger
+            </span>
+          )}
+          {filter === "all" && (
+            <span className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-emerald-600">
+              <span className="w-4 h-[2px] rounded bg-emerald-400 inline-block" style={{ borderTop: "2px dashed #34d399" }} />Total
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Chart */}
+      <div className="relative">
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 300 }}>
+          <defs>
+            {/* Gradient fills → glass/reflection under each line */}
+            <linearGradient id="gb" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stopColor="#111827" stopOpacity="0.13" />
+              <stop offset="100%" stopColor="#111827" stopOpacity="0" />
+            </linearGradient>
+            <linearGradient id="gg" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stopColor="#d97706" stopOpacity="0.15" />
+              <stop offset="100%" stopColor="#d97706" stopOpacity="0" />
+            </linearGradient>
+            <linearGradient id="gt" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stopColor="#10b981" stopOpacity="0.10" />
+              <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+
+          {/* Horizontal grid */}
+          {[0, 0.25, 0.5, 0.75, 1].map((f, i) => {
+            const y   = PT + f * cH
+            const val = Math.round(maxV * (1 - f))
+            return (
+              <g key={i}>
+                <line x1={PL} y1={y} x2={W - PR} y2={y}
+                  stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 3" />
+                <text x={PL - 6} y={y + 4} textAnchor="end"
+                  fontSize="9" fontWeight="700" fill="#cbd5e1">
+                  {val > 999 ? `${(val / 1000).toFixed(0)}k` : val}
+                </text>
+              </g>
+            )
+          })}
+
+          {/* Area fills (reflection/glass) */}
+          {filter !== "Ginger"  && <path d={mkArea(bitS)} fill="url(#gb)" />}
+          {filter !== "Bitters" && <path d={mkArea(ginS)} fill="url(#gg)" />}
+          {filter === "all"     && <path d={mkArea(totS)} fill="url(#gt)" />}
+
+          {/* Lines */}
+          {filter !== "Ginger" && (
+            <path d={mkLine(bitS)} fill="none" stroke="#111827" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round" />
+          )}
+          {filter !== "Bitters" && (
+            <path d={mkLine(ginS)} fill="none" stroke="#d97706" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round" />
+          )}
+          {filter === "all" && (
+            <path d={mkLine(totS)} fill="none" stroke="#10b981" strokeWidth="1.5"
+              strokeLinecap="round" strokeLinejoin="round" strokeDasharray="5 3" />
+          )}
+
+          {/* X-axis labels */}
+          {data.map((d, i) => showLabel(i) && (
+            <text key={i} x={xp(i)} y={H - 6} textAnchor="middle"
+              fontSize="9" fontWeight="700"
+              fill={hover === i ? "#0f172a" : "#94a3b8"}>
+              {xLabelText(d, i)}
+            </text>
+          ))}
+
+          {/* Hover crosshair */}
+          {hover !== null && (
+            <line x1={xp(hover)} y1={PT} x2={xp(hover)} y2={base}
+              stroke="#e2e8f0" strokeWidth="1" strokeDasharray="3 2" />
+          )}
+
+          {/* Interactive dots + hit areas */}
+          {data.map((d, i) => (
+            <g key={i}
+              onMouseEnter={() => setHover(i)}
+              onMouseLeave={() => setHover(null)}
+            >
+              <rect x={xp(i) - 18} y={PT} width={36} height={cH} fill="transparent" className="cursor-default" />
+
+              {filter !== "Ginger" && (
+                <circle cx={xp(i)} cy={yp(bitS[i])}
+                  r={hover === i ? 5 : 3}
+                  fill="#111827" stroke="#fff" strokeWidth="2" />
+              )}
+              {filter !== "Bitters" && (
+                <circle cx={xp(i)} cy={yp(ginS[i])}
+                  r={hover === i ? 5 : 3}
+                  fill="#d97706" stroke="#fff" strokeWidth="2" />
+              )}
+              {filter === "all" && (
+                <circle cx={xp(i)} cy={yp(totS[i])}
+                  r={hover === i ? 4 : 2.5}
+                  fill="#10b981" stroke="#fff" strokeWidth="1.5" />
+              )}
+            </g>
+          ))}
+        </svg>
+
+        {/* Floating tooltip */}
+        {hover !== null && (
+          <div
+            className="absolute top-0 pointer-events-none bg-slate-900/95 backdrop-blur-sm text-white rounded-xl px-3.5 py-2.5 shadow-2xl z-10"
+            style={{
+              left: `clamp(4px, calc(${n > 1 ? (hover / (n - 1)) * 100 : 50}% - 56px), calc(100% - 120px))`,
+              minWidth: 112,
+            }}
+          >
+            <p className="text-[8px] font-black uppercase tracking-[0.18em] text-slate-400 mb-2">
+              {isMonthly ? `Day ${xLabelText(data[hover], hover)}` : data[hover].month}
+            </p>
+            {filter !== "Ginger" && (
+              <div className="flex justify-between items-center gap-4 text-[11px]">
+                <span className="text-slate-400 font-semibold">Bitters</span>
+                <span className="font-black tabular-nums">{data[hover].bitters.toLocaleString()}</span>
+              </div>
+            )}
+            {filter !== "Bitters" && (
+              <div className="flex justify-between items-center gap-4 text-[11px]">
+                <span className="text-amber-400 font-semibold">Ginger</span>
+                <span className="font-black tabular-nums">{data[hover].ginger.toLocaleString()}</span>
+              </div>
+            )}
+            {filter === "all" && (
+              <div className="flex justify-between items-center gap-4 text-[11px] border-t border-white/10 pt-1.5 mt-1.5">
+                <span className="text-emerald-400 font-semibold">Total</span>
+                <span className="font-black tabular-nums">{data[hover].total.toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Cell — compact metric inside product panel
 // ─────────────────────────────────────────────────────────────────────────────
 function Cell({
   label, value, unit, icon: Icon, isBitters,
@@ -201,39 +370,15 @@ function Cell({
   return (
     <div className={`rounded-xl px-4 py-3 flex flex-col gap-1 ${tk.soft}`}>
       <div className="flex items-center gap-1.5">
-        {Icon && <Icon className={`w-3 h-3 ${isBitters ? "text-slate-400" : "text-amber-400"} shrink-0`} />}
-        <span className={`text-[9px] font-black uppercase tracking-widest ${isBitters ? "text-slate-500" : "text-amber-700"}`}>
-          {label}
-        </span>
+        {Icon && <Icon className={`w-3 h-3 ${tk.iconClr} shrink-0`} />}
+        <span className={`text-[9px] font-black uppercase tracking-widest ${tk.textMid}`}>{label}</span>
       </div>
-      <span className={`text-xl font-black tabular-nums leading-none ${isBitters ? "text-slate-900" : "text-amber-950"}`}>
+      <span className={`text-xl font-black tabular-nums leading-none ${tk.textVal}`}>
         {value.toLocaleString()}
       </span>
-      <span className={`text-[9px] font-bold uppercase tracking-wider ${isBitters ? "text-slate-400" : "text-amber-500"}`}>
+      <span className={`text-[9px] font-bold uppercase tracking-wider ${isBitters ? "text-slate-400" : "text-amber-400"}`}>
         {unit}
       </span>
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Shared material row
-// ─────────────────────────────────────────────────────────────────────────────
-function MatRow({
-  label, value, unit, icon: Icon, last = false,
-}: {
-  label: string; value: number; unit: string; icon?: React.ElementType; last?: boolean
-}) {
-  return (
-    <div className={`flex items-center justify-between py-3 ${!last ? "border-b border-slate-100" : ""}`}>
-      <div className="flex items-center gap-2">
-        {Icon && <Icon className="w-3.5 h-3.5 text-slate-400 shrink-0" />}
-        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{label}</span>
-      </div>
-      <div className="flex items-baseline gap-1.5">
-        <span className="text-sm font-black tabular-nums text-slate-900">{value.toLocaleString()}</span>
-        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{unit}</span>
-      </div>
     </div>
   )
 }
@@ -247,10 +392,9 @@ function DeptPanel({ dept }: { dept: string }) {
 
   useEffect(() => {
     if (dept === "All Departments") { setRows([]); return }
-    const tables = DEPT_TABLES[dept] || []
     setLoading(true)
     Promise.all(
-      tables.map(async ({ table, label }) => {
+      (DEPT_TABLES[dept] || []).map(async ({ table, label }) => {
         try {
           const res = await fetch(`/api/admin/dept-activity?table=${table}`)
           if (!res.ok) return { table, label, count: 0, lastDate: null }
@@ -264,7 +408,7 @@ function DeptPanel({ dept }: { dept: string }) {
   if (dept === "All Departments" || rows.length === 0) return null
 
   return (
-    <div className="rounded-2xl bg-white border border-slate-200 p-5">
+    <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm">
       <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 mb-4">
         {dept} · Activity
       </p>
@@ -274,7 +418,7 @@ function DeptPanel({ dept }: { dept: string }) {
           Loading…
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {rows.map(r => (
             <div key={r.table} className="rounded-xl bg-slate-50 border border-slate-100 px-4 py-3">
               <p className="text-[9px] font-black uppercase tracking-wider text-slate-500">{r.label}</p>
@@ -343,70 +487,65 @@ export function ManagerDashboard({ userId }: { userId: string }) {
     } catch { alert("Export failed") } finally { setIsExporting(false) }
   }
 
-  const d     = kpi
-  const showB = product === "all" || product === "Bitters"
-  const showG = product === "all" || product === "Ginger"
+  const d        = kpi
+  const showB    = product === "all" || product === "Bitters"
+  const showG    = product === "all" || product === "Ginger"
+  const isMonthly = period === "month"
   const capsUsed = d ? (d.bitters_cartons + d.ginger_cartons) * 12 : 0
-  const labB  = d ? d.bitters_cartons * 12 : 0
-  const labG  = d ? d.ginger_cartons  * 12 : 0
-
-  const periodLabel = period === "all" ? "All time" :
-    `${MONTHS[selMonth - 1]} ${selYear}`
+  const labB     = d ? d.bitters_cartons * 12 : 0
+  const labG     = d ? d.ginger_cartons  * 12 : 0
+  const periodLabel = period === "all" ? "All Time" : `${MONTHS[selMonth - 1]} ${selYear}`
 
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
         .dash { font-family: 'Instrument Sans', sans-serif; }
-        @keyframes fadeUp { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
-        .fu  { animation: fadeUp .35s ease both }
-        .fu1 { animation-delay:.04s }
-        .fu2 { animation-delay:.08s }
-        .fu3 { animation-delay:.12s }
-        .fu4 { animation-delay:.16s }
-        .fu5 { animation-delay:.20s }
-        .fu6 { animation-delay:.24s }
+        @keyframes fadeUp { from { opacity:0; transform:translateY(10px) } to { opacity:1; transform:translateY(0) } }
+        .fu  { animation: fadeUp .3s ease both }
+        .fu1 { animation-delay:.03s } .fu2 { animation-delay:.06s }
+        .fu3 { animation-delay:.09s } .fu4 { animation-delay:.12s }
+        .fu5 { animation-delay:.15s } .fu6 { animation-delay:.18s }
+        .fu7 { animation-delay:.21s } .fu8 { animation-delay:.24s }
       `}</style>
 
       <div className="dash w-full bg-[#f7f7f5] min-h-screen -m-4 sm:-m-6 md:-m-10 px-4 sm:px-6 md:px-10 py-8">
-        <div className="max-w-[1400px] mx-auto space-y-5">
+        <div className="max-w-[1400px] mx-auto space-y-6">
 
-          {/* ── Top bar ──────────────────────────────────────────────── */}
+          {/* ══ HEADER ══════════════════════════════════════════════ */}
           <header className="fu flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-200">
             <div className="flex items-center gap-4">
               <Image src="/logo.png" alt="Lawson" width={48} height={48}
-                className="rounded-xl shrink-0 bg-white p-1 ring-1 ring-slate-200" />
+                className="rounded-xl bg-white p-1 ring-1 ring-slate-200 shrink-0" />
               <div>
-                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Lawson Limited Company</p>
+                <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Lawson Limited Company</p>
                 <h1 className="text-2xl sm:text-3xl font-black text-slate-900 leading-none mt-0.5">
                   Manager Dashboard
                 </h1>
                 {d && (
                   <p className="text-[10px] font-semibold text-slate-400 mt-1 tabular-nums">
                     Updated {new Date(d.last_updated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    <span className="mx-1.5 opacity-40">·</span>
-                    {periodLabel}
+                    <span className="mx-1.5 opacity-30">·</span>{periodLabel}
                   </p>
                 )}
               </div>
             </div>
-
             <div className="flex items-center gap-2 shrink-0">
               <button onClick={() => fetchKPIs()} disabled={refreshing}
-                className="h-9 px-3.5 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs font-bold flex items-center gap-1.5 hover:bg-slate-50 transition-colors disabled:opacity-50 shadow-sm">
+                className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs font-bold flex items-center gap-1.5 hover:bg-slate-50 transition-colors disabled:opacity-50 shadow-sm">
                 <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin text-emerald-500" : ""}`} />
                 Refresh
               </button>
               <button onClick={handleExport} disabled={isExporting}
-                className="h-9 px-4 rounded-xl bg-slate-900 text-white text-xs font-bold flex items-center gap-1.5 hover:bg-slate-800 transition-colors disabled:opacity-50 shadow-sm">
+                className="h-9 px-5 rounded-xl bg-slate-900 text-white text-xs font-bold flex items-center gap-1.5 hover:bg-slate-800 transition-colors disabled:opacity-50 shadow-sm">
                 <Download className="w-3.5 h-3.5" />
                 {isExporting ? "Exporting…" : "Export XLSX"}
               </button>
             </div>
           </header>
 
-          {/* ── Filter row ───────────────────────────────────────────── */}
-          <div className="fu fu1 flex flex-wrap gap-2">
+          {/* ══ FILTERS ═════════════════════════════════════════════ */}
+          <div className="fu fu1 flex flex-wrap gap-2 items-center">
             {/* Period */}
             <div className="flex items-center gap-0.5 bg-white rounded-xl p-1 border border-slate-200 shadow-sm">
               {(["all", "month"] as Period[]).map(p => (
@@ -418,7 +557,6 @@ export function ManagerDashboard({ userId }: { userId: string }) {
               ))}
             </div>
 
-            {/* Month/year */}
             {period === "month" && (
               <>
                 <div className="relative">
@@ -451,8 +589,7 @@ export function ManagerDashboard({ userId }: { userId: string }) {
                       ? p === "Bitters" ? "bg-[#111827] text-white shadow-sm"
                         : p === "Ginger" ? "bg-amber-500 text-white shadow-sm"
                         : "bg-slate-100 text-slate-700 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700"
-                    }`}>
+                      : "text-slate-500 hover:text-slate-700"}`}>
                   {p === "all" ? "All" : p}
                 </button>
               ))}
@@ -469,305 +606,223 @@ export function ManagerDashboard({ userId }: { userId: string }) {
             </div>
           </div>
 
-          {/* ── Dept activity ────────────────────────────────────────── */}
           {dept !== "All Departments" && <DeptPanel dept={dept} />}
 
-          {/* ── Error ────────────────────────────────────────────────── */}
+          {/* Error */}
           {error && !loading && (
             <div className="rounded-2xl bg-red-50 border border-red-200 p-4 flex items-center gap-3">
               <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
               <p className="text-sm font-bold text-red-800 flex-1">{error}</p>
               <button onClick={() => fetchKPIs()}
-                className="px-3 py-1.5 bg-white rounded-lg text-xs font-black text-red-600 border border-red-200 hover:bg-red-50 transition-colors shrink-0">
+                className="px-3 py-1.5 bg-white rounded-lg text-xs font-black text-red-600 border border-red-200 hover:bg-red-50 shrink-0">
                 Retry
               </button>
             </div>
           )}
 
-          {/* ── Skeleton ─────────────────────────────────────────────── */}
+          {/* Skeleton */}
           {loading && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="h-28 rounded-2xl bg-slate-200 animate-pulse" />
+            <div className="space-y-4">
+              {[5, 3, 1, 4].map((cols, row) => (
+                <div key={row} className={`grid grid-cols-${Math.min(cols, 4)} sm:grid-cols-${cols} gap-3`}>
+                  {Array.from({ length: cols }).map((_, i) => (
+                    <div key={i} className="h-28 rounded-2xl bg-slate-200 animate-pulse" />
+                  ))}
+                </div>
               ))}
+              <div className="h-64 rounded-2xl bg-slate-200 animate-pulse" />
             </div>
           )}
 
-          {/* ── DATA ─────────────────────────────────────────────────── */}
+          {/* ══ DATA ════════════════════════════════════════════════ */}
           {!loading && !error && d && (
-            <div className="space-y-5">
+            <div className="space-y-6">
 
-              {/* ── 1. Hero summary strip ──────────────────────────── */}
-              <div className="fu fu2 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {/* Total */}
-                <div className="rounded-2xl bg-white border border-slate-200 shadow-sm px-5 py-4 flex flex-col justify-between gap-3">
-                  <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Total Output</p>
-                  <div>
-                    <p className="text-3xl font-black tabular-nums text-slate-900 leading-none">
-                      {d.total_production_cartons.toLocaleString()}
-                    </p>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1">Cartons</p>
-                  </div>
+              {/* ─── 1. AVAILABLE STOCK ──────────────────────────── */}
+              <section className="fu fu2">
+                <SectionLabel title="Available Stock" sub="Live Inventory" />
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                  {showB && <Tile label="Live Stock" sub="Bitters" value={d.live_bitters_stock}     unit="Cartons" variant="bitters" />}
+                  {showG && <Tile label="Live Stock" sub="Ginger"  value={d.live_ginger_stock}      unit="Cartons" variant="ginger"  />}
+                  <Tile label="Alcohol Balance"  value={d.current_alcohol_balance}  unit="Litres" variant="white" />
+                  <Tile label="Caps Remaining"   value={d.caps_remaining}            unit="Units"  variant="white" />
+                  <Tile label="Preforms Balance" value={d.current_preform_balance}   unit="Bags"   variant="white" />
                 </div>
+              </section>
 
-                {/* Bitters hero */}
-                <div className="rounded-2xl bg-[#111827] shadow-sm px-5 py-4 flex flex-col justify-between gap-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Bitters</p>
-                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-500 bg-white/10 px-2 py-0.5 rounded-full">
-                      {d.total_production_cartons > 0
-                        ? `${((d.bitters_cartons / d.total_production_cartons) * 100).toFixed(0)}%`
-                        : "—"}
-                    </span>
+              {/* ─── 2. PRODUCTION OUTPUT ────────────────────────── */}
+              <section className="fu fu3">
+                <SectionLabel title="Production Output" sub="Cartons Produced" />
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {/* Total */}
+                  <div className="rounded-2xl bg-white border border-slate-200 shadow-sm px-5 py-4 flex flex-col justify-between gap-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Total</p>
+                      <TrendingUp className="w-3.5 h-3.5 text-slate-300" />
+                    </div>
+                    <div>
+                      <p className="text-3xl font-black tabular-nums text-slate-900 leading-none">
+                        {d.total_production_cartons.toLocaleString()}
+                      </p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1">Cartons</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-3xl font-black tabular-nums text-white leading-none">
-                      {d.bitters_cartons.toLocaleString()}
-                    </p>
-                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-1">Cartons</p>
-                  </div>
-                </div>
-
-                {/* Ginger hero */}
-                <div className="rounded-2xl bg-amber-500 shadow-sm px-5 py-4 flex flex-col justify-between gap-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[9px] font-black uppercase tracking-[0.18em] text-amber-100">Ginger</p>
-                    <span className="text-[9px] font-black uppercase tracking-wider text-amber-200 bg-white/20 px-2 py-0.5 rounded-full">
-                      {d.total_production_cartons > 0
-                        ? `${((d.ginger_cartons / d.total_production_cartons) * 100).toFixed(0)}%`
-                        : "—"}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-3xl font-black tabular-nums text-white leading-none">
-                      {d.ginger_cartons.toLocaleString()}
-                    </p>
-                    <p className="text-[9px] font-bold text-amber-100 uppercase tracking-wider mt-1">Cartons</p>
-                  </div>
-                </div>
-
-                {/* Alcohol balance */}
-                <div className="rounded-2xl bg-white border border-slate-200 shadow-sm px-5 py-4 flex flex-col justify-between gap-3">
-                  <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Alcohol Balance</p>
-                  <div>
-                    <p className="text-3xl font-black tabular-nums text-slate-900 leading-none">
-                      {d.current_alcohol_balance.toLocaleString()}
-                    </p>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1">Litres</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* ── 2. Trend chart ────────────────────────────────── */}
-              <div className="fu fu3 rounded-2xl bg-white border border-slate-200 shadow-sm p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">
-                      {period === "month" ? "Daily" : "Monthly"} Trend
-                    </p>
-                    <h3 className="text-sm font-black text-slate-900 mt-0.5">Production Over Time</h3>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {product !== "Ginger" && (
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-4 h-0.5 rounded bg-[#111827] inline-block" />
-                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Bitters</span>
-                      </div>
-                    )}
-                    {product !== "Bitters" && (
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-4 h-0.5 rounded bg-amber-500 inline-block" />
-                        <span className="text-[9px] font-bold text-amber-600 uppercase tracking-wider">Ginger</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <LineChart data={d.monthly_trend} filter={product} />
-              </div>
-
-              {/* ── 3. Live stock + remaining materials ────────────── */}
-              <div className="fu fu4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {/* Live stock Bitters */}
-                {showB && (
-                  <div className="rounded-2xl bg-[#111827] shadow-sm px-5 py-4">
-                    <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Live Stock</p>
-                    <p className="text-[9px] font-black uppercase tracking-wider text-slate-500 mt-0.5">Bitters</p>
-                    <p className="text-3xl font-black tabular-nums text-white mt-2 leading-none">
-                      {d.live_bitters_stock.toLocaleString()}
-                    </p>
-                    <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-1">Cartons</p>
-                  </div>
-                )}
-                {/* Live stock Ginger */}
-                {showG && (
-                  <div className="rounded-2xl bg-amber-500 shadow-sm px-5 py-4">
-                    <p className="text-[9px] font-black uppercase tracking-[0.18em] text-amber-100">Live Stock</p>
-                    <p className="text-[9px] font-black uppercase tracking-wider text-amber-200 mt-0.5">Ginger</p>
-                    <p className="text-3xl font-black tabular-nums text-white mt-2 leading-none">
-                      {d.live_ginger_stock.toLocaleString()}
-                    </p>
-                    <p className="text-[9px] font-bold text-amber-100 uppercase tracking-wider mt-1">Cartons</p>
-                  </div>
-                )}
-                {/* Caps */}
-                <div className="rounded-2xl bg-white border border-slate-200 shadow-sm px-5 py-4">
-                  <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Caps Remaining</p>
-                  <p className="text-3xl font-black tabular-nums text-slate-900 mt-2 leading-none">
-                    {d.caps_remaining.toLocaleString()}
-                  </p>
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1">Units</p>
-                </div>
-                {/* Preforms */}
-                <div className="rounded-2xl bg-white border border-slate-200 shadow-sm px-5 py-4">
-                  <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Preforms Balance</p>
-                  <p className="text-3xl font-black tabular-nums text-slate-900 mt-2 leading-none">
-                    {d.current_preform_balance.toLocaleString()}
-                  </p>
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1">Bags</p>
-                </div>
-              </div>
-
-              {/* ── 4. Labels & Caramel remaining ────────────────── */}
-              {(showB || showG) && (
-                <div className="fu fu5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {/* Bitters */}
                   {showB && (
-                    <div className="rounded-2xl bg-slate-100 px-5 py-4">
-                      <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-500">Labels Remaining</p>
-                      <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 mt-0.5">Bitters</p>
-                      <p className="text-2xl font-black tabular-nums text-slate-900 mt-2 leading-none">
-                        {d.labels_bitters_remaining.toLocaleString()}
-                      </p>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1">Units</p>
-                    </div>
-                  )}
-                  {showG && (
-                    <div className="rounded-2xl bg-amber-50 border border-amber-100 px-5 py-4">
-                      <p className="text-[9px] font-black uppercase tracking-[0.15em] text-amber-600">Labels Remaining</p>
-                      <p className="text-[9px] font-black uppercase tracking-wider text-amber-400 mt-0.5">Ginger</p>
-                      <p className="text-2xl font-black tabular-nums text-amber-950 mt-2 leading-none">
-                        {d.labels_ginger_remaining.toLocaleString()}
-                      </p>
-                      <p className="text-[9px] font-bold text-amber-400 uppercase tracking-wider mt-1">Units</p>
-                    </div>
-                  )}
-                  {showB && (
-                    <div className="rounded-2xl bg-slate-100 px-5 py-4">
-                      <p className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-500">Caramel Remaining</p>
-                      <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 mt-0.5">Bitters</p>
-                      <p className="text-2xl font-black tabular-nums text-slate-900 mt-2 leading-none">
-                        {d.caramel_bitters_remaining.toLocaleString()}
-                      </p>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1">Gallons</p>
-                    </div>
-                  )}
-                  {showG && (
-                    <div className="rounded-2xl bg-amber-50 border border-amber-100 px-5 py-4">
-                      <p className="text-[9px] font-black uppercase tracking-[0.15em] text-amber-600">Caramel Remaining</p>
-                      <p className="text-[9px] font-black uppercase tracking-wider text-amber-400 mt-0.5">Ginger</p>
-                      <p className="text-2xl font-black tabular-nums text-amber-950 mt-2 leading-none">
-                        {d.caramel_ginger_remaining.toLocaleString()}
-                      </p>
-                      <p className="text-[9px] font-bold text-amber-400 uppercase tracking-wider mt-1">Gallons</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ── 5. Shared consumption ──────────────────────────── */}
-              <div className="fu fu6 rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
-                <div className="px-5 py-4 border-b border-slate-100">
-                  <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Shared Inputs</p>
-                  <h3 className="text-sm font-black text-slate-900 mt-0.5">Material Consumption</h3>
-                </div>
-                <div className="px-5">
-                  <MatRow label="Alcohol Used"  value={d.total_alcohol_used_litres} unit="Litres" icon={Droplet} />
-                  <MatRow label="Preforms Used" value={d.total_preforms_used}       unit="Bags"   icon={Package} />
-                  <MatRow label="Caps Used"     value={d.total_caps_used}           unit="Units"  icon={Box}     last />
-                </div>
-              </div>
-
-              {/* ── 6. Product panels side-by-side ────────────────── */}
-              <div className={`grid gap-5 ${showB && showG ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1"}`}>
-
-                {/* Bitters panel */}
-                {showB && (
-                  <div className="rounded-2xl overflow-hidden border border-[#1f2937]">
-                    {/* Header */}
-                    <div className="bg-[#111827] px-6 py-5 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center">
-                          <FlaskConical className="w-4 h-4 text-white" />
-                        </div>
-                        <div>
-                          <p className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400">Product Line</p>
-                          <h3 className="text-base font-black text-white leading-tight">Bitters</h3>
-                        </div>
+                    <div className="rounded-2xl bg-[#111827] shadow-sm px-5 py-4 flex flex-col justify-between gap-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Bitters</p>
+                        {d.total_production_cartons > 0 && (
+                          <span className="text-[9px] font-black text-slate-500 bg-white/10 px-2 py-0.5 rounded-full tabular-nums">
+                            {((d.bitters_cartons / d.total_production_cartons) * 100).toFixed(0)}%
+                          </span>
+                        )}
                       </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-black text-white tabular-nums">
+                      <div>
+                        <p className="text-3xl font-black tabular-nums text-white leading-none">
                           {d.bitters_cartons.toLocaleString()}
                         </p>
-                        <p className="text-[8px] font-black uppercase tracking-widest text-slate-500">Cartons</p>
+                        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-1">Cartons</p>
                       </div>
                     </div>
-                    {/* Cells */}
-                    <div className="bg-slate-50 p-4 grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                      <Cell label="Alcohol"    value={d.alcohol_used_for_bitters_drums}  unit="Drums"   icon={Droplet}      isBitters />
-                      <Cell label="Concentrate" value={d.total_concentrate_used_litres}  unit="Litres"                      isBitters />
-                      <Cell label="Spices"     value={d.total_spices_used_litres}        unit="Litres"                      isBitters />
-                      <Cell label="Caramel"    value={d.total_caramel_used_gallons}      unit="Gallons" icon={FlaskConical} isBitters />
-                      <Cell label="Water"      value={d.total_water_litres}              unit="Litres"  icon={Droplet}      isBitters />
-                      <Cell label="Labels"     value={labB}                              unit="Units"   icon={Tag}          isBitters />
-                      <Cell label="Caps"       value={capsUsed}                          unit="Units"   icon={Box}          isBitters />
-                      <Cell label="Bottles"    value={d.total_bottles_bitters}           unit="Units"   icon={Package}      isBitters />
-                    </div>
-                  </div>
-                )}
-
-                {/* Ginger panel */}
-                {showG && (
-                  <div className="rounded-2xl overflow-hidden border border-amber-400">
-                    {/* Header */}
-                    <div className="bg-amber-500 px-6 py-5 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
-                          <FlaskConical className="w-4 h-4 text-white" />
-                        </div>
-                        <div>
-                          <p className="text-[8px] font-black uppercase tracking-[0.2em] text-amber-100">Product Line</p>
-                          <h3 className="text-base font-black text-white leading-tight">Ginger</h3>
-                        </div>
+                  )}
+                  {/* Ginger */}
+                  {showG && (
+                    <div className="rounded-2xl bg-amber-500 shadow-sm px-5 py-4 flex flex-col justify-between gap-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[9px] font-black uppercase tracking-[0.18em] text-amber-100">Ginger</p>
+                        {d.total_production_cartons > 0 && (
+                          <span className="text-[9px] font-black text-amber-200 bg-white/20 px-2 py-0.5 rounded-full tabular-nums">
+                            {((d.ginger_cartons / d.total_production_cartons) * 100).toFixed(0)}%
+                          </span>
+                        )}
                       </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-black text-white tabular-nums">
+                      <div>
+                        <p className="text-3xl font-black tabular-nums text-white leading-none">
                           {d.ginger_cartons.toLocaleString()}
                         </p>
-                        <p className="text-[8px] font-black uppercase tracking-widest text-amber-100">Cartons</p>
+                        <p className="text-[9px] font-bold text-amber-100 uppercase tracking-wider mt-1">Cartons</p>
                       </div>
                     </div>
-                    {/* Cells */}
-                    <div className="bg-amber-50 p-4 grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                      <Cell label="Alcohol"  value={d.alcohol_used_for_ginger_drums} unit="Drums"   icon={Droplet}      isBitters={false} />
-                      <Cell label="Water"    value={d.ginger_water_used_litres}      unit="Litres"  icon={Droplet}      isBitters={false} />
-                      <Cell label="G/T Juice" value={d.ginger_gt_juice_litres}       unit="Litres"                      isBitters={false} />
-                      <Cell label="Spices"   value={d.ginger_spices_used_litres}     unit="Litres"                      isBitters={false} />
-                      <Cell label="Caramel"  value={d.ginger_caramel_used_gallons}   unit="Gallons" icon={FlaskConical} isBitters={false} />
-                      <Cell label="Labels"   value={labG}                            unit="Units"   icon={Tag}          isBitters={false} />
-                      <Cell label="Bottles"  value={d.total_bottles_ginger}          unit="Units"   icon={Package}      isBitters={false} />
+                  )}
+                </div>
+              </section>
+
+              {/* ─── 3. TREND CHART ──────────────────────────────── */}
+              {/* Monthly → daily (day 1–31); All-time → monthly (Jan–Dec) */}
+              <section className="fu fu4">
+                <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-5 sm:p-6">
+                  <TrendChart
+                    data={d.monthly_trend}
+                    filter={product}
+                    isMonthly={isMonthly}
+                    selMonth={selMonth}
+                    selYear={selYear}
+                  />
+                </div>
+              </section>
+
+              {/* ─── 4. REMAINING QUANTITY ───────────────────────── */}
+              <section className="fu fu5">
+                <SectionLabel title="Remaining Quantity" sub="Current Stock Levels" />
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {showB && <Tile label="Labels"  sub="Bitters" value={d.labels_bitters_remaining}  unit="Units"   variant="slate" />}
+                  {showG && <Tile label="Labels"  sub="Ginger"  value={d.labels_ginger_remaining}   unit="Units"   variant="amber-soft" />}
+                  {showB && <Tile label="Caramel" sub="Bitters" value={d.caramel_bitters_remaining} unit="Gallons" variant="slate" />}
+                  {showG && <Tile label="Caramel" sub="Ginger"  value={d.caramel_ginger_remaining}  unit="Gallons" variant="amber-soft" />}
+                </div>
+              </section>
+
+              {/* ─── 5. QUANTITY USED ────────────────────────────── */}
+              <section className="fu fu6">
+                <SectionLabel title="Quantity Used" sub="Consumed This Period" />
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  <Tile label="Alcohol Used"  value={d.total_alcohol_used_litres}   unit="Litres" variant="white" />
+                  <Tile label="Preforms Used" value={d.total_preforms_used}         unit="Bags"   variant="white" />
+                  <Tile label="Caps Used"     value={d.total_caps_used}             unit="Units"  variant="white" />
+                  {showB && <Tile label="Labels Used" sub="Bitters" value={d.total_labels_bitters_used} unit="Units"   variant="slate" />}
+                  {showG && <Tile label="Labels Used" sub="Ginger"  value={d.total_labels_ginger_used}  unit="Units"   variant="amber-soft" />}
+                  {showB && <Tile label="Bottles"     sub="Bitters" value={d.total_bottles_bitters}     unit="Units"   variant="slate" />}
+                  {showG && <Tile label="Bottles"     sub="Ginger"  value={d.total_bottles_ginger}      unit="Units"   variant="amber-soft" />}
+                </div>
+              </section>
+
+              {/* ─── 6. RAW MATERIALS — product panels ───────────── */}
+              <section className="fu fu7">
+                <SectionLabel title="Raw Materials" sub="Production Inputs" />
+                <div className={`grid gap-5 ${showB && showG ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1"}`}>
+
+                  {showB && (
+                    <div className="rounded-2xl overflow-hidden border border-[#1f2937]">
+                      <div className="bg-[#111827] px-6 py-5 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center">
+                            <FlaskConical className="w-[18px] h-[18px] text-white" />
+                          </div>
+                          <div>
+                            <p className="text-[8px] font-black uppercase tracking-[0.22em] text-slate-400">Product Line</p>
+                            <h3 className="text-base font-black text-white">Bitters</h3>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-2xl font-black text-white tabular-nums">{d.bitters_cartons.toLocaleString()}</p>
+                          <p className="text-[8px] font-black uppercase tracking-widest text-slate-500">Cartons</p>
+                        </div>
+                      </div>
+                      <div className="bg-slate-50 p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                        <Cell label="Alcohol"     value={d.alcohol_used_for_bitters_drums} unit="Drums"   icon={Droplet}      isBitters />
+                        <Cell label="Concentrate" value={d.total_concentrate_used_litres}  unit="Litres"                      isBitters />
+                        <Cell label="Spices"      value={d.total_spices_used_litres}       unit="Litres"                      isBitters />
+                        <Cell label="Caramel"     value={d.total_caramel_used_gallons}     unit="Gallons" icon={FlaskConical} isBitters />
+                        <Cell label="Water"       value={d.total_water_litres}             unit="Litres"  icon={Droplet}      isBitters />
+                        <Cell label="Labels"      value={labB}                             unit="Units"   icon={Tag}          isBitters />
+                        <Cell label="Caps"        value={capsUsed}                         unit="Units"   icon={Box}          isBitters />
+                        <Cell label="Bottles"     value={d.total_bottles_bitters}          unit="Units"   icon={Package}      isBitters />
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                  )}
+
+                  {showG && (
+                    <div className="rounded-2xl overflow-hidden border border-amber-400">
+                      <div className="bg-amber-500 px-6 py-5 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
+                            <FlaskConical className="w-[18px] h-[18px] text-white" />
+                          </div>
+                          <div>
+                            <p className="text-[8px] font-black uppercase tracking-[0.22em] text-amber-100">Product Line</p>
+                            <h3 className="text-base font-black text-white">Ginger</h3>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-2xl font-black text-white tabular-nums">{d.ginger_cartons.toLocaleString()}</p>
+                          <p className="text-[8px] font-black uppercase tracking-widest text-amber-100">Cartons</p>
+                        </div>
+                      </div>
+                      <div className="bg-amber-50 p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                        <Cell label="Alcohol"  value={d.alcohol_used_for_ginger_drums} unit="Drums"   icon={Droplet}      isBitters={false} />
+                        <Cell label="Water"    value={d.ginger_water_used_litres}      unit="Litres"  icon={Droplet}      isBitters={false} />
+                        <Cell label="G/T Juice" value={d.ginger_gt_juice_litres}       unit="Litres"                      isBitters={false} />
+                        <Cell label="Spices"   value={d.ginger_spices_used_litres}     unit="Litres"                      isBitters={false} />
+                        <Cell label="Caramel"  value={d.ginger_caramel_used_gallons}   unit="Gallons" icon={FlaskConical} isBitters={false} />
+                        <Cell label="Labels"   value={labG}                            unit="Units"   icon={Tag}          isBitters={false} />
+                        <Cell label="Bottles"  value={d.total_bottles_ginger}          unit="Units"   icon={Package}      isBitters={false} />
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              </section>
 
             </div>
           )}
 
           {/* No data */}
           {!loading && !error && !d && (
-            <div className="rounded-2xl bg-white border border-slate-200 p-12 text-center">
+            <div className="rounded-2xl bg-white border border-slate-200 p-14 text-center shadow-sm">
               <p className="text-slate-500 font-semibold text-sm">No data available</p>
               <button onClick={() => fetchKPIs()}
-                className="mt-4 px-5 py-2 bg-slate-900 text-white rounded-xl text-xs font-black hover:bg-slate-800 transition-colors">
+                className="mt-4 px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black hover:bg-slate-800 transition-colors shadow-sm">
                 Load Data
               </button>
             </div>
