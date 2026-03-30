@@ -8,27 +8,19 @@ import {
 import Image from "next/image"
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Brand tokens — Bitters: obsidian black | Ginger: amber gold
+// Brand tokens
 // ─────────────────────────────────────────────────────────────────────────────
 const BIT = {
-  accent:   "#111827",
-  soft:     "bg-slate-100",
-  textMid:  "text-slate-500",
-  textVal:  "text-slate-900",
-  iconClr:  "text-slate-400",
-  dot:      "#111827",
+  accent: "#111827", soft: "bg-slate-100", textMid: "text-slate-500",
+  textVal: "text-slate-900", iconClr: "text-slate-400", dot: "#111827",
 }
 const GIN = {
-  accent:   "#d97706",
-  soft:     "bg-amber-50",
-  textMid:  "text-amber-700",
-  textVal:  "text-amber-950",
-  iconClr:  "text-amber-400",
-  dot:      "#d97706",
+  accent: "#d97706", soft: "bg-amber-50", textMid: "text-amber-700",
+  textVal: "text-amber-950", iconClr: "text-amber-400", dot: "#d97706",
 }
 
 type Product = "all" | "Bitters" | "Ginger"
-type Period  = "all" | "month"
+type Period = "all" | "month"
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
 
@@ -36,18 +28,24 @@ const DEPARTMENTS = [
   "All Departments","Blowing","Alcohol and Blending","Filling Line","Packaging","Concentrate",
 ]
 const DEPT_TABLES: Record<string, { table: string; label: string }[]> = {
-  "Blowing":              [{ table: "blowing_daily_records",           label: "Preform Usage"    }],
-  "Alcohol and Blending": [{ table: "alcohol_stock_level_records",     label: "Alcohol Stock"    },
-                           { table: "alcohol_blending_daily_records",  label: "Blending"         },
-                           { table: "ginger_production_records",       label: "Ginger Prod."     },
-                           { table: "extraction_monitoring_records",   label: "Extraction"       },
-                           { table: "caramel_stock_records",           label: "Caramel"          }],
-  "Filling Line":         [{ table: "filling_line_daily_records",      label: "Filling"          },
-                           { table: "caps_stock_records",              label: "Caps"             },
-                           { table: "labels_stock_records",            label: "Labels"           }],
-  "Packaging":            [{ table: "packaging_daily_records",         label: "Packaging"        }],
-  "Concentrate":          [{ table: "concentrate_alcohol_records",     label: "Concentrate Alc." },
-                           { table: "herbs_stock_records",             label: "Herbs"            }],
+  "Blowing": [{ table: "blowing_daily_records", label: "Preform Usage" }],
+  "Alcohol and Blending": [
+    { table: "alcohol_stock_level_records", label: "Alcohol Stock" },
+    { table: "alcohol_blending_daily_records", label: "Blending" },
+    { table: "ginger_production_records", label: "Ginger Prod." },
+    { table: "extraction_monitoring_records", label: "Extraction" },
+    { table: "caramel_stock_records", label: "Caramel" },
+  ],
+  "Filling Line": [
+    { table: "filling_line_daily_records", label: "Filling" },
+    { table: "caps_stock_records", label: "Caps" },
+    { table: "labels_stock_records", label: "Labels" },
+  ],
+  "Packaging": [{ table: "packaging_daily_records", label: "Packaging" }],
+  "Concentrate": [
+    { table: "concentrate_alcohol_records", label: "Concentrate Alc." },
+    { table: "herbs_stock_records", label: "Herbs" },
+  ],
 }
 
 interface KPIData {
@@ -69,7 +67,7 @@ interface KPIData {
 interface DeptActivity { table: string; label: string; count: number; lastDate: string | null }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Section heading
+// Section heading
 // ─────────────────────────────────────────────────────────────────────────────
 function SectionLabel({ title, sub }: { title: string; sub?: string }) {
   return (
@@ -81,7 +79,49 @@ function SectionLabel({ title, sub }: { title: string; sub?: string }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Stat tile
+// Sparkline — mini inline trend chart
+// ─────────────────────────────────────────────────────────────────────────────
+function Sparkline({
+  data, color, gradId, width = 80, height = 28,
+}: {
+  data: number[]
+  color: string
+  gradId: string
+  width?: number
+  height?: number
+}) {
+  if (data.length < 2) return null
+  const max = Math.max(...data, 1)
+  const pad = 2
+
+  const pts = data.map((v, i) => {
+    const x = pad + (i / (data.length - 1)) * (width - pad * 2)
+    const y = pad + (1 - v / max) * (height - pad * 2)
+    return [x, y] as [number, number]
+  })
+
+  const polyline = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ")
+  const areaPath = `M${pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" L")} L${pts[pts.length - 1][0].toFixed(1)},${height} L${pts[0][0].toFixed(1)},${height} Z`
+  const last = pts[pts.length - 1]
+
+  return (
+    <svg width={width} height={height} className="shrink-0 overflow-visible">
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      <path d={areaPath} fill={`url(#${gradId})`} />
+      <polyline points={polyline} fill="none" stroke={color} strokeWidth="1.5"
+        strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={last[0]} cy={last[1]} r="2.5" fill={color} />
+    </svg>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stat tile
 // ─────────────────────────────────────────────────────────────────────────────
 function Tile({
   label, sub, value, unit, variant = "white",
@@ -90,10 +130,10 @@ function Tile({
   variant?: "white" | "bitters" | "ginger" | "slate" | "amber-soft"
 }) {
   const styles: Record<string, string> = {
-    white:        "bg-white border border-slate-200",
-    bitters:      "bg-[#111827]",
-    ginger:       "bg-amber-500",
-    slate:        "bg-slate-100",
+    white: "bg-white border border-slate-200",
+    bitters: "bg-[#111827]",
+    ginger: "bg-amber-500",
+    slate: "bg-slate-100",
     "amber-soft": "bg-amber-50 border border-amber-100",
   }
   const lClr: Record<string, string> = {
@@ -130,10 +170,12 @@ function Tile({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Trend chart
-//  isMonthly=true  → X axis shows day numbers (1–31), "Daily trend" heading
-//  isMonthly=false → X axis shows month abbreviations, "Monthly trend" heading
-//  Area fill below lines gives the "reflection" effect
+// Trend chart — matches "factory chart" style:
+//   • Rotated date labels on X axis
+//   • Dots always visible (r=3.5)
+//   • Green-tinted dashed grid
+//   • No area fills on main lines
+//   • Tooltip on hover
 // ─────────────────────────────────────────────────────────────────────────────
 function TrendChart({
   data, filter, isMonthly, selMonth, selYear,
@@ -152,176 +194,186 @@ function TrendChart({
     </div>
   )
 
-  const W = 700, H = 210, PL = 44, PR = 16, PT = 16, PB = 34
-  const cW = W - PL - PR
-  const cH = H - PT - PB
-  const n  = data.length
+  // ── Chart geometry (matches pasted SVG proportions) ──
+  const W = 800, H = 236
+  const PL = 60, PR = 20, PT = 30, PB = 56
+  const cW = W - PL - PR          // 720
+  const cH = H - PT - PB          // 150
+  const base = PT + cH            // 180
+  const n = data.length
 
   const bitS = data.map(d => d.bitters)
   const ginS = data.map(d => d.ginger)
   const totS = data.map(d => d.total)
 
   const domainVals = [
-    ...(filter !== "Ginger"  ? bitS : []),
+    ...(filter !== "Ginger" ? bitS : []),
     ...(filter !== "Bitters" ? ginS : []),
-    ...(filter === "all"     ? totS : []),
+    ...(filter === "all" ? totS : []),
   ]
-  const maxV = Math.max(...domainVals, 1)
+  const rawMax = Math.max(...domainVals, 1)
+
+  // Nice rounded grid maximum
+  const gridMax = (() => {
+    const m = rawMax * 1.08
+    if (m <= 50) return Math.ceil(m / 10) * 10
+    if (m <= 200) return Math.ceil(m / 25) * 25
+    if (m <= 500) return Math.ceil(m / 50) * 50
+    if (m <= 2000) return Math.ceil(m / 200) * 200
+    if (m <= 5000) return Math.ceil(m / 500) * 500
+    if (m <= 20000) return Math.ceil(m / 2000) * 2000
+    return Math.ceil(m / 5000) * 5000
+  })()
+  const gridSteps = 5
 
   const xp = (i: number) => PL + (n > 1 ? i / (n - 1) : 0.5) * cW
-  const yp = (v: number) => PT + cH - (v / maxV) * cH
-  const base = PT + cH   // bottom of chart area
+  const yp = (v: number) => PT + cH - (v / gridMax) * cH
 
-  const mkLine = (vals: number[]) =>
-    vals.map((v, i) => `${i === 0 ? "M" : "L"}${xp(i).toFixed(1)},${yp(v).toFixed(1)}`).join(" ")
+  const mkPolyline = (vals: number[]) =>
+    vals.map((v, i) => `${xp(i).toFixed(1)},${yp(v).toFixed(1)}`).join(" ")
 
-  const mkArea = (vals: number[]) =>
-    `${mkLine(vals)} L${xp(n - 1).toFixed(1)},${base} L${xp(0).toFixed(1)},${base} Z`
-
-  // Which x-labels to show (avoid crowding for daily data)
-  const showLabel = (i: number) => {
-    if (!isMonthly || n <= 10) return true
-    if (n <= 16) return i % 2 === 0
-    return i % 5 === 0 || i === n - 1
-  }
-
-  // Label text: day number for monthly view, month name for all-time
-  const xLabelText = (d: { month: string }, i: number): string => {
+  // ── X-axis label: "Mar 2" for monthly, month name for all-time ──
+  const xLabel = (d: { month: string }): string => {
     if (isMonthly) {
       const num = parseInt(d.month, 10)
-      return isNaN(num) ? d.month : String(num)
+      return isNaN(num) ? d.month : `${MONTHS[selMonth - 1]} ${num}`
     }
     return d.month
+  }
+
+  // Skip crowded labels
+  const shouldShowLabel = (i: number) => {
+    if (n <= 12) return true
+    if (n <= 20) return i % 2 === 0 || i === n - 1
+    return i % Math.ceil(n / 15) === 0 || i === n - 1
   }
 
   const titleStr = isMonthly
     ? `Daily Trend — ${MONTHS[selMonth - 1]} ${selYear}`
     : "Monthly Trend"
 
+  const fmtGrid = (val: number) =>
+    val >= 1000 ? `${(val / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k` : val.toLocaleString()
+
   return (
     <div>
-      {/* Header */}
+      {/* Header + Legend */}
       <div className="flex items-center justify-between mb-5">
         <div>
           <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Production</p>
           <h3 className="text-sm font-black text-slate-900 mt-0.5">{titleStr}</h3>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-5">
           {filter !== "Ginger" && (
-            <span className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-500">
-              <span className="w-4 h-[2px] rounded bg-[#111827] inline-block" />Bitters
+            <span className="flex items-center gap-1.5 text-[10px] font-semibold text-[#111827]">
+              <span className="w-2.5 h-2.5 rounded-sm bg-[#111827] inline-block" />Bitters
             </span>
           )}
           {filter !== "Bitters" && (
-            <span className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-amber-600">
-              <span className="w-4 h-[2px] rounded bg-amber-500 inline-block" />Ginger
+            <span className="flex items-center gap-1.5 text-[10px] font-semibold text-amber-600">
+              <span className="w-2.5 h-2.5 rounded-sm bg-amber-500 inline-block" />Ginger
             </span>
           )}
           {filter === "all" && (
-            <span className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-emerald-600">
-              <span className="w-4 h-[2px] rounded bg-emerald-400 inline-block" style={{ borderTop: "2px dashed #34d399" }} />Total
+            <span className="flex items-center gap-1.5 text-[10px] font-semibold text-emerald-600">
+              <span className="w-2.5 h-2.5 rounded-sm bg-emerald-400 inline-block" />Total
             </span>
           )}
         </div>
       </div>
 
-      {/* Chart */}
+      {/* SVG Chart */}
       <div className="relative">
-        <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 300 }}>
-          <defs>
-            {/* Gradient fills → glass/reflection under each line */}
-            <linearGradient id="gb" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"   stopColor="#111827" stopOpacity="0.13" />
-              <stop offset="100%" stopColor="#111827" stopOpacity="0" />
-            </linearGradient>
-            <linearGradient id="gg" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"   stopColor="#d97706" stopOpacity="0.15" />
-              <stop offset="100%" stopColor="#d97706" stopOpacity="0" />
-            </linearGradient>
-            <linearGradient id="gt" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"   stopColor="#10b981" stopOpacity="0.10" />
-              <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
-            </linearGradient>
-          </defs>
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 320 }}>
 
-          {/* Horizontal grid */}
-          {[0, 0.25, 0.5, 0.75, 1].map((f, i) => {
-            const y   = PT + f * cH
-            const val = Math.round(maxV * (1 - f))
+          {/* ── Horizontal grid lines + Y labels ── */}
+          {Array.from({ length: gridSteps + 1 }).map((_, i) => {
+            const y = PT + (i / gridSteps) * cH
+            const val = Math.round(gridMax * (1 - i / gridSteps))
             return (
               <g key={i}>
                 <line x1={PL} y1={y} x2={W - PR} y2={y}
-                  stroke="#f1f5f9" strokeWidth="1" strokeDasharray="4 3" />
-                <text x={PL - 6} y={y + 4} textAnchor="end"
-                  fontSize="9" fontWeight="700" fill="#cbd5e1">
-                  {val > 999 ? `${(val / 1000).toFixed(0)}k` : val}
+                  stroke="#d1fae5" strokeWidth="1" strokeDasharray="4,4" />
+                <text x={PL - 8} y={y + 4} textAnchor="end"
+                  fontSize="10" fontWeight="500" fill="#6b7280">
+                  {fmtGrid(val)}
                 </text>
               </g>
             )
           })}
 
-          {/* Area fills (reflection/glass) */}
-          {filter !== "Ginger"  && <path d={mkArea(bitS)} fill="url(#gb)" />}
-          {filter !== "Bitters" && <path d={mkArea(ginS)} fill="url(#gg)" />}
-          {filter === "all"     && <path d={mkArea(totS)} fill="url(#gt)" />}
-
-          {/* Lines */}
+          {/* ── Polylines (no area fill — clean factory style) ── */}
           {filter !== "Ginger" && (
-            <path d={mkLine(bitS)} fill="none" stroke="#111827" strokeWidth="2"
+            <polyline points={mkPolyline(bitS)} fill="none"
+              stroke="#111827" strokeWidth="2.5"
               strokeLinecap="round" strokeLinejoin="round" />
           )}
           {filter !== "Bitters" && (
-            <path d={mkLine(ginS)} fill="none" stroke="#d97706" strokeWidth="2"
+            <polyline points={mkPolyline(ginS)} fill="none"
+              stroke="#ca8a04" strokeWidth="2.5"
               strokeLinecap="round" strokeLinejoin="round" />
           )}
           {filter === "all" && (
-            <path d={mkLine(totS)} fill="none" stroke="#10b981" strokeWidth="1.5"
-              strokeLinecap="round" strokeLinejoin="round" strokeDasharray="5 3" />
+            <polyline points={mkPolyline(totS)} fill="none"
+              stroke="#10b981" strokeWidth="2"
+              strokeLinecap="round" strokeLinejoin="round"
+              strokeDasharray="5 3" />
           )}
 
-          {/* X-axis labels */}
-          {data.map((d, i) => showLabel(i) && (
-            <text key={i} x={xp(i)} y={H - 6} textAnchor="middle"
-              fontSize="9" fontWeight="700"
-              fill={hover === i ? "#0f172a" : "#94a3b8"}>
-              {xLabelText(d, i)}
-            </text>
-          ))}
-
-          {/* Hover crosshair */}
+          {/* ── Hover crosshair ── */}
           {hover !== null && (
             <line x1={xp(hover)} y1={PT} x2={xp(hover)} y2={base}
               stroke="#e2e8f0" strokeWidth="1" strokeDasharray="3 2" />
           )}
 
-          {/* Interactive dots + hit areas */}
+          {/* ── Dots + interactive hit areas ── */}
           {data.map((d, i) => (
             <g key={i}
               onMouseEnter={() => setHover(i)}
               onMouseLeave={() => setHover(null)}
             >
-              <rect x={xp(i) - 18} y={PT} width={36} height={cH} fill="transparent" className="cursor-default" />
+              <rect x={xp(i) - 18} y={PT} width={36} height={cH}
+                fill="transparent" className="cursor-default" />
 
               {filter !== "Ginger" && (
                 <circle cx={xp(i)} cy={yp(bitS[i])}
-                  r={hover === i ? 5 : 3}
-                  fill="#111827" stroke="#fff" strokeWidth="2" />
+                  r={hover === i ? 5 : 3.5}
+                  fill="#111827"
+                  stroke={hover === i ? "#fff" : "none"}
+                  strokeWidth="2" />
               )}
               {filter !== "Bitters" && (
                 <circle cx={xp(i)} cy={yp(ginS[i])}
-                  r={hover === i ? 5 : 3}
-                  fill="#d97706" stroke="#fff" strokeWidth="2" />
+                  r={hover === i ? 5 : 3.5}
+                  fill="#ca8a04"
+                  stroke={hover === i ? "#fff" : "none"}
+                  strokeWidth="2" />
               )}
               {filter === "all" && (
                 <circle cx={xp(i)} cy={yp(totS[i])}
                   r={hover === i ? 4 : 2.5}
-                  fill="#10b981" stroke="#fff" strokeWidth="1.5" />
+                  fill="#10b981"
+                  stroke={hover === i ? "#fff" : "none"}
+                  strokeWidth="1.5" />
               )}
             </g>
           ))}
+
+          {/* ── X-axis labels (rotated -45°) ── */}
+          {data.map((d, i) => {
+            if (!shouldShowLabel(i)) return null
+            return (
+              <text key={`xl-${i}`} x={xp(i)} y={base + 14} textAnchor="end"
+                fontSize="9" fontWeight="500"
+                fill={hover === i ? "#0f172a" : "#6b7280"}
+                transform={`rotate(-45 ${xp(i)} ${base + 14})`}>
+                {xLabel(d)}
+              </text>
+            )
+          })}
         </svg>
 
-        {/* Floating tooltip */}
+        {/* ── Floating tooltip ── */}
         {hover !== null && (
           <div
             className="absolute top-0 pointer-events-none bg-slate-900/95 backdrop-blur-sm text-white rounded-xl px-3.5 py-2.5 shadow-2xl z-10"
@@ -331,7 +383,7 @@ function TrendChart({
             }}
           >
             <p className="text-[8px] font-black uppercase tracking-[0.18em] text-slate-400 mb-2">
-              {isMonthly ? `Day ${xLabelText(data[hover], hover)}` : data[hover].month}
+              {xLabel(data[hover])}
             </p>
             {filter !== "Ginger" && (
               <div className="flex justify-between items-center gap-4 text-[11px]">
@@ -359,7 +411,7 @@ function TrendChart({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Cell — compact metric inside product panel
+// Cell — compact metric inside product panel
 // ─────────────────────────────────────────────────────────────────────────────
 function Cell({
   label, value, unit, icon: Icon, isBitters,
@@ -384,10 +436,10 @@ function Cell({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Dept panel
+// Dept panel
 // ─────────────────────────────────────────────────────────────────────────────
 function DeptPanel({ dept }: { dept: string }) {
-  const [rows, setRows]       = useState<DeptActivity[]>([])
+  const [rows, setRows] = useState<DeptActivity[]>([])
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -398,7 +450,7 @@ function DeptPanel({ dept }: { dept: string }) {
         try {
           const res = await fetch(`/api/admin/dept-activity?table=${table}`)
           if (!res.ok) return { table, label, count: 0, lastDate: null }
-          const d   = await res.json()
+          const d = await res.json()
           return { table, label, count: d.count ?? 0, lastDate: d.lastDate ?? null }
         } catch { return { table, label, count: 0, lastDate: null } }
       })
@@ -437,28 +489,28 @@ function DeptPanel({ dept }: { dept: string }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Main
+// Main
 // ─────────────────────────────────────────────────────────────────────────────
 export function ManagerDashboard({ userId }: { userId: string }) {
-  const [kpi, setKpi]               = useState<KPIData | null>(null)
-  const [loading, setLoading]       = useState(true)
+  const [kpi, setKpi] = useState<KPIData | null>(null)
+  const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [error, setError]           = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [isExporting, setIsExporting] = useState(false)
 
   const now = new Date()
-  const [period, setPeriod]     = useState<Period>("all")
-  const [selYear, setSelYear]   = useState(now.getFullYear())
+  const [period, setPeriod] = useState<Period>("all")
+  const [selYear, setSelYear] = useState(now.getFullYear())
   const [selMonth, setSelMonth] = useState(now.getMonth() + 1)
-  const [product, setProduct]   = useState<Product>("all")
-  const [dept, setDept]         = useState("All Departments")
+  const [product, setProduct] = useState<Product>("all")
+  const [dept, setDept] = useState("All Departments")
 
   const fetchKPIs = useCallback(async (p = period, y = selYear, m = selMonth) => {
     try {
       setRefreshing(true); setError(null)
       const params = new URLSearchParams()
       if (p === "month") { params.set("year", String(y)); params.set("month", String(m)) }
-      const res  = await fetch(`/api/analytics/kpis?${params}`)
+      const res = await fetch(`/api/analytics/kpis?${params}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed")
       setKpi(data)
@@ -476,10 +528,10 @@ export function ManagerDashboard({ userId }: { userId: string }) {
   const handleExport = async () => {
     setIsExporting(true)
     try {
-      const res  = await fetch("/api/records/export")
+      const res = await fetch("/api/records/export")
       const blob = await res.blob()
-      const url  = URL.createObjectURL(blob)
-      const a    = document.createElement("a")
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
       a.href = url
       a.download = `lawson_production_${now.toISOString().split("T")[0]}.xlsx`
       a.click()
@@ -487,13 +539,13 @@ export function ManagerDashboard({ userId }: { userId: string }) {
     } catch { alert("Export failed") } finally { setIsExporting(false) }
   }
 
-  const d        = kpi
-  const showB    = product === "all" || product === "Bitters"
-  const showG    = product === "all" || product === "Ginger"
+  const d = kpi
+  const showB = product === "all" || product === "Bitters"
+  const showG = product === "all" || product === "Ginger"
   const isMonthly = period === "month"
   const capsUsed = d ? (d.bitters_cartons + d.ginger_cartons) * 12 : 0
-  const labB     = d ? d.bitters_cartons * 12 : 0
-  const labG     = d ? d.ginger_cartons  * 12 : 0
+  const labB = d ? d.bitters_cartons * 12 : 0
+  const labG = d ? d.ginger_cartons * 12 : 0
   const periodLabel = period === "all" ? "All Time" : `${MONTHS[selMonth - 1]} ${selYear}`
 
   return (
@@ -512,7 +564,7 @@ export function ManagerDashboard({ userId }: { userId: string }) {
       <div className="dash w-full bg-[#f7f7f5] min-h-screen -m-4 sm:-m-6 md:-m-10 px-4 sm:px-6 md:px-10 py-8">
         <div className="max-w-[1400px] mx-auto space-y-6">
 
-          {/* ══ HEADER ══════════════════════════════════════════════ */}
+          {/* ══ HEADER ══════════════════════════════════════════ */}
           <header className="fu flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-200">
             <div className="flex items-center gap-4">
               <Image src="/logo.png" alt="Lawson" width={48} height={48}
@@ -544,9 +596,8 @@ export function ManagerDashboard({ userId }: { userId: string }) {
             </div>
           </header>
 
-          {/* ══ FILTERS ═════════════════════════════════════════════ */}
+          {/* ══ FILTERS ═════════════════════════════════════════ */}
           <div className="fu fu1 flex flex-wrap gap-2 items-center">
-            {/* Period */}
             <div className="flex items-center gap-0.5 bg-white rounded-xl p-1 border border-slate-200 shadow-sm">
               {(["all", "month"] as Period[]).map(p => (
                 <button key={p} onClick={() => { setPeriod(p); fetchKPIs(p) }}
@@ -580,7 +631,6 @@ export function ManagerDashboard({ userId }: { userId: string }) {
               </>
             )}
 
-            {/* Product */}
             <div className="flex items-center gap-0.5 bg-white rounded-xl p-1 border border-slate-200 shadow-sm">
               {(["all", "Bitters", "Ginger"] as Product[]).map(p => (
                 <button key={p} onClick={() => setProduct(p)}
@@ -595,7 +645,6 @@ export function ManagerDashboard({ userId }: { userId: string }) {
               ))}
             </div>
 
-            {/* Dept */}
             <div className="relative">
               <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
               <select value={dept} onChange={e => setDept(e.target.value)}
@@ -623,7 +672,7 @@ export function ManagerDashboard({ userId }: { userId: string }) {
           {/* Skeleton */}
           {loading && (
             <div className="space-y-4">
-              {[5, 3, 1, 4].map((cols, row) => (
+              {[2, 3, 1, 5, 4].map((cols, row) => (
                 <div key={row} className={`grid grid-cols-${Math.min(cols, 4)} sm:grid-cols-${cols} gap-3`}>
                   {Array.from({ length: cols }).map((_, i) => (
                     <div key={i} className="h-28 rounded-2xl bg-slate-200 animate-pulse" />
@@ -634,39 +683,45 @@ export function ManagerDashboard({ userId }: { userId: string }) {
             </div>
           )}
 
-          {/* ══ DATA ════════════════════════════════════════════════ */}
+          {/* ══ DATA ════════════════════════════════════════════ */}
           {!loading && !error && d && (
             <div className="space-y-6">
 
-              {/* ─── 1. AVAILABLE STOCK ──────────────────────────── */}
+              {/* ─── 1. AVAILABLE STOCK (live finished goods only) ── */}
               <section className="fu fu2">
                 <SectionLabel title="Available Stock" sub="Live Inventory" />
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                  {showB && <Tile label="Live Stock" sub="Bitters" value={d.live_bitters_stock}     unit="Cartons" variant="bitters" />}
-                  {showG && <Tile label="Live Stock" sub="Ginger"  value={d.live_ginger_stock}      unit="Cartons" variant="ginger"  />}
-                  <Tile label="Alcohol Balance"  value={d.current_alcohol_balance}  unit="Litres" variant="white" />
-                  <Tile label="Caps Remaining"   value={d.caps_remaining}            unit="Units"  variant="white" />
-                  <Tile label="Preforms Balance" value={d.current_preform_balance}   unit="Bags"   variant="white" />
+                <div className="grid grid-cols-2 gap-3">
+                  {showB && <Tile label="Live Stock" sub="Bitters" value={d.live_bitters_stock} unit="Cartons" variant="bitters" />}
+                  {showG && <Tile label="Live Stock" sub="Ginger" value={d.live_ginger_stock} unit="Cartons" variant="ginger" />}
                 </div>
               </section>
 
-              {/* ─── 2. PRODUCTION OUTPUT ────────────────────────── */}
+              {/* ─── 2. PRODUCTION OUTPUT (with sparklines) ──────── */}
               <section className="fu fu3">
                 <SectionLabel title="Production Output" sub="Cartons Produced" />
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+
                   {/* Total */}
                   <div className="rounded-2xl bg-white border border-slate-200 shadow-sm px-5 py-4 flex flex-col justify-between gap-3">
                     <div className="flex items-center justify-between">
                       <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Total</p>
                       <TrendingUp className="w-3.5 h-3.5 text-slate-300" />
                     </div>
-                    <div>
-                      <p className="text-3xl font-black tabular-nums text-slate-900 leading-none">
-                        {d.total_production_cartons.toLocaleString()}
-                      </p>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1">Cartons</p>
+                    <div className="flex items-end justify-between gap-3">
+                      <div>
+                        <p className="text-3xl font-black tabular-nums text-slate-900 leading-none">
+                          {d.total_production_cartons.toLocaleString()}
+                        </p>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-1">Cartons</p>
+                      </div>
+                      <Sparkline
+                        data={d.monthly_trend.map(t => t.total)}
+                        color="#64748b"
+                        gradId="spark-total"
+                      />
                     </div>
                   </div>
+
                   {/* Bitters */}
                   {showB && (
                     <div className="rounded-2xl bg-[#111827] shadow-sm px-5 py-4 flex flex-col justify-between gap-3">
@@ -678,14 +733,22 @@ export function ManagerDashboard({ userId }: { userId: string }) {
                           </span>
                         )}
                       </div>
-                      <div>
-                        <p className="text-3xl font-black tabular-nums text-white leading-none">
-                          {d.bitters_cartons.toLocaleString()}
-                        </p>
-                        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-1">Cartons</p>
+                      <div className="flex items-end justify-between gap-3">
+                        <div>
+                          <p className="text-3xl font-black tabular-nums text-white leading-none">
+                            {d.bitters_cartons.toLocaleString()}
+                          </p>
+                          <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider mt-1">Cartons</p>
+                        </div>
+                        <Sparkline
+                          data={d.monthly_trend.map(t => t.bitters)}
+                          color="rgba(255,255,255,0.5)"
+                          gradId="spark-bitters"
+                        />
                       </div>
                     </div>
                   )}
+
                   {/* Ginger */}
                   {showG && (
                     <div className="rounded-2xl bg-amber-500 shadow-sm px-5 py-4 flex flex-col justify-between gap-3">
@@ -697,11 +760,18 @@ export function ManagerDashboard({ userId }: { userId: string }) {
                           </span>
                         )}
                       </div>
-                      <div>
-                        <p className="text-3xl font-black tabular-nums text-white leading-none">
-                          {d.ginger_cartons.toLocaleString()}
-                        </p>
-                        <p className="text-[9px] font-bold text-amber-100 uppercase tracking-wider mt-1">Cartons</p>
+                      <div className="flex items-end justify-between gap-3">
+                        <div>
+                          <p className="text-3xl font-black tabular-nums text-white leading-none">
+                            {d.ginger_cartons.toLocaleString()}
+                          </p>
+                          <p className="text-[9px] font-bold text-amber-100 uppercase tracking-wider mt-1">Cartons</p>
+                        </div>
+                        <Sparkline
+                          data={d.monthly_trend.map(t => t.ginger)}
+                          color="rgba(255,255,255,0.6)"
+                          gradId="spark-ginger"
+                        />
                       </div>
                     </div>
                   )}
@@ -709,7 +779,6 @@ export function ManagerDashboard({ userId }: { userId: string }) {
               </section>
 
               {/* ─── 3. TREND CHART ──────────────────────────────── */}
-              {/* Monthly → daily (day 1–31); All-time → monthly (Jan–Dec) */}
               <section className="fu fu4">
                 <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-5 sm:p-6">
                   <TrendChart
@@ -722,10 +791,13 @@ export function ManagerDashboard({ userId }: { userId: string }) {
                 </div>
               </section>
 
-              {/* ─── 4. REMAINING QUANTITY ───────────────────────── */}
+              {/* ─── 4. REMAINING QUANTITY (includes balances) ──── */}
               <section className="fu fu5">
                 <SectionLabel title="Remaining Quantity" sub="Current Stock Levels" />
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                  <Tile label="Alcohol Balance" value={d.current_alcohol_balance} unit="Litres" variant="white" />
+                  <Tile label="Caps Remaining"  value={d.caps_remaining}          unit="Units"  variant="white" />
+                  <Tile label="Preforms Balance" value={d.current_preform_balance} unit="Bags"   variant="white" />
                   {showB && <Tile label="Labels"  sub="Bitters" value={d.labels_bitters_remaining}  unit="Units"   variant="slate" />}
                   {showG && <Tile label="Labels"  sub="Ginger"  value={d.labels_ginger_remaining}   unit="Units"   variant="amber-soft" />}
                   {showB && <Tile label="Caramel" sub="Bitters" value={d.caramel_bitters_remaining} unit="Gallons" variant="slate" />}
@@ -737,13 +809,13 @@ export function ManagerDashboard({ userId }: { userId: string }) {
               <section className="fu fu6">
                 <SectionLabel title="Quantity Used" sub="Consumed This Period" />
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                  <Tile label="Alcohol Used"  value={d.total_alcohol_used_litres}   unit="Litres" variant="white" />
-                  <Tile label="Preforms Used" value={d.total_preforms_used}         unit="Bags"   variant="white" />
-                  <Tile label="Caps Used"     value={d.total_caps_used}             unit="Units"  variant="white" />
-                  {showB && <Tile label="Labels Used" sub="Bitters" value={d.total_labels_bitters_used} unit="Units"   variant="slate" />}
-                  {showG && <Tile label="Labels Used" sub="Ginger"  value={d.total_labels_ginger_used}  unit="Units"   variant="amber-soft" />}
-                  {showB && <Tile label="Bottles"     sub="Bitters" value={d.total_bottles_bitters}     unit="Units"   variant="slate" />}
-                  {showG && <Tile label="Bottles"     sub="Ginger"  value={d.total_bottles_ginger}      unit="Units"   variant="amber-soft" />}
+                  <Tile label="Alcohol Used"  value={d.total_alcohol_used_litres} unit="Litres" variant="white" />
+                  <Tile label="Preforms Used" value={d.total_preforms_used}       unit="Bags"   variant="white" />
+                  <Tile label="Caps Used"     value={d.total_caps_used}           unit="Units"  variant="white" />
+                  {showB && <Tile label="Labels Used" sub="Bitters" value={d.total_labels_bitters_used} unit="Units" variant="slate" />}
+                  {showG && <Tile label="Labels Used" sub="Ginger"  value={d.total_labels_ginger_used}  unit="Units" variant="amber-soft" />}
+                  {showB && <Tile label="Bottles"     sub="Bitters" value={d.total_bottles_bitters}     unit="Units" variant="slate" />}
+                  {showG && <Tile label="Bottles"     sub="Ginger"  value={d.total_bottles_ginger}      unit="Units" variant="amber-soft" />}
                 </div>
               </section>
 
@@ -800,17 +872,16 @@ export function ManagerDashboard({ userId }: { userId: string }) {
                         </div>
                       </div>
                       <div className="bg-amber-50 p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
-                        <Cell label="Alcohol"  value={d.alcohol_used_for_ginger_drums} unit="Drums"   icon={Droplet}      isBitters={false} />
-                        <Cell label="Water"    value={d.ginger_water_used_litres}      unit="Litres"  icon={Droplet}      isBitters={false} />
-                        <Cell label="G/T Juice" value={d.ginger_gt_juice_litres}       unit="Litres"                      isBitters={false} />
-                        <Cell label="Spices"   value={d.ginger_spices_used_litres}     unit="Litres"                      isBitters={false} />
-                        <Cell label="Caramel"  value={d.ginger_caramel_used_gallons}   unit="Gallons" icon={FlaskConical} isBitters={false} />
-                        <Cell label="Labels"   value={labG}                            unit="Units"   icon={Tag}          isBitters={false} />
-                        <Cell label="Bottles"  value={d.total_bottles_ginger}          unit="Units"   icon={Package}      isBitters={false} />
+                        <Cell label="Alcohol"   value={d.alcohol_used_for_ginger_drums} unit="Drums"   icon={Droplet}      isBitters={false} />
+                        <Cell label="Water"     value={d.ginger_water_used_litres}      unit="Litres"  icon={Droplet}      isBitters={false} />
+                        <Cell label="G/T Juice" value={d.ginger_gt_juice_litres}        unit="Litres"                      isBitters={false} />
+                        <Cell label="Spices"    value={d.ginger_spices_used_litres}     unit="Litres"                      isBitters={false} />
+                        <Cell label="Caramel"   value={d.ginger_caramel_used_gallons}   unit="Gallons" icon={FlaskConical} isBitters={false} />
+                        <Cell label="Labels"    value={labG}                            unit="Units"   icon={Tag}          isBitters={false} />
+                        <Cell label="Bottles"   value={d.total_bottles_ginger}          unit="Units"   icon={Package}      isBitters={false} />
                       </div>
                     </div>
                   )}
-
                 </div>
               </section>
 
