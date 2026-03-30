@@ -32,7 +32,7 @@ const BADGE_META: Record<string, BadgeMeta> = {
   streak_100:        { label: "The Eternal Flame", desc: "100-shift streak — extraordinary",        icon: FlameIcon, color: "text-yellow-300",  bg: "bg-zinc-900",    ring: "ring-yellow-300"  },
   perfect_week:      { label: "Perfect Week",      desc: "All shifts on time for a full week",      icon: Target,    color: "text-emerald-400", bg: "bg-emerald-900", ring: "ring-emerald-400" },
   night_owl:         { label: "Night Owl",         desc: "Submitted a Night shift on time",         icon: Moon,      color: "text-indigo-400",  bg: "bg-indigo-900",  ring: "ring-indigo-400"  },
-  early_bird:        { label: "Early Bird",        desc: "Submitted before 8am on a Morning shift", icon: Sunrise,   color: "text-amber-400",   bg: "bg-amber-50",    ring: "ring-amber-300"   },
+  early_bird:        { label: "Early Bird",        desc: "Submitted before 3pm on a Morning shift", icon: Sunrise,   color: "text-amber-400",   bg: "bg-amber-50",    ring: "ring-amber-300"   },
   all_rounder:       { label: "All-Rounder",       desc: "Submitted on all 3 shift types",          icon: Shuffle,   color: "text-teal-500",    bg: "bg-teal-50",     ring: "ring-teal-200"    },
 }
 
