@@ -45,6 +45,12 @@ export async function POST(request: Request) {
     email,
     password,
     email_confirm: true,
+    user_metadata: {
+      full_name: full_name || username,
+      role,
+      department: department || "",
+      group_number: group_number ? String(group_number) : "",
+    },
   })
   if (authError || !authData.user) {
     return NextResponse.json({ error: authError?.message ?? "Failed to create user" }, { status: 400 })
@@ -52,7 +58,7 @@ export async function POST(request: Request) {
 
   // handle_new_user() has already created a default profile row; set the real
   // fields with an upsert (idempotent).
-  const { error: profileError } = await admin.from("profiles").upsert(
+  const { data: profile, error: profileError } = await admin.from("profiles").upsert(
     {
       id: authData.user.id,
       email,
@@ -63,10 +69,13 @@ export async function POST(request: Request) {
     },
     { onConflict: "id" },
   )
+    .select("id, role")
+    .single()
 
-  if (profileError) {
+  const assignedRole = (profile as unknown as { role?: UserRole } | null)?.role
+  if (profileError || !profile || assignedRole !== role) {
     await admin.auth.admin.deleteUser(authData.user.id) // roll back
-    return NextResponse.json({ error: profileError.message }, { status: 500 })
+    return NextResponse.json({ error: profileError?.message ?? "Profile role could not be assigned" }, { status: 500 })
   }
 
   return NextResponse.json({ success: true, userId: authData.user.id })

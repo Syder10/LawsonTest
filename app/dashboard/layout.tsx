@@ -17,13 +17,15 @@ export default async function DashboardLayout({
     }
 
     // Fetch the user's role so the header label matches their role
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', user!.id)
         .single()
 
-    const displayName = roleLabel(profile?.role || 'supervisor')
+    if (profileError || !profile) redirect("/auth/signout")
+
+    const displayName = roleLabel(profile.role)
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col font-sans">

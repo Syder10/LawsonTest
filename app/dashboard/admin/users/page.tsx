@@ -26,7 +26,7 @@ export default async function AdminUsersPage() {
 
     const { data: users } = await serviceClient
         .from("profiles")
-        .select("id, email, full_name, role, department, group_number, supervisor_id, created_at")
+        .select("id, email, full_name, role, department, group_number, created_at")
         .order("created_at", { ascending: false })
 
     return <UserManagement initialUsers={users || []} />

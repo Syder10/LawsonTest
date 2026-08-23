@@ -39,8 +39,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (full_name !== undefined) updates.full_name = full_name
   if (group_number !== undefined) updates.group_number = group_number ? Number(group_number) : null
 
-  const { error } = await admin.from("profiles").update(updates).eq("id", id)
+  const { data: updatedProfile, error } = await admin
+    .from("profiles")
+    .update(updates)
+    .eq("id", id)
+    .select("id, role")
+    .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const updatedRole = (updatedProfile as unknown as { role?: UserRole } | null)?.role
+  if (!updatedProfile || (role !== undefined && updatedRole !== role)) {
+    return NextResponse.json({ error: "Profile role was not updated." }, { status: 500 })
+  }
   return NextResponse.json({ success: true })
 }
 

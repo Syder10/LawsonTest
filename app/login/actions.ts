@@ -8,7 +8,10 @@ export async function login(state: unknown, formData: FormData) {
     const supabase  = await createClient()
     const rawUsername = (formData.get("username") as string)?.trim()
     const password    = formData.get("password") as string
-    const mode        = (formData.get("mode") as string) || "supervisor"
+    const requestedMode = (formData.get("mode") as string) || "supervisor"
+    const mode = ["supervisor", "manager", "admin"].includes(requestedMode)
+        ? requestedMode
+        : "supervisor"
 
     if (!rawUsername || !password) {
         return { error: "Username and password are required." }
@@ -32,14 +35,24 @@ export async function login(state: unknown, formData: FormData) {
     // After login, verify the user's role matches the mode they used.
     // This prevents a supervisor from stumbling into the manager panel
     // just by clicking the wrong button.
-    const { data: { user } } = await supabase.auth.getUser()
-    const { data: profile }  = await supabase
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError || !user) {
+        await supabase.auth.signOut()
+        return { error: "Unable to load this account. Please try again." }
+    }
+
+    const { data: profile, error: profileError }  = await supabase
         .from("profiles")
         .select("role")
-        .eq("id", user!.id)
+        .eq("id", user.id)
         .single()
 
-    const role = profile?.role || "supervisor"
+    if (profileError || !profile) {
+        await supabase.auth.signOut()
+        return { error: "No valid profile is configured for this account." }
+    }
+
+    const role = profile.role
 
     if (mode === "manager" && role !== "manager" && role !== "admin") {
         await supabase.auth.signOut()
@@ -49,6 +62,11 @@ export async function login(state: unknown, formData: FormData) {
     if (mode === "admin" && role !== "admin") {
         await supabase.auth.signOut()
         return { error: "Access denied." }
+    }
+
+    if (mode === "supervisor" && role !== "supervisor" && role !== "procurement") {
+        await supabase.auth.signOut()
+        return { error: "This account must use its assigned access level." }
     }
 
     revalidatePath("/", "layout")

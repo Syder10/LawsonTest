@@ -11,13 +11,15 @@ export default async function DashboardPage() {
 
     if (!user) redirect("/login")
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("role")
         .eq("id", user.id)
         .single()
 
-    const role = profile?.role || "supervisor"
+    if (profileError || !profile) redirect("/auth/signout")
+
+    const role = profile.role
 
     if (role === "admin")        return <AdminDashboard />
     if (role === "manager")      return <ManagerDashboard userId={user.id} />
