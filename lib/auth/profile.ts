@@ -8,13 +8,14 @@ export interface ProfileLookup {
   profile: ProfileRow | null
   /**
    * Why the lookup produced no profile:
-   *   ok          — found it.
-   *   missing     — CONFIRMED absent (the service role looked and found nothing).
-   *   unreadable  — could not determine; the read errored, or the service-role
-   *                 cross-check was unavailable. A config problem, not a data one.
-   * The two failures need opposite fixes, so they must not share a message.
+   *   ok            — found it.
+   *   missing       — CONFIRMED absent (the service role looked and found nothing).
+   *   misconfigured — the server lacks usable Supabase credentials, so we could
+   *                   not even determine whether the row exists.
+   *   unreadable    — the database refused the read (policy, grants, recursion).
+   * These need completely different fixes, so they must not share a message.
    */
-  reason: "ok" | "missing" | "unreadable"
+  reason: "ok" | "missing" | "misconfigured" | "unreadable"
   error: string | null
 }
 
@@ -66,12 +67,23 @@ export async function getProfileForUser(client: RlsClient, userId: string): Prom
   } catch (e) {
     // createAdminSupabase() throws when SUPABASE_SERVICE_ROLE_KEY is unset, so we
     // cannot tell "absent" from "hidden by RLS" — report it as a config problem
-    // rather than guessing.
+    // rather than guessing. Classify explicitly so the message is actionable.
     const message = e instanceof Error ? e.message : String(e)
+    const keyMissing = !process.env.SUPABASE_SERVICE_ROLE_KEY
     console.error(
       `[profile] Profile ${userId} was not returned by its own RLS read ` +
-        `(${rlsError ?? "no error"}), and the service-role cross-check is unavailable: ${message}`,
+        `(${rlsError ?? "no error, so RLS or table grants filtered it"}), and the ` +
+        `service-role cross-check is unavailable: ${message}` +
+        (keyMissing
+          ? " — SUPABASE_SERVICE_ROLE_KEY is NOT SET in this environment. On Vercel, " +
+            "add it under Settings -> Environment Variables and REDEPLOY (env changes " +
+            "do not apply to existing deployments)."
+          : ""),
     )
-    return { profile: null, reason: "unreadable", error: rlsError ?? message }
+    return {
+      profile: null,
+      reason: keyMissing ? "misconfigured" : "unreadable",
+      error: rlsError ?? message,
+    }
   }
 }

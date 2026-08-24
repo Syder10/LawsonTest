@@ -44,16 +44,20 @@ export async function login(state: unknown, formData: FormData) {
 
     if (!profile) {
         await supabase.auth.signOut()
-        // Distinguish the two causes — they need completely different fixes, and
-        // one catch-all message made this impossible to diagnose.
-        return {
-            error:
-                reason === "missing"
-                    ? "This login exists but has no profile record yet, so it has no role or department. " +
-                      "An administrator needs to create your profile before you can sign in."
-                    : "Your profile could not be loaded because of a server configuration problem. " +
-                      "Please contact an administrator.",
-        }
+        // Three distinct causes with three different fixes — never collapse them.
+        const messages = {
+            missing:
+                "This login exists but has no profile record yet, so it has no role or department. " +
+                "An administrator needs to create your profile before you can sign in.",
+            misconfigured:
+                "The server is missing its database credentials, so your profile could not be loaded. " +
+                "An administrator needs to check the deployment's environment variables " +
+                "(SUPABASE_SERVICE_ROLE_KEY) and redeploy.",
+            unreadable:
+                "The database refused to load your profile. An administrator should check the " +
+                "profiles access policy and the server logs.",
+        } as const
+        return { error: messages[reason as keyof typeof messages] ?? messages.unreadable }
     }
 
     const role = profile.role

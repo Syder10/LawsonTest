@@ -15,7 +15,7 @@ select u.id, u.email, p.role, p.department,
        case when p.id is null then 'NO PROFILE ROW' else 'profile exists' end as row_state
 from auth.users u
 left join public.profiles p on p.id = u.id
-order by u.created_at desc;
+order by u.email;
 
 -- ── 2. Is RLS on, and which policies apply to SELECT? ───────────────────────
 select relname as table_name, relrowsecurity as rls_enabled, relforcerowsecurity as rls_forced
@@ -38,25 +38,43 @@ declare
   v_user   uuid := 'PASTE_USER_ID_HERE';   -- <<< EDIT
   v_owner  int;
   v_rls    int;
+  v_denied boolean := false;
 begin
   select count(*) into v_owner from public.profiles where id = v_user;
 
-  set local role authenticated;
-  perform set_config('request.jwt.claim.sub', v_user::text, true);
-  perform set_config('request.jwt.claims', json_build_object('sub', v_user, 'role', 'authenticated')::text, true);
-
-  select count(*) into v_rls from public.profiles where id = v_user;
+  begin
+    set local role authenticated;
+    perform set_config('request.jwt.claim.sub', v_user::text, true);
+    perform set_config('request.jwt.claims', json_build_object('sub', v_user, 'role', 'authenticated')::text, true);
+    select count(*) into v_rls from public.profiles where id = v_user;
+  exception when insufficient_privilege then
+    -- No table-level SELECT grant: RLS runs AFTER grants, so no policy can help.
+    v_denied := true;
+    v_rls := 0;
+  end;
   reset role;
 
   raise notice '─────────────────────────────────────────────';
   raise notice 'rows visible as OWNER (RLS bypassed): %', v_owner;
-  raise notice 'rows visible as the USER  (RLS on)  : %', v_rls;
-  if v_owner = 0 then
+  if v_denied then
+    raise notice 'rows visible as the USER  (RLS on)  : PERMISSION DENIED';
+  else
+    raise notice 'rows visible as the USER  (RLS on)  : %', v_rls;
+  end if;
+
+  if v_denied then
+    raise notice 'VERDICT: `authenticated` has no SELECT grant on public.profiles.';
+    raise notice '         Grants are checked BEFORE RLS, so no policy can let this';
+    raise notice '         through. Fix (section 4 below):';
+    raise notice '           grant usage on schema public to authenticated, anon;';
+    raise notice '           grant select, insert, update on public.profiles to authenticated;';
+  elsif v_owner = 0 then
     raise notice 'VERDICT: no profile row at all -> run bootstrap-admin.sql';
   elsif v_rls = 0 then
     raise notice 'VERDICT: the row EXISTS but RLS hides it from its own user.';
-    raise notice '         The profiles_select policy or the table grants are wrong.';
-    raise notice '         Re-apply 0003_profiles.sql, then run section 4 below.';
+    raise notice '         The profiles_select policy is missing or wrong (section 2),';
+    raise notice '         or is_staff()/is_admin() are absent (0001 not applied).';
+    raise notice '         Re-apply 0003_profiles.sql.';
   else
     raise notice 'VERDICT: the row is readable by the app. If login still fails,';
     raise notice '         the deployed build is stale, or it points at a DIFFERENT';
