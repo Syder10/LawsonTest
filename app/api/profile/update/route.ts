@@ -2,40 +2,42 @@ import { NextResponse } from "next/server"
 import { requireUser } from "@/lib/auth/guards"
 
 // Update the caller's own profile. The profile row is provisioned by the
-// handle_new_user() trigger at signup, so this is a plain UPDATE (not an
-// upsert). Role is deliberately NOT accepted here — role changes go through the
-// admin API. Writes through the RLS-bound client (profiles_update_own policy).
+// handle_new_user() trigger at signup, so this is a plain UPDATE (not an upsert).
+// Writes through the RLS-bound client (profiles_update_own policy).
+//
+// ONLY full_name is self-editable. role, department and group_number are
+// privileged: they decide the supervisor's shift roster, which record types they
+// may submit, and how they are scored, so an administrator assigns them via
+// /api/admin/users. This route not accepting them is a convenience, NOT the
+// boundary — the real guard is the DB trigger in
+// 0012_profile_privilege_guard.sql, which rejects the change even if the caller
+// talks to PostgREST directly with their own JWT.
 export async function POST(request: Request) {
   const auth = await requireUser()
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
   const { user, supabase } = auth.ctx
 
-  let body: { full_name?: string; department?: string | null; group_number?: number | string | null }
+  let body: { full_name?: string }
   try {
     body = await request.json()
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  let group: number | null = null
-  if (body.group_number !== null && body.group_number !== undefined && body.group_number !== "") {
-    const n = Number(body.group_number)
-    if (!Number.isInteger(n) || n < 1 || n > 3) {
-      return NextResponse.json({ error: "group_number must be 1, 2, or 3." }, { status: 400 })
-    }
-    group = n
+  const fullName = body.full_name?.trim()
+  if (!fullName) {
+    return NextResponse.json({ error: "Full name is required." }, { status: 400 })
   }
 
-  const { error } = await supabase
-    .from("profiles")
-    .update({
-      full_name: body.full_name ?? null,
-      department: body.department || null,
-      group_number: group,
-    })
-    .eq("id", user.id)
+  const { error } = await supabase.from("profiles").update({ full_name: fullName }).eq("id", user.id)
 
   if (error) {
+    // 42501 = insufficient_privilege, raised by the profile guard trigger. Should
+    // be unreachable from here (we only send full_name) but surfacing it as 403
+    // beats a misleading 500 if that ever changes.
+    if (error.code === "42501") {
+      return NextResponse.json({ error: error.message }, { status: 403 })
+    }
     console.error("[profile/update] error:", error.message)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }

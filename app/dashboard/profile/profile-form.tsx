@@ -6,8 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
-import { KeyRound, Eye, EyeOff } from "lucide-react"
-import { DEPARTMENTS } from "@/lib/domain/record-types"
+import { KeyRound, Eye, EyeOff, Lock } from "lucide-react"
 
 interface ProfileFormProps {
     initialData: { full_name?: string | null; department?: string | null; group_number?: number | null }
@@ -17,10 +16,11 @@ interface ProfileFormProps {
 export default function ProfileForm({ initialData, username }: ProfileFormProps) {
     const router = useRouter()
     const [isSubmitting, setIsSubmitting] = useState(false)
+    // Only full_name is self-editable. Department, group and role are privileged
+    // columns assigned by an administrator and enforced by a DB trigger
+    // (0012_profile_privilege_guard.sql) — they are shown read-only here.
     const [formData, setFormData] = useState({
         full_name: initialData.full_name || "",
-        department: initialData.department || "",
-        group_number: initialData.group_number || 1,
     })
 
     // Password change state
@@ -52,15 +52,16 @@ export default function ProfileForm({ initialData, username }: ProfileFormProps)
             const response = await fetch("/api/profile/update", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(formData),
+                body: JSON.stringify({ full_name: formData.full_name }),
             })
 
-            if (!response.ok) throw new Error("Failed to update profile")
+            const data = await response.json().catch(() => ({}))
+            if (!response.ok) throw new Error(data.error || "Failed to update profile")
 
             toast.success("Profile updated successfully!")
             router.refresh()
         } catch (error) {
-            toast.error("There was a problem updating your profile.")
+            toast.error(error instanceof Error ? error.message : "There was a problem updating your profile.")
             console.error(error)
         } finally {
             setIsSubmitting(false)
@@ -130,38 +131,32 @@ export default function ProfileForm({ initialData, username }: ProfileFormProps)
                     </div>
 
                     <div className="space-y-2">
-                        <Label htmlFor="department" className="text-emerald-900 font-semibold">Department</Label>
-                        <select
-                            id="department"
-                            name="department"
-                            value={formData.department}
-                            onChange={handleChange}
-                            required
-                            className="w-full px-4 py-3 h-12 text-base rounded-xl border border-emerald-100 bg-white focus:border-emerald-500 focus:ring-emerald-500/20 transition-all text-slate-900 font-medium"
-                        >
-                            <option value="" disabled>Select Department</option>
-                            {DEPARTMENTS.map((d) => (
-                                <option key={d} value={d}>{d}</option>
-                            ))}
-                        </select>
+                        <Label className="text-emerald-900 font-semibold flex items-center gap-1.5">
+                            Department <Lock className="w-3 h-3 text-slate-400" />
+                        </Label>
+                        <Input
+                            disabled
+                            value={initialData.department || "Not assigned"}
+                            className="w-full px-4 py-3 text-base rounded-xl border-emerald-100 bg-emerald-50/50 text-emerald-800"
+                        />
                     </div>
 
                     <div className="space-y-2">
-                        <Label htmlFor="group_number" className="text-emerald-900 font-semibold">Group Number</Label>
-                        <select
-                            id="group_number"
-                            name="group_number"
-                            value={formData.group_number}
-                            onChange={handleChange}
-                            required
-                            className="w-full px-4 py-3 h-12 text-base rounded-xl border border-emerald-100 bg-white focus:border-emerald-500 focus:ring-emerald-500/20 transition-all text-slate-900 font-medium"
-                        >
-                            <option value={1}>Group 1</option>
-                            <option value={2}>Group 2</option>
-                            <option value={3}>Group 3</option>
-                        </select>
+                        <Label className="text-emerald-900 font-semibold flex items-center gap-1.5">
+                            Group Number <Lock className="w-3 h-3 text-slate-400" />
+                        </Label>
+                        <Input
+                            disabled
+                            value={initialData.group_number ? `Group ${initialData.group_number}` : "Not assigned"}
+                            className="w-full px-4 py-3 text-base rounded-xl border-emerald-100 bg-emerald-50/50 text-emerald-800"
+                        />
                     </div>
                 </div>
+
+                <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
+                    Your department and rotation group determine your shift roster and which records you must submit, so they
+                    are assigned by an administrator. Ask your manager if either is wrong or missing.
+                </p>
 
                 <div className="pt-6 border-t border-emerald-100 flex justify-end">
                     <Button

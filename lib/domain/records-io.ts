@@ -68,8 +68,30 @@ export function buildRecordRow(
     user_id: env.user_id,
   }
 
-  // Product only if this record type is filed per-product.
-  if (def.products.length > 0 && env.product) row.product = env.product
+  // Product, for record types filed per-product. Validated rather than merely
+  // copied when present — mirroring the herb-variant check below.
+  //
+  // Silently omitting it was a real hazard: packaging_daily_records.product is
+  // NOT NULL so the insert failed with a raw Postgres error, while
+  // filling_line / labels / caramel accept NULL and would have stored a row that
+  // is invisible to every per-product analytic AND occupies a different slot in
+  // the one-record-per-(date,shift,product) uniqueness guard
+  // (0013_prevent_duplicate_submissions.sql).
+  if (def.products.length > 0) {
+    if (!env.product) {
+      return {
+        ok: false,
+        error: `${recordType} must be filed for a product (${def.products.join(" or ")}).`,
+      }
+    }
+    if (!def.products.includes(env.product)) {
+      return {
+        ok: false,
+        error: `"${env.product}" is not a valid product for ${recordType} (expected ${def.products.join(" or ")}).`,
+      }
+    }
+    row.product = env.product
+  }
 
   // Stock records also carry the material (+ herb variant).
   if (def.storage.kind === "stock") {

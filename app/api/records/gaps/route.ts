@@ -30,8 +30,7 @@ export async function GET() {
   const rowsByDef = new Map<string, EnvelopeRow[]>()
   await Promise.all(
     defs.map(async (def) => {
-      const all = await fetchTypeRows(admin, def, floor)
-      rowsByDef.set(def.label, all.filter((r) => r.user_id === user.id))
+      rowsByDef.set(def.label, await fetchTypeRows(admin, def, floor, undefined, user.id))
     }),
   )
 

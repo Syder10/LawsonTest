@@ -43,6 +43,16 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (error) {
+    // 23505 = unique_violation (no_work_records_one_per_shift_uidx, 0013).
+    if (error.code === "23505") {
+      return NextResponse.json(
+        {
+          error:
+            `A no-work record already exists for ${department} on ${body.date} (${body.shift} shift).`,
+        },
+        { status: 409 },
+      )
+    }
     console.error("[no-work] insert error:", error.message)
     return NextResponse.json({ error: `Database error: ${error.message}` }, { status: 500 })
   }

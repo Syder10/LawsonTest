@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A new push to the same branch supersedes an in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  database:
+    name: Database — migrations + SQL behaviour suites
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: lawson
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PGPASSWORD: postgres
+      PSQL_ARGS: -h localhost -U postgres -d lawson -v ON_ERROR_STOP=1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Stands in for Supabase's managed auth schema (auth.uid(), auth.users).
+      # Identical file to the one scripts/validate-ledger.sh uses locally.
+      - name: Apply auth shim
+        run: psql $PSQL_ARGS -q -f supabase/tests/_shim.sql
+
+      - name: Apply all migrations in order
+        run: |
+          for f in supabase/migrations/*.sql; do
+            echo "→ $(basename "$f")"
+            psql $PSQL_ARGS -q -f "$f"
+          done
+
+      # Locks in the invariants: derived-ledger self-healing + reconciliation
+      # (01_ledger.sql), and the profile privilege guard + duplicate-submission
+      # guards (02_security.sql).
+      - name: Run SQL behaviour suites
+        run: |
+          for f in supabase/tests/[0-9][0-9]_*.sql; do
+            echo "→ $(basename "$f")"
+            psql $PSQL_ARGS -f "$f"
+          done
+
+  app:
+    name: App — unit tests, types, build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Unit tests (pure domain logic)
+        run: npm run test:run
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Placeholder values: the build never contacts Supabase, but the clients
+      # read these at module scope.
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key

@@ -2,17 +2,15 @@
 
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { createServerSupabase } from "@/lib/supabase/server"
 import { getProfileForUser } from "@/lib/auth/profile"
+import { isKnownRole, normalizeLoginMode, roleLabel, roleSatisfiesMode } from "@/lib/domain/roles"
 
 export async function login(state: unknown, formData: FormData) {
-    const supabase  = await createClient()
+    const supabase  = await createServerSupabase()
     const rawUsername = (formData.get("username") as string)?.trim()
     const password    = formData.get("password") as string
-    const requestedMode = (formData.get("mode") as string) || "supervisor"
-    const mode = ["supervisor", "manager", "admin"].includes(requestedMode)
-        ? requestedMode
-        : "supervisor"
+    const mode        = normalizeLoginMode(formData.get("mode") as string | null)
 
     if (!rawUsername || !password) {
         return { error: "Username and password are required." }
@@ -33,9 +31,9 @@ export async function login(state: unknown, formData: FormData) {
         return { error: "Incorrect username or password." }
     }
 
-    // After login, verify the user's role matches the mode they used.
-    // This prevents a supervisor from stumbling into the manager panel
-    // just by clicking the wrong button.
+    // Verify the account's role clears the bar for the form they used. This stops
+    // a supervisor walking into the manager/admin panel by clicking the wrong
+    // button; it does NOT stop a manager/admin using the default form.
     const { data: { user }, error: userError } = await supabase.auth.getUser()
     if (userError || !user) {
         await supabase.auth.signOut()
@@ -51,19 +49,23 @@ export async function login(state: unknown, formData: FormData) {
 
     const role = profile.role
 
-    if (mode === "manager" && role !== "manager" && role !== "admin") {
+    if (!isKnownRole(role)) {
         await supabase.auth.signOut()
-        return { error: "This account does not have manager access." }
+        return { error: `This account has an unrecognised role ("${role}"). Please contact an administrator.` }
     }
 
-    if (mode === "admin" && role !== "admin") {
+    if (!roleSatisfiesMode(role, mode)) {
         await supabase.auth.signOut()
-        return { error: "Access denied." }
-    }
-
-    if (mode === "supervisor" && role !== "supervisor" && role !== "procurement") {
-        await supabase.auth.signOut()
-        return { error: "This account must use its assigned access level." }
+        // Naming the account's ACTUAL role matters: the password already verified
+        // who they are, and a generic refusal makes a mis-assigned role almost
+        // impossible to diagnose from the outside.
+        const required = mode === "admin" ? "Administrator" : "Manager"
+        return {
+            error:
+                `This is a ${roleLabel(role)} account, so it cannot sign in here — ` +
+                `${required} access is required. If that is wrong, ask an administrator ` +
+                `to update your role (it is stored on your profile, not on your login).`,
+        }
     }
 
     revalidatePath("/", "layout")

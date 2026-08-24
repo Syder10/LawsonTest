@@ -69,10 +69,12 @@ create policy "profiles_select"
   on public.profiles for select to authenticated
   using (id = auth.uid() or public.is_staff());
 
--- Update own profile. NOTE: role/department escalation is prevented at the
--- application layer (the profile-update API never accepts `role`, and admins
--- change roles through the service-role admin API). A DB-level guard against
--- self-role-change can be added with a column-level trigger if desired.
+-- Update own profile.
+--
+-- IMPORTANT: RLS gates rows, never columns — this policy alone would let a
+-- supervisor set their own role to 'admin'. Column-level protection for
+-- role / department / group_number is enforced by the BEFORE UPDATE trigger in
+-- 0012_profile_privilege_guard.sql. Do not rely on the API layer for it.
 create policy "profiles_update_own"
   on public.profiles for update to authenticated
   using (id = auth.uid())

@@ -96,25 +96,76 @@ export function isEarlyBird(createdAt: string, shift: string): boolean {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SHIFT-DATE CONVENTION — the most important dating rule in the system.
+//
+// A record is dated by the day its shift STARTED, never by the wall-clock day
+// the supervisor happened to fill in the form.
+//
+// A Night shift that starts Thu 20/08 at 21:00 and closes Fri 21/08 at ~05:00 is
+// dated 20/08. That way one calendar date holds exactly one Morning + one
+// Afternoon + one Night submission per department — which is precisely what every
+// downstream consumer already assumes:
+//
+//   • The derived stock ledger chains movements date → Morning → Afternoon →
+//     Night (shift_rank, 0011_stock_counts.sql). A Night row dated 21/08 would
+//     sort BEFORE that day's Morning row and corrupt every running balance.
+//   • isDayOff/isSaturdayOff read "Night is off Saturday" as "no Night shift
+//     STARTS on Saturday" — so the week's last Night shift starts Friday.
+//   • The on-time window for Night (04:00–05:30) falls on the following calendar
+//     morning, which isBackdated() forgives via its +1-day Night grace.
+//
+// NIGHT_ROLLOVER_HOUR is the boundary: before 06:00 we are still in the tail of
+// the Night shift that began yesterday.
+// ─────────────────────────────────────────────────────────────────────────────
+export const NIGHT_ROLLOVER_HOUR = 6
+
+/** ISO date (yyyy-mm-dd) `offsetDays` from `d`, in UTC (= Ghana local). */
+function isoDay(d: Date, offsetDays = 0): string {
+  const x = new Date(d)
+  x.setUTCDate(x.getUTCDate() + offsetDays)
+  return x.toISOString().split("T")[0]
+}
+
+/**
+ * The date a record for `shift` belongs to, given the current moment.
+ *
+ * This is the canonical default for the date field on the submission forms. Use
+ * it instead of `new Date().toISOString()`, which yields the WRONG day for a
+ * Night shift being filed at 05:00 (it would say 21/08 for a shift that began
+ * 20/08, splitting one working day across two dates).
+ *
+ *   shiftDateFor("Night",     21/08 04:30) -> "2026-08-20"   (started yesterday)
+ *   shiftDateFor("Night",     20/08 21:30) -> "2026-08-20"
+ *   shiftDateFor("Morning",   21/08 08:00) -> "2026-08-21"
+ *   shiftDateFor("Afternoon", 21/08 20:15) -> "2026-08-21"
+ */
+export function shiftDateFor(shift: string, now: Date = new Date()): string {
+  if (shift === "Night" && now.getUTCHours() < NIGHT_ROLLOVER_HOUR) {
+    return isoDay(now, -1)
+  }
+  return isoDay(now)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // currentGhanaShift
-// Used only internally for streak date-keying and no-work record matching.
-// Do NOT use this to decide what shift to display to supervisors.
-// Use expectedShiftForGroup() for display.
+// Which shift is running right now, and the date that shift is keyed to (per the
+// convention above). Used for streak date-keying and no-work record matching.
+// Do NOT use this to decide what shift to DISPLAY to a supervisor — their shift
+// is fixed for the week by the rotation; use expectedShiftForGroup() for that.
 //
 //  Morning:   06:00–13:59
 //  Afternoon: 14:00–20:59
-//  Night:     21:00–05:59  (wraps midnight)
+//  Night:     21:00–05:59  (wraps midnight; before 06:00 it is still yesterday's)
 // ─────────────────────────────────────────────────────────────────────────────
 export function currentGhanaShift(now: Date): { shift: string; shiftDate: string } {
   const hour = now.getUTCHours()
-  if (hour < 6) {
-    const yesterday = new Date(now)
-    yesterday.setUTCDate(yesterday.getUTCDate() - 1)
-    return { shift: "Night", shiftDate: yesterday.toISOString().split("T")[0] }
-  }
-  const dateStr = now.toISOString().split("T")[0]
-  if (hour >= 6  && hour < 14) return { shift: "Morning",   shiftDate: dateStr }
-  if (hour >= 14 && hour < 21) return { shift: "Afternoon", shiftDate: dateStr }
+  // Before the rollover we are in the tail of the Night shift that began
+  // yesterday, so it keeps yesterday's date.
+  if (hour < NIGHT_ROLLOVER_HOUR) return { shift: "Night", shiftDate: isoDay(now, -1) }
+
+  const dateStr = isoDay(now)
+  if (hour < 14) return { shift: "Morning",   shiftDate: dateStr }
+  if (hour < 21) return { shift: "Afternoon", shiftDate: dateStr }
   return { shift: "Night", shiftDate: dateStr }
 }
 
@@ -236,6 +287,30 @@ export interface OnTimeWindowInfo {
   startMin:  number
   endHour:   number
   endMin:    number
+}
+
+/**
+ * ISO timestamp at which the on-time window CLOSES for `shift` on `recordDate`.
+ *
+ * Unlike buildOnTimeWindowInfo (which is relative to "now"), this is anchored to
+ * a specific record date, so it can answer "has that day's window passed?" for
+ * any day in history. For Night the window falls on the FOLLOWING calendar
+ * morning, because a Night record is dated by the day its shift started — see
+ * the SHIFT-DATE CONVENTION above.
+ *
+ *   onTimeWindowCloseFor("2026-08-20", "Morning") -> 2026-08-20T14:30:00Z
+ *   onTimeWindowCloseFor("2026-08-20", "Night")   -> 2026-08-21T05:30:00Z
+ */
+export function onTimeWindowCloseFor(recordDate: string, shift: string): string {
+  const w = ON_TIME_WINDOWS[shift]
+  const d = new Date(recordDate + "T00:00:00Z")
+  if (!w) {
+    d.setUTCHours(23, 59, 59, 999)
+    return d.toISOString()
+  }
+  if (shift === "Night") d.setUTCDate(d.getUTCDate() + 1)
+  d.setUTCHours(w.endHour, w.endMin, 0, 0)
+  return d.toISOString()
 }
 
 export function buildOnTimeWindowInfo(now: Date, assignedShift: string): OnTimeWindowInfo {

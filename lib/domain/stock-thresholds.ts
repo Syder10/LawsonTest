@@ -24,8 +24,14 @@ export const THRESHOLDS: Record<string, { red: number; yellow: number }> = {
 
 export type AlertLevel = "red" | "yellow" | "none"
 
+// Object.hasOwn guards against keys that collide with inherited Object members
+// ("toString", "constructor"): a plain-object lookup would return that function,
+// pass the truthiness check, and yield `remaining / undefined` = NaN below.
+const thresholdFor = (key: string) =>
+  Object.hasOwn(THRESHOLDS, key) ? THRESHOLDS[key] : undefined
+
 export function alertLevel(value: number, key: string): AlertLevel {
-  const t = THRESHOLDS[key]
+  const t = thresholdFor(key)
   if (!t) return "none"
   if (value <= t.red) return "red"
   if (value <= t.yellow) return "yellow"
@@ -34,7 +40,7 @@ export function alertLevel(value: number, key: string): AlertLevel {
 
 /** Estimated days of stock remaining, based on the weekly (red) threshold. */
 export function daysRemaining(remaining: number, key: string): number | null {
-  const t = THRESHOLDS[key]
+  const t = thresholdFor(key)
   if (!t || t.red <= 0) return null
   return Math.round((remaining / t.red) * WEEK_DAYS * 10) / 10
 }

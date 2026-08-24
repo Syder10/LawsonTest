@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/lib/db/types"
 import { compulsoryRecordTypes, type RecordTypeDef } from "@/lib/domain/record-types"
-import { isBackdated, isOnTime, expectedShiftForGroup, isDayOff, buildOnTimeWindowInfo } from "@/lib/shift-config"
+import { isBackdated, isOnTime, expectedShiftForGroup, isDayOff, buildOnTimeWindowInfo, onTimeWindowCloseFor } from "@/lib/shift-config"
 
 // ============================================================================
 // Shared gamification data-access + aggregation.
@@ -30,17 +30,27 @@ export function storageTable(def: RecordTypeDef): string {
   return def.storage.kind === "table" ? def.storage.table : "stock_records"
 }
 
-/** Envelope rows for a record type within [gteDate, lteDate]. */
+/**
+ * Envelope rows for a record type within [gteDate, lteDate].
+ *
+ * `userId` filters in the DATABASE rather than in JS. The per-user endpoints
+ * (stats, gaps) only ever want one supervisor's rows, and fetching every
+ * supervisor's rows for every compulsory type on each dashboard load — then
+ * discarding ~all of them client-side — does not scale. Cross-user consumers
+ * (leaderboard, MVP) simply omit it.
+ */
 export async function fetchTypeRows(
   admin: AdminClient,
   def: RecordTypeDef,
   gteDate: string,
   lteDate?: string,
+  userId?: string,
 ): Promise<EnvelopeRow[]> {
   // Dynamic table name — the one place we intentionally step outside the typed
   // table map, so the builder is treated loosely here.
   let q = (admin.from(storageTable(def)) as any).select(ENVELOPE).gte("date", gteDate)
   if (lteDate) q = q.lte("date", lteDate)
+  if (userId) q = q.eq("user_id", userId)
   if (def.storage.kind === "stock") q = q.eq("material", def.storage.material)
   const { data } = await q
   return (data ?? []) as EnvelopeRow[]
@@ -182,7 +192,9 @@ export interface DayGap {
  * there is no no-work row.
  *
  * Unlike the streak, presence here counts ANY row (a late/backfilled submission
- * resolves the gap — on-time is NOT required). Returned most-recent first.
+ * resolves the gap — on-time is NOT required). A day is also only eligible once
+ * its rostered shift's on-time window has CLOSED, so a Night shift still inside
+ * its next-morning window is never reported. Returned most-recent first.
  */
 export function computeGaps(
   rowsByLabel: Map<string, EnvelopeRow[]>,
@@ -214,7 +226,14 @@ export function computeGaps(
     const dateStr = cursor.toISOString().slice(0, 10)
     if (!isDayOff(dept, group, cursor)) {
       const shift = expectedShiftForGroup(dept, group, cursor)
-      if (shift) {
+      // Only nag once that shift's on-time window has actually CLOSED. This
+      // matters for Night: a shift dated 20/08 stays submittable until 05:30 on
+      // 21/08, by which point the calendar has already rolled it into
+      // "yesterday" — without this check the supervisor is told they missed a
+      // shift they are still inside the window for.
+      const windowClosed =
+        !!shift && now.getTime() > new Date(onTimeWindowCloseFor(dateStr, shift)).getTime()
+      if (shift && windowClosed) {
         const key = `${dateStr}|${shift}`
         if (!noWorkKeys.has(key)) {
           const missing = required.filter((def) => !presence.get(def.label)?.has(key)).map((def) => def.label)

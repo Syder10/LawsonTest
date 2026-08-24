@@ -12,6 +12,7 @@ import {
   currentGhanaShift,
   expectedShiftForGroup,
   isWindowOpenNow,
+  shiftDateFor,
 } from "@/lib/shift-config"
 
 const NO_WORK_REASONS = [
@@ -26,7 +27,12 @@ const DEPARTMENT_RECORDS = DEPARTMENTS.map((name) => ({
   records: RECORD_TYPES.filter((r) => r.departments.includes(name)).map((r) => r.label),
 }))
 
-const todayStr = () => currentGhanaShift(new Date()).shiftDate
+// The date a record belongs to right now for a given shift. Night shifts are
+// dated by the day they STARTED, so before 06:00 this is yesterday — see the
+// SHIFT-DATE CONVENTION in lib/shift-config. With no shift yet, fall back to
+// whichever shift is currently running.
+const shiftToday = (shift?: string) =>
+  shift ? shiftDateFor(shift, new Date()) : currentGhanaShift(new Date()).shiftDate
 
 interface Profile {
   full_name: string | null
@@ -46,7 +52,7 @@ export default function RecordSelectionPage() {
 
   const [profile, setProfile] = useState<Profile | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
-  const [selectedDate, setSelectedDate] = useState(todayStr())
+  const [selectedDate, setSelectedDate] = useState(shiftToday())
   const [shift, setShift] = useState("")
   const [submittedTypes, setSubmittedTypes] = useState<Set<string>>(new Set())
   const [loadingChecks, setLoadingChecks] = useState(false)
@@ -84,7 +90,12 @@ export default function RecordSelectionPage() {
       const isManager = p?.role === "manager" || p?.role === "admin"
       if (!isManager && p?.department && p?.group_number) {
         const assigned = expectedShiftForGroup(p.department, p.group_number, new Date())
-        if (assigned) setShift(assigned)
+        if (assigned) {
+          setShift(assigned)
+          // Re-key the date to that shift: a Night supervisor opening this at
+          // 04:30 is filing for the shift that began YESTERDAY.
+          setSelectedDate(shiftToday(assigned))
+        }
       }
     })()
   }, [supabase])
@@ -112,8 +123,18 @@ export default function RecordSelectionPage() {
   const isManager = profile?.role === "manager" || profile?.role === "admin"
   const userDept = profile?.department || null
   const bothSelected = !!selectedDate && !!shift
-  const isToday = selectedDate === todayStr()
-  const isPastDate = !!selectedDate && selectedDate < todayStr()
+  // Latest date submittable for the selected shift (Night rolls back before 06:00).
+  const maxDate = shiftToday(shift)
+  const isToday = selectedDate === maxDate
+  const isPastDate = !!selectedDate && selectedDate < maxDate
+
+  // Keep the date in step with the shift-start convention when the shift changes,
+  // but never clobber a date the supervisor deliberately backdated.
+  const handleShiftChange = (next: string) => {
+    const previousAuto = shiftToday(shift)
+    setShift(next)
+    if (selectedDate === previousAuto) setSelectedDate(shiftToday(next))
+  }
 
   const visibleDepartments = isManager
     ? DEPARTMENT_RECORDS
@@ -178,7 +199,7 @@ export default function RecordSelectionPage() {
           <div className="space-y-1.5">
             <label className="text-sm font-bold text-emerald-900">Date <span className="text-red-500">*</span></label>
             <input
-              type="date" value={selectedDate} max={todayStr()}
+              type="date" value={selectedDate} max={maxDate}
               onChange={(e) => setSelectedDate(e.target.value)}
               className="w-full h-10 px-3 text-sm font-medium rounded-xl border border-emerald-200 bg-white text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none transition-all"
             />
@@ -192,7 +213,7 @@ export default function RecordSelectionPage() {
             </div>
             <div className="relative">
               <select
-                value={shift} onChange={(e) => setShift(e.target.value)}
+                value={shift} onChange={(e) => handleShiftChange(e.target.value)}
                 className="w-full h-10 pl-3 pr-9 text-sm font-medium rounded-xl border border-emerald-200 bg-white text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none appearance-none transition-all"
               >
                 <option value="" disabled>Select shift…</option>
@@ -219,6 +240,17 @@ export default function RecordSelectionPage() {
           </div>
         )}
 
+        {shift === "Night" && (
+          <p className="mt-3 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 font-semibold">
+            Night shifts are dated by the day the shift <span className="font-black">starts</span> — a shift closing around
+            5 am is filed under the previous day. Your current Night shift is dated{" "}
+            <span className="font-black">
+              {new Date(maxDate + "T00:00:00Z").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" })}
+            </span>
+            , so Morning, Afternoon and Night all share one date.
+          </p>
+        )}
+
         {isPastDate && (
           <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 font-semibold">
             You are submitting for a previous date:{" "}
@@ -231,7 +263,7 @@ export default function RecordSelectionPage() {
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 text-center">
           <p className="text-amber-800 font-semibold">No department assigned to your profile yet.</p>
           <p className="text-amber-700/70 text-sm mt-1">
-            Please update your department in <Link href="/dashboard/profile" className="underline font-bold">My Profile</Link>.
+            Departments and rotation groups are assigned by an administrator. Please ask your manager to set yours up.
           </p>
         </div>
       )}
