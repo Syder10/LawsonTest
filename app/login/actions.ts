@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { getProfileForUser } from "@/lib/auth/profile"
 
 export async function login(state: unknown, formData: FormData) {
     const supabase  = await createClient()
@@ -41,11 +42,7 @@ export async function login(state: unknown, formData: FormData) {
         return { error: "Unable to load this account. Please try again." }
     }
 
-    const { data: profile, error: profileError }  = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single()
+    const { profile, error: profileError } = await getProfileForUser(supabase, user.id)
 
     if (profileError || !profile) {
         await supabase.auth.signOut()

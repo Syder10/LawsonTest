@@ -1,6 +1,7 @@
 import type { User } from "@supabase/supabase-js"
 import { createServerSupabase } from "@/lib/supabase/server"
 import type { ProfileRow, UserRole } from "@/lib/db/types"
+import { getProfileForUser } from "@/lib/auth/profile"
 
 // ============================================================================
 // Auth guards — one implementation, used by every API route / server action.
@@ -30,13 +31,7 @@ export async function requireUser(): Promise<GuardResult> {
 
   if (!user) return { ok: false, status: 401, error: "Unauthorized" }
 
-  const { data } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single()
-
-  const profile = data as ProfileRow | null
+  const { profile } = await getProfileForUser(supabase, user.id)
   if (!profile) return { ok: false, status: 403, error: "No profile found for this account." }
 
   return { ok: true, ctx: { user, profile, supabase } }

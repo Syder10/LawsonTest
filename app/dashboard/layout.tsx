@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { LogOut, User } from "lucide-react"
 import Image from "next/image"
 import { roleLabel } from "@/lib/domain/roles"
+import { getProfileForUser } from "@/lib/auth/profile"
 
 export default async function DashboardLayout({
     children,
@@ -17,11 +18,7 @@ export default async function DashboardLayout({
     }
 
     // Fetch the user's role so the header label matches their role
-    const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user!.id)
-        .single()
+    const { profile, error: profileError } = await getProfileForUser(supabase, user!.id)
 
     if (profileError || !profile) redirect("/auth/signout")
 

@@ -4,6 +4,7 @@ import { ManagerDashboard }     from "@/components/features/dashboard/ManagerDas
 import { SupervisorDashboard }  from "@/components/features/dashboard/SupervisorDashboard"
 import { AdminDashboard }       from "@/components/features/dashboard/AdminDashboard"
 import { ProcurementDashboard } from "@/components/features/dashboard/ProcurementDashboard"
+import { getProfileForUser } from "@/lib/auth/profile"
 
 export default async function DashboardPage() {
     const supabase = await createClient()
@@ -11,11 +12,7 @@ export default async function DashboardPage() {
 
     if (!user) redirect("/login")
 
-    const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single()
+    const { profile, error: profileError } = await getProfileForUser(supabase, user.id)
 
     if (profileError || !profile) redirect("/auth/signout")
 
