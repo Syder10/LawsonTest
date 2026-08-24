@@ -40,11 +40,20 @@ export async function login(state: unknown, formData: FormData) {
         return { error: "Unable to load this account. Please try again." }
     }
 
-    const { profile, error: profileError } = await getProfileForUser(supabase, user.id)
+    const { profile, reason } = await getProfileForUser(supabase, user.id)
 
-    if (profileError || !profile) {
+    if (!profile) {
         await supabase.auth.signOut()
-        return { error: "No valid profile is configured for this account." }
+        // Distinguish the two causes — they need completely different fixes, and
+        // one catch-all message made this impossible to diagnose.
+        return {
+            error:
+                reason === "missing"
+                    ? "This login exists but has no profile record yet, so it has no role or department. " +
+                      "An administrator needs to create your profile before you can sign in."
+                    : "Your profile could not be loaded because of a server configuration problem. " +
+                      "Please contact an administrator.",
+        }
     }
 
     const role = profile.role
