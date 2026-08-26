@@ -21,7 +21,7 @@
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shift chronological order (Morning → Afternoon → Night).
-// Mirrors the DB shift_rank() function (0011_stock_counts.sql). This is the
+// Mirrors the DB shift_rank() function (0005_ledger_and_grants.sql). This is the
 // single JS source of truth for ordering shifts within a day — use it instead of
 // re-hardcoding a ["Morning","Afternoon","Night"] literal.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -107,7 +107,7 @@ export function isEarlyBird(createdAt: string, shift: string): boolean {
 // downstream consumer already assumes:
 //
 //   • The derived stock ledger chains movements date → Morning → Afternoon →
-//     Night (shift_rank, 0011_stock_counts.sql). A Night row dated 21/08 would
+//     Night (shift_rank, 0005_ledger_and_grants.sql). A Night row dated 21/08 would
 //     sort BEFORE that day's Morning row and corrupt every running balance.
 //   • isDayOff/isSaturdayOff read "Night is off Saturday" as "no Night shift
 //     STARTS on Saturday" — so the week's last Night shift starts Friday.

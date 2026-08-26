@@ -46,6 +46,11 @@ export interface RecordTypeDef {
 
 const BOTH: Product[] = ["Bitters", "Ginger"]
 
+// The two products, in display order. Use this instead of re-hardcoding
+// ["Bitters", "Ginger"] in selects and filters — only the `Product` TYPE existed
+// before, so every consumer wrote the literals out again.
+export const PRODUCTS: readonly Product[] = BOTH
+
 // Canonical department names, in display order. Matches the departments seed
 // row in the DB. Use this instead of re-hardcoding the list in components.
 export const DEPARTMENTS = [

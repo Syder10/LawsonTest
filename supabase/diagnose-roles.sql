@@ -38,14 +38,14 @@ select tgname, tgrelid::regclass as on_table, tgenabled
 from pg_trigger
 where not tgisinternal and tgname = 'on_auth_user_created';
 
--- 3) Is the privilege guard from 0012 installed?
+-- 3) Is the privilege guard from 0003_identity.sql installed?
 --    Expect exactly one row: profiles_guard_privileged_columns.
 select tgname, tgrelid::regclass as on_table, tgenabled
 from pg_trigger
 where not tgisinternal and tgname = 'profiles_guard_privileged_columns';
 
 -- 4) Accounts with no profile row (these fail login with
---    "No valid profile is configured for this account.").
+--    "This login exists but has no profile record yet.").
 select u.id, u.email, u.created_at
 from auth.users u
 left join public.profiles p on p.id = u.id
@@ -53,7 +53,7 @@ where p.id is null;
 
 -- ── FIXES ───────────────────────────────────────────────────────────────────
 -- Prefer the app's User Management screen (/dashboard/admin/users). It uses the
--- service role, so it is allowed through the 0012 guard. If you must do it in
+-- service role, so it is allowed through the privilege guard. If you must do it in
 -- SQL, run it HERE in the SQL editor (the editor connects as the table owner,
 -- which the guard also permits):
 --

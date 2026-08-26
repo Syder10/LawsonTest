@@ -1,7 +1,9 @@
 "use client"
 
 import { ChevronDown } from "lucide-react"
-import { DEPARTMENTS } from "@/lib/domain/record-types"
+import { DEPARTMENTS, PRODUCTS } from "@/lib/domain/record-types"
+import { hasProductSplit } from "@/lib/domain/dept-metrics"
+import { SHIFT_ORDER } from "@/lib/shift-config"
 
 export interface Filters {
   from: string
@@ -23,14 +25,30 @@ const PRESETS: { label: string; range: () => { from: string; to: string } }[] = 
   { label: "This month", range: () => { const n = new Date(); return { from: `${n.getUTCFullYear()}-${String(n.getUTCMonth() + 1).padStart(2, "0")}-01`, to: iso(n) } } },
 ]
 
-function Select({ value, onChange, children }: { value: string; onChange: (v: string) => void; children: React.ReactNode }) {
+function Select({
+  value,
+  onChange,
+  children,
+  disabled,
+  title,
+}: {
+  value: string
+  onChange: (v: string) => void
+  children: React.ReactNode
+  disabled?: boolean
+  title?: string
+}) {
   return (
-    <div className="relative">
-      <select value={value} onChange={(e) => onChange(e.target.value)}
-        className="h-9 pl-3 pr-8 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-700 focus:border-emerald-500 focus:outline-none appearance-none">
+    <div className="relative" title={title}>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className="h-9 pl-3 pr-8 text-xs font-semibold rounded-lg border border-hairline bg-surface-card text-ink-secondary focus:border-brand focus:outline-none appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
+      >
         {children}
       </select>
-      <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+      <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted pointer-events-none" aria-hidden="true" />
     </div>
   )
 }
@@ -40,6 +58,16 @@ export function FilterBar({ filters, onChange }: { filters: Filters; onChange: (
   const isActivePreset = (p: (typeof PRESETS)[number]) => {
     const r = p.range()
     return r.from === filters.from && r.to === filters.to
+  }
+
+  // Blowing and Concentrate have no `product` column, and Alcohol and Blending
+  // only ever files Bitters — so a product filter there does nothing. Disable it
+  // rather than leave a control that silently has no effect, and clear any
+  // selection carried over from a department where it did apply.
+  const productApplies = filters.department === "" || hasProductSplit(filters.department)
+  const selectDepartment = (department: string) => {
+    const stillApplies = department === "" || hasProductSplit(department)
+    set({ department, ...(stillApplies ? {} : { product: "" }) })
   }
 
   return (
@@ -63,20 +91,22 @@ export function FilterBar({ filters, onChange }: { filters: Filters; onChange: (
 
       <Select value={filters.shift} onChange={(v) => set({ shift: v })}>
         <option value="">All shifts</option>
-        <option value="Morning">Morning</option>
-        <option value="Afternoon">Afternoon</option>
-        <option value="Night">Night</option>
+        {SHIFT_ORDER.map((s) => (
+          <option key={s} value={s}>{s}</option>
+        ))}
       </Select>
 
-      <Select value={filters.department} onChange={(v) => set({ department: v })}>
+      <Select value={filters.department} onChange={selectDepartment}>
         <option value="">All departments</option>
         {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
       </Select>
 
-      <Select value={filters.product} onChange={(v) => set({ product: v })}>
+      <Select value={filters.product} onChange={(v) => set({ product: v })} disabled={!productApplies}
+        title={productApplies ? undefined : `${filters.department} records carry no product`}>
         <option value="">Both products</option>
-        <option value="Bitters">Bitters</option>
-        <option value="Ginger">Ginger</option>
+        {PRODUCTS.map((p) => (
+          <option key={p} value={p}>{p}</option>
+        ))}
       </Select>
 
       {(filters.shift || filters.department || filters.product) && (

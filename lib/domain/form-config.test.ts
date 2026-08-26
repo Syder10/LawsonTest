@@ -3,8 +3,8 @@ import { FORM_FIELDS, type FormFieldDef } from "@/lib/domain/form-config"
 import { RECORD_TYPES, getRecordType } from "@/lib/domain/record-types"
 
 // ============================================================================
-// Column sets transcribed from supabase/migrations/0004_production_records.sql
-// and 0005_stock_records.sql. `WRITABLE` = columns an INSERT may set;
+// Column sets transcribed from supabase/migrations/0004_records.sql
+// and 0004_records.sql. `WRITABLE` = columns an INSERT may set;
 // `DERIVED` = values the client must never send, either because the DB computes
 // them (GENERATED ALWAYS) or because the server derives them on read.
 // A failure here means FORM_FIELDS has drifted from the schema.

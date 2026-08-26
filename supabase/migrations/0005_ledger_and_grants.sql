@@ -1,7 +1,6 @@
 -- ============================================================================
--- 0011_stock_counts.sql
--- The DERIVED STOCK LEDGER: management baselines/reconciliations + the functions
--- that compute opening/remaining balances on read.
+-- 0005_ledger_and_grants.sql
+-- The DERIVED STOCK LEDGER + the Data API grants. Run LAST.
 --
 -- Model
 -- -----
@@ -26,6 +25,27 @@
 -- supervisors' rows, which RLS correctly hides from any one supervisor. The
 -- functions expose only computed balances, never other users' raw rows.
 -- ============================================================================
+
+-- ── Finished-goods on hand, derived ─────────────────────────────────────────
+-- Σ produced − Σ loaded per product. Replaces the old stored packaging_live_stocks
+-- running total, which drifted on edits and could go negative. Cumulative /
+-- all-time (a warehouse balance), independent of any dashboard date filter.
+create or replace function public.finished_goods_stock()
+returns table (product public.product_type, available numeric, total_produced numeric, total_loaded numeric)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p.product,
+         coalesce(sum(p.quantity_cartons_produced), 0) - coalesce(sum(p.quantity_cartons_loaded), 0) as available,
+         coalesce(sum(p.quantity_cartons_produced), 0) as total_produced,
+         coalesce(sum(p.quantity_cartons_loaded), 0)   as total_loaded
+  from public.packaging_daily_records p
+  group by p.product;
+$$;
+
+grant execute on function public.finished_goods_stock() to authenticated;
 
 -- Chronological rank of a shift within a day (Morning -> Afternoon -> Night).
 -- Mirrors the Shift order in lib/shift-config.ts (SHIFT_RANK).
@@ -284,3 +304,127 @@ grant execute on function public.stock_opening(text, date, public.shift_type, pu
 grant execute on function public.stock_remaining_asof(text, date, public.product_type, text) to authenticated;
 grant execute on function public.stock_ledger(text, date, date, public.product_type, text) to authenticated;
 grant execute on function public.record_stock_count(text, date, numeric, public.shift_type, public.product_type, text, text, text) to authenticated;
+
+-- ============================================================================
+-- Data API grants
+--
+-- THE FAILURE THIS FIXES
+-- ----------------------
+-- Every request through PostgREST failing with:
+--     ERROR 42501: permission denied for schema public     (user: authenticator)
+-- while the SQL editor works perfectly — because the editor connects as the
+-- schema OWNER, which needs no grants.
+--
+-- Cause: `drop schema public cascade; create schema public;` (the usual way to
+-- reset a database) destroys the grants Supabase ships by default and does NOT
+-- restore them. `auth` is a separate schema, so logins survive — which is why the
+-- symptom looks like "my profile disappeared" rather than "the API is dead".
+--
+-- WHY GRANTING TABLE ACCESS IS SAFE HERE
+-- --------------------------------------
+-- This is Supabase's model: `anon` and `authenticated` hold table privileges and
+-- **RLS is the actual security boundary**. Every table in `public` has RLS
+-- enabled with policies scoped `to authenticated`, so `anon` reaches zero rows
+-- and a supervisor reaches only their own. The DO block REFUSES to grant
+-- anything if that assumption is ever violated.
+-- ============================================================================
+
+do $$
+declare
+  v_norls text;
+  v_views text;
+begin
+  -- Non-Supabase environments (a bare Postgres) have none of these roles.
+  if not exists (select 1 from pg_roles where rolname = 'authenticated') then
+    raise notice '0005: Supabase API roles absent — skipping grants (non-Supabase environment).';
+    return;
+  end if;
+
+  -- SAFETY GATE: these grants rely on RLS for security. If any table in public
+  -- lacks RLS, granting would expose it wholesale — refuse instead.
+  select string_agg(c.relname, ', ' order by c.relname) into v_norls
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity;
+
+  if v_norls is not null then
+    raise exception
+      '0005 refusing to grant API access: these public tables have no RLS: %. '
+      'Enable RLS (and add policies) on them first, or they would be fully readable '
+      'by any holder of the public anon key.', v_norls;
+  end if;
+
+  -- Views do not have RLS of their own and, unless created WITH
+  -- (security_invoker = on), run as their owner and bypass the base tables' RLS.
+  -- There are none today; warn loudly if that ever changes.
+  select string_agg(c.relname, ', ' order by c.relname) into v_views
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relkind = 'v';
+
+  if v_views is not null then
+    raise warning
+      '0005: public contains view(s): %. Views bypass base-table RLS unless created '
+      'WITH (security_invoker = on). Verify each before relying on these grants.', v_views;
+  end if;
+
+  -- ── Schema usage — without this NOTHING through PostgREST works ────────────
+  grant usage on schema public to postgres, anon, authenticated, service_role;
+
+  -- ── Existing objects ──────────────────────────────────────────────────────
+  grant select, insert, update, delete on all tables in schema public
+    to anon, authenticated, service_role;
+  grant usage, select on all sequences in schema public
+    to anon, authenticated, service_role;
+  grant execute on all functions in schema public
+    to authenticated, service_role;
+
+  -- ── Future objects created by this role ───────────────────────────────────
+  alter default privileges in schema public
+    grant select, insert, update, delete on tables to anon, authenticated, service_role;
+  alter default privileges in schema public
+    grant usage, select on sequences to anon, authenticated, service_role;
+  alter default privileges in schema public
+    grant execute on functions to authenticated, service_role;
+
+  raise notice '0005: API grants restored for anon, authenticated, service_role.';
+end $$;
+
+-- ── Lock down the SECURITY DEFINER data functions ────────────────────────────
+-- NOT redundant with the grants above. PostgreSQL grants EXECUTE on every new
+-- function to PUBLIC by default, and `anon` is a member of PUBLIC — so simply
+-- omitting anon from the GRANT above does nothing. These functions are SECURITY
+-- DEFINER and therefore bypass RLS by design, and the anon key is embedded in the
+-- browser bundle. Without the REVOKE below, anyone who reads the JavaScript can
+-- call them and read live stock balances, finished-goods on hand, and the full
+-- movement ledger.
+--
+-- Verified reachable-as-anon before this was added, which is why it is here.
+do $$
+declare
+  fn text;
+  guarded text[] := array[
+    'public.stock_balance_core(text, public.product_type, text, date, int, boolean)',
+    'public.stock_opening(text, date, public.shift_type, public.product_type, text)',
+    'public.stock_remaining_asof(text, date, public.product_type, text)',
+    'public.stock_ledger(text, date, date, public.product_type, text)',
+    'public.finished_goods_stock()',
+    'public.record_stock_count(text, date, numeric, public.shift_type, public.product_type, text, text, text)'
+  ];
+begin
+  if not exists (select 1 from pg_roles where rolname = 'authenticated') then
+    return;
+  end if;
+
+  foreach fn in array guarded loop
+    begin
+      execute format('revoke execute on function %s from public', fn);
+      execute format('revoke execute on function %s from anon', fn);
+      execute format('grant execute on function %s to authenticated, service_role', fn);
+    exception when undefined_function then
+      raise warning '0005: function %s not found — skipped', fn;
+    end;
+  end loop;
+
+  raise notice '0005: SECURITY DEFINER stock functions restricted to authenticated + service_role.';
+end $$;

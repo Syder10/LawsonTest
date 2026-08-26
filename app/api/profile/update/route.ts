@@ -10,7 +10,7 @@ import { requireUser } from "@/lib/auth/guards"
 // may submit, and how they are scored, so an administrator assigns them via
 // /api/admin/users. This route not accepting them is a convenience, NOT the
 // boundary — the real guard is the DB trigger in
-// 0012_profile_privilege_guard.sql, which rejects the change even if the caller
+// 0003_identity.sql, which rejects the change even if the caller
 // talks to PostgREST directly with their own JWT.
 export async function POST(request: Request) {
   const auth = await requireUser()

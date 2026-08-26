@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
 
   if (error) {
     // 23505 = unique_violation, i.e. the one-record-per-shift indexes added in
-    // 0013_prevent_duplicate_submissions.sql. Report it as a 409 with a readable
+    // 0004_records.sql. Report it as a 409 with a readable
     // message rather than leaking a raw Postgres error as a 500.
     if (error.code === "23505") {
       const scope = [row.product, row.variant].filter(Boolean).join(" · ")

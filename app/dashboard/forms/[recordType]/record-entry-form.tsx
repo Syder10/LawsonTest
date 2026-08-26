@@ -1,16 +1,38 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { FORM_FIELDS, type FormFieldDef } from "@/lib/domain/form-config"
 import { getRecordType } from "@/lib/domain/record-types"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
-import { Plus } from "lucide-react"
+import { AlertCircle, Lock, Minus, Plus, Sparkles, Trash2 } from "lucide-react"
 import { SuccessToast, type SuccessInfo } from "./success-toast"
+import { Card, Chip, Choice, Field, NumberInput, SectionTitle, Select, TextArea, TextInput } from "@/components/primitives"
+
+// ============================================================================
+// Record entry — the screen supervisors use many times a day, on a phone, often
+// one-handed on the factory floor. Everything here is built for that.
+//
+// ONE ERROR SYSTEM. This previously had four competing surfaces: the browser's
+// own `required` validation bubbles, a per-product inline banner, a form-level
+// banner at the very bottom of the page, and a toast that fired simultaneously
+// with the banner. On a 20-tank extraction form the message "Tank 14 missing:
+// Time" appeared below the entire page with no indication which tank. Now:
+// per-field messages with aria-live, and submit scrolls to and focuses the first
+// offending field. `noValidate` suppresses the native bubbles so there is exactly
+// one voice.
+//
+// TOUCH TARGETS. The herb checkboxes and alcohol-% radios were 14px, and the tank
+// picker was twenty 36px buttons. All now 44px via the Choice primitive and a
+// stepper.
+//
+// DRAFTS cover every layout. They previously saved only formDataByProduct, so
+// extraction tank data and herb data were silently lost on reload.
+// ============================================================================
 
 interface RecordEntryFormProps {
   recordType: string
@@ -20,6 +42,12 @@ interface RecordEntryFormProps {
   initialDate: string
   initialShift: string
 }
+
+/** scope (product / herb name / "tank-3") -> field label -> message */
+type Errors = Record<string, Record<string, string>>
+
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+const fieldId = (scope: string, label: string) => `f-${slug(scope)}-${slug(label)}`
 
 // Recompute every generated field's live preview from its inputs.
 function recalc(fields: FormFieldDef[], data: Record<string, string>) {
@@ -35,7 +63,7 @@ function recalc(fields: FormFieldDef[], data: Record<string, string>) {
 function stockError(fields: FormFieldDef[], data: Record<string, string>): string {
   for (const f of fields) {
     if (f.generated && /(remaining|closing)/.test(f.column) && parseFloat(data[f.label] || "0") < 0) {
-      return "Values result in negative stock — check your inputs."
+      return "These values leave negative stock — check received and used."
     }
   }
   return ""
@@ -43,7 +71,6 @@ function stockError(fields: FormFieldDef[], data: Record<string, string>): strin
 
 export default function RecordEntryForm({
   recordType,
-  supervisorName,
   department,
   groupNumber,
   initialDate,
@@ -51,7 +78,7 @@ export default function RecordEntryForm({
 }: RecordEntryFormProps) {
   const router = useRouter()
   const def = getRecordType(recordType)
-  const fields = FORM_FIELDS[recordType] ?? []
+  const fields = useMemo(() => FORM_FIELDS[recordType] ?? [], [recordType])
   const availableProducts = def?.products ?? []
   const supportsMultiProduct = availableProducts.length > 0
   const carriedLabel = fields.find((f) => f.carried)?.label
@@ -63,7 +90,9 @@ export default function RecordEntryForm({
   const selectedDate = initialDate
 
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [errors, setErrors] = useState<Errors>({})
   const [successInfo, setSuccessInfo] = useState<SuccessInfo | null>(null)
 
   const [productionTypes, setProductionTypes] = useState<string[]>([])
@@ -85,28 +114,63 @@ export default function RecordEntryForm({
   const [herbsPrev, setHerbsPrev] = useState<Record<string, number | null>>({})
   const [showCreateHerb, setShowCreateHerb] = useState(false)
   const [newHerbName, setNewHerbName] = useState("")
+  const [herbDialogError, setHerbDialogError] = useState<string | null>(null)
+
+  const [hasDraft, setHasDraft] = useState(false)
 
   const draftKey = `draft_${recordType}_${initialDate}_${initialShift}`
 
   // ── Draft restore / save ──────────────────────────────────────────────────
+  // Covers EVERY layout. Previously only formDataByProduct was persisted, so a
+  // supervisor who filled 20 extraction tanks and reloaded lost all of it.
   useEffect(() => {
     try {
       const saved = localStorage.getItem(draftKey)
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        if (parsed.formDataByProduct) setFormDataByProduct(parsed.formDataByProduct)
-        if (parsed.productionTypes) setProductionTypes(parsed.productionTypes)
-        toast.info("Draft restored from your previous session.")
-      }
-    } catch { /* ignore */ }
+      if (!saved) return
+      const p = JSON.parse(saved)
+      if (p.formDataByProduct) setFormDataByProduct(p.formDataByProduct)
+      if (p.productionTypes) setProductionTypes(p.productionTypes)
+      if (p.tankData) setTankData(p.tankData)
+      if (p.numberOfTanks) setNumberOfTanks(p.numberOfTanks)
+      if (p.herbsData) setHerbsData(p.herbsData)
+      if (p.selectedHerbs) setSelectedHerbs(p.selectedHerbs)
+      setHasDraft(true)
+      toast.info("Draft restored", { description: "Your unsaved entries were kept." })
+    } catch {
+      /* a corrupt draft is not worth surfacing */
+    }
   }, [draftKey])
 
   useEffect(() => {
-    if (Object.keys(formDataByProduct).length === 0) return
+    const empty =
+      Object.keys(formDataByProduct).length === 0 &&
+      Object.keys(tankData).length === 0 &&
+      Object.keys(herbsData).length === 0
+    if (empty) return
     try {
-      localStorage.setItem(draftKey, JSON.stringify({ formDataByProduct, productionTypes }))
-    } catch { /* ignore */ }
-  }, [formDataByProduct, productionTypes, draftKey])
+      localStorage.setItem(
+        draftKey,
+        JSON.stringify({ formDataByProduct, productionTypes, tankData, numberOfTanks, herbsData, selectedHerbs }),
+      )
+      setHasDraft(true)
+    } catch {
+      /* storage full or blocked — not worth interrupting data entry */
+    }
+  }, [formDataByProduct, productionTypes, tankData, numberOfTanks, herbsData, selectedHerbs, draftKey])
+
+  const discardDraft = () => {
+    try { localStorage.removeItem(draftKey) } catch { /* ignore */ }
+    setFormDataByProduct({})
+    setProductionTypes([])
+    setTankData({})
+    setNumberOfTanks(1)
+    setHerbsData({})
+    setSelectedHerbs([])
+    setErrors({})
+    setFormError(null)
+    setHasDraft(false)
+    toast.success("Draft discarded")
+  }
 
   // ── Load herb options ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -121,9 +185,9 @@ export default function RecordEntryForm({
     })()
   }, [isHerbs])
 
-  // ── Stock ledger: fetch the server-DERIVED carried-forward balance ─────────
+  // ── Stock ledger: the server-DERIVED carried-forward balance ────────────────
   // Supervisors never type opening; it is computed from prior shifts' movements
-  // + management baselines and shown read-only.
+  // plus management baselines, and shown read-only.
   useEffect(() => {
     if (!def?.stockContinuity || isHerbs || !carriedLabel) return
     ;(async () => {
@@ -169,14 +233,44 @@ export default function RecordEntryForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recordType, selectedDate, shift])
 
-  // ── Handlers ────────────────────────────────────────────────────────────────
+  // ── Editing ─────────────────────────────────────────────────────────────────
+  /** Clear a field's error as soon as the supervisor starts fixing it. */
+  const clearError = useCallback((scope: string, label: string) => {
+    setErrors((prev) => {
+      if (!prev[scope]?.[label]) return prev
+      const scoped = { ...prev[scope] }
+      delete scoped[label]
+      const next = { ...prev, [scope]: scoped }
+      if (Object.keys(scoped).length === 0) delete next[scope]
+      return next
+    })
+  }, [])
+
   const handleInputChange = (product: string, field: string, value: string) => {
+    clearError(product, field)
     setFormDataByProduct((prev) => {
       const d = { ...(prev[product] || {}), [field]: value }
       recalc(fields, d)
       setStockErrors((se) => ({ ...se, [product]: stockError(fields, d) }))
       return { ...prev, [product]: d }
     })
+  }
+
+  const handleHerbField = (herb: string, label: string, value: string) => {
+    clearError(herb, label)
+    setHerbsData((prev) => {
+      const d = { ...(prev[herb] || {}), [label]: value }
+      recalc(fields, d)
+      return { ...prev, [herb]: d }
+    })
+  }
+
+  const setTankField = (idx: number, label: string, value: string) => {
+    clearError(`tank-${idx}`, label)
+    setTankData((prev) => ({
+      ...prev,
+      [idx]: { ...(prev[idx] || { sameAsFirst: false, data: {} }), data: { ...(prev[idx]?.data || {}), [label]: value } },
+    }))
   }
 
   const fetchHerbPrev = async (herb: string) => {
@@ -190,372 +284,625 @@ export default function RecordEntryForm({
     } catch { setHerbsPrev((prev) => ({ ...prev, [herb]: null })) }
   }
 
-  const handleHerbField = (herb: string, label: string, value: string) => {
-    setHerbsData((prev) => {
-      const d = { ...(prev[herb] || {}), [label]: value }
-      recalc(fields, d)
-      return { ...prev, [herb]: d }
+  const toggleHerb = (herb: string) => {
+    setSelectedHerbs((prev) => {
+      if (prev.includes(herb)) return prev.filter((h) => h !== herb)
+      fetchHerbPrev(herb)
+      return [...prev, herb]
     })
   }
 
   const handleCreateHerb = async () => {
     const name = newHerbName.trim()
-    if (!name) return setError("Please enter a herb name")
-    if (herbOptions.some((h) => h.toLowerCase() === name.toLowerCase())) return setError("This herb already exists")
+    if (!name) return setHerbDialogError("Enter a herb name.")
+    if (herbOptions.some((h) => h.toLowerCase() === name.toLowerCase())) return setHerbDialogError("That herb already exists.")
     try {
       const res = await fetch("/api/herbs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) })
       const d = await res.json()
-      if (!res.ok) return setError(d.error || "Failed to create herb")
+      if (!res.ok) return setHerbDialogError(d.error || "Could not create the herb.")
       setHerbOptions((prev) => [...prev, name].sort())
       setSelectedHerbs((prev) => [...prev, name])
       fetchHerbPrev(name)
       setShowCreateHerb(false)
       setNewHerbName("")
-      setError(null)
-    } catch { setError("Failed to create herb") }
+      setHerbDialogError(null)
+    } catch { setHerbDialogError("Could not create the herb.") }
+  }
+
+  // ── Validation ──────────────────────────────────────────────────────────────
+  const missingIn = (data: Record<string, string>): Record<string, string> => {
+    const out: Record<string, string> = {}
+    for (const f of fields) {
+      if (f.generated || f.carried) continue
+      if (f.required && !data[f.label]?.trim()) out[f.label] = "Required"
+    }
+    return out
+  }
+
+  /** Scroll to and focus the first invalid control — the whole point of ids. */
+  const focusFirstError = (errs: Errors, order: string[]) => {
+    for (const scope of order) {
+      const scoped = errs[scope]
+      if (!scoped) continue
+      const label = fields.find((f) => scoped[f.label])?.label ?? Object.keys(scoped)[0]
+      const el = document.getElementById(fieldId(scope, label))
+      if (el) {
+        el.scrollIntoView({ block: "center", behavior: "smooth" })
+        ;(el as HTMLElement).focus({ preventScroll: true })
+        return
+      }
+    }
   }
 
   // ── Submit ──────────────────────────────────────────────────────────────────
   const post = (body: Record<string, unknown>) =>
     fetch("/api/records/submit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
 
-  const goToSuccess = (count: number) => {
-    try { localStorage.removeItem(draftKey) } catch { /* ignore */ }
-    setSuccessInfo({ recordType, department, shift, date: selectedDate, count })
-    setIsSubmitting(false)
-  }
-
-  const requiredMissing = (data: Record<string, string>) =>
-    fields.filter((f) => f.required && !f.generated && !data[f.label]?.trim()).map((f) => f.label)
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsSubmitting(true)
-    setError(null)
+    setFormError(null)
+    setErrors({})
+
+    // One shape for every layout: a list of scopes to validate and then post.
+    type Scope = { scope: string; data: Record<string, string>; body: Record<string, unknown> }
     const base = { recordType, department, group: groupNumber, shift, date: selectedDate }
+    let scopes: Scope[] = []
 
-    try {
-      if (isExtraction) {
-        for (let i = 0; i < numberOfTanks; i++) {
-          const data = tankData[i]?.data || {}
-          const missing = requiredMissing(data)
-          if (missing.length) { setError(`Tank ${i + 1} missing: ${missing.join(", ")}`); setIsSubmitting(false); return }
-          const res = await post({ ...base, productType: "Bitters", formData: data })
-          if (!res.ok) throw new Error((await res.json()).error || "Failed to save")
-        }
-        return goToSuccess(numberOfTanks)
+    if (isExtraction) {
+      scopes = Array.from({ length: numberOfTanks }, (_, i) => ({
+        scope: `tank-${i}`,
+        data: tankData[i]?.data || {},
+        body: { ...base, productType: "Bitters", formData: tankData[i]?.data || {} },
+      }))
+    } else if (isHerbs) {
+      if (selectedHerbs.length === 0) {
+        setFormError("Choose at least one herb to record.")
+        return
       }
-
-      if (isHerbs) {
-        if (selectedHerbs.length === 0) { setError("Please select at least one herb"); setIsSubmitting(false); return }
-        for (const herb of selectedHerbs) {
-          const data = herbsData[herb] || {}
-          const missing = requiredMissing(data)
-          if (missing.length) { setError(`${herb} missing: ${missing.join(", ")}`); setIsSubmitting(false); return }
-          const res = await post({ ...base, variant: herb, formData: data })
-          if (!res.ok) throw new Error((await res.json()).error || "Failed to save")
-        }
-        return goToSuccess(selectedHerbs.length)
-      }
-
+      scopes = selectedHerbs.map((herb) => ({
+        scope: herb,
+        data: herbsData[herb] || {},
+        body: { ...base, variant: herb, formData: herbsData[herb] || {} },
+      }))
+    } else {
       if (supportsMultiProduct && productionTypes.length === 0) {
-        setError(`Please select at least one: ${availableProducts.join(", ")}`); setIsSubmitting(false); return
+        setFormError(`Choose at least one product: ${availableProducts.join(" or ")}.`)
+        return
       }
       const products = supportsMultiProduct ? productionTypes : ["default"]
+      scopes = products.map((product) => ({
+        scope: product,
+        data: formDataByProduct[product] || {},
+        body: {
+          ...base,
+          productType: product === "default" ? undefined : product,
+          formData: formDataByProduct[product] || {},
+        },
+      }))
+    }
 
-      for (const product of products) {
-        const data = formDataByProduct[product] || {}
-        if (stockErrors[product]) { setError(`${product}: ${stockErrors[product]}`); setIsSubmitting(false); return }
-        const missing = requiredMissing(data)
-        if (missing.length) { setError(`${product === "default" ? "Form" : product} missing: ${missing.join(", ")}`); setIsSubmitting(false); return }
+    // Validate everything BEFORE posting anything, so a later failure can never
+    // leave a half-submitted set of records behind.
+    const nextErrors: Errors = {}
+    for (const s of scopes) {
+      const missing = missingIn(s.data)
+      if (Object.keys(missing).length) nextErrors[s.scope] = missing
+    }
+    if (Object.keys(nextErrors).length) {
+      setErrors(nextErrors)
+      const count = Object.values(nextErrors).reduce((n, m) => n + Object.keys(m).length, 0)
+      setFormError(`${count} field${count === 1 ? "" : "s"} still need${count === 1 ? "s" : ""} a value.`)
+      focusFirstError(nextErrors, scopes.map((s) => s.scope))
+      return
+    }
+    const blocked = scopes.find((s) => stockErrors[s.scope])
+    if (blocked) {
+      setFormError(stockErrors[blocked.scope])
+      return
+    }
+
+    setIsSubmitting(true)
+    setProgress({ done: 0, total: scopes.length })
+    try {
+      for (const [i, s] of scopes.entries()) {
+        const res = await post(s.body)
+        if (!res.ok) throw new Error((await res.json()).error || "Could not save the record.")
+        setProgress({ done: i + 1, total: scopes.length })
       }
-      for (const product of products) {
-        const res = await post({ ...base, productType: product === "default" ? undefined : product, formData: formDataByProduct[product] })
-        if (!res.ok) throw new Error((await res.json()).error || "Failed to save")
-      }
-      goToSuccess(products.length)
+      try { localStorage.removeItem(draftKey) } catch { /* ignore */ }
+      setSuccessInfo({ recordType, department, shift, date: selectedDate, count: scopes.length })
     } catch (err) {
-      toast.error("There was a problem submitting.")
-      setError(err instanceof Error ? err.message : "Failed to save record")
+      // ONE message. This used to raise a banner and a toast for the same event.
+      setFormError(err instanceof Error ? err.message : "Could not save the record.")
+    } finally {
       setIsSubmitting(false)
+      setProgress(null)
     }
   }
 
-  // ── Field renderer ────────────────────────────────────────────────────────
-  const renderField = (field: FormFieldDef, product: string) => {
-    const value = formDataByProduct[product]?.[field.label] || ""
-    const disabled = !!field.generated || !!field.carried
+  // ── Field renderer ──────────────────────────────────────────────────────────
+  const renderControl = (
+    field: FormFieldDef,
+    scope: string,
+    value: string,
+    onChange: (v: string) => void,
+    forcedDisabled = false,
+  ) => {
+    const disabled = forcedDisabled || !!field.generated || !!field.carried
+    const id = fieldId(scope, field.label)
+    const error = errors[scope]?.[field.label] ?? null
 
+    // Radio group inside a fieldset so the choice is announced as a group.
     if (field.isAlcoholPercentage && field.options) {
       return (
-        <div className="flex gap-2">
-          {field.options.map((opt) => (
-            <label key={opt} className="flex items-center gap-1.5 cursor-pointer">
-              <input type="radio" name={`${product}-${field.label}`} value={opt} checked={value === opt}
-                onChange={(e) => handleInputChange(product, field.label, e.target.value)} disabled={disabled} className="w-3.5 h-3.5 accent-emerald-600" />
-              <span className="text-sm font-medium">{opt}</span>
-            </label>
-          ))}
-        </div>
+        <fieldset className="space-y-1.5" aria-invalid={error ? true : undefined}>
+          <legend className="block text-xs font-bold uppercase tracking-wide text-ink-secondary mb-1.5">
+            {field.label}
+            {field.required && <span className="text-critical ml-0.5" aria-hidden="true">*</span>}
+          </legend>
+          <div className="flex flex-wrap gap-2">
+            {field.options.map((opt) => (
+              <Choice
+                key={opt}
+                type="radio"
+                name={`${scope}-${field.label}`}
+                value={opt}
+                checked={value === opt}
+                disabled={disabled}
+                onChange={(e) => onChange(e.target.value)}
+                label={opt}
+              />
+            ))}
+          </div>
+          {error && (
+            <p role="alert" aria-live="polite" className="text-xs font-semibold text-critical-ink">{error}</p>
+          )}
+        </fieldset>
       )
     }
-    if (field.type === "textarea") {
-      return (
-        <textarea rows={3} value={value} disabled={disabled} onChange={(e) => handleInputChange(product, field.label, e.target.value)}
-          className="w-full px-3 py-2 text-sm rounded-xl border border-emerald-100 bg-white focus:border-emerald-500 focus:outline-none resize-none transition-all disabled:bg-emerald-50 disabled:cursor-not-allowed" />
-      )
-    }
+
     return (
-      <div className="relative">
-        <Input type={field.type} value={value} required={field.required} disabled={disabled}
-          onChange={(e) => handleInputChange(product, field.label, e.target.value)}
-          className={`w-full px-3 py-2 text-sm rounded-xl transition-all h-10 ${disabled ? "bg-emerald-50/80 border-emerald-100 cursor-not-allowed" : "bg-white border-emerald-100 focus:border-emerald-500 focus:ring-emerald-500/20"}`} />
-        {field.carried && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-blue-600 whitespace-nowrap">🔒 carried</span>}
-        {field.generated && value && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-emerald-600">✓ auto</span>}
-      </div>
+      <Field
+        id={id}
+        label={field.label}
+        required={field.required && !field.generated && !field.carried}
+        error={error}
+        hint={
+          field.carried
+            ? "Carried forward — set by management"
+            : field.generated
+              ? "Calculated automatically"
+              : undefined
+        }
+      >
+        {(a11y) => {
+          if (field.type === "textarea") {
+            return <TextArea {...a11y} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
+          }
+          const Ctl = field.type === "number" ? NumberInput : TextInput
+          return (
+            <div className="relative">
+              <Ctl
+                {...a11y}
+                type={field.type === "number" ? undefined : field.type}
+                value={value}
+                disabled={disabled}
+                onChange={(e) => onChange(e.target.value)}
+                className={error ? "border-critical focus:border-critical focus:ring-critical/20" : undefined}
+              />
+              {field.carried && (
+                <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-ink-muted" aria-hidden="true" />
+              )}
+              {field.generated && value && (
+                <Sparkles className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-brand" aria-hidden="true" />
+              )}
+            </div>
+          )
+        }}
+      </Field>
     )
   }
 
-  const FieldGrid = ({ product }: { product: string }) => (
+  // Plain function, NOT a component. Declared here because it closes over
+  // `fields` and the handlers. As `<FieldGrid />` its identity changed every
+  // render, so React remounted the whole field subtree on every keystroke and
+  // dropped focus after each character. Do not convert it back.
+  const fieldGrid = (product: string) => (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       {fields.map((field) => (
-        <div key={field.label} className="space-y-1">
-          <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{field.label}</Label>
-          {renderField(field, product)}
+        <div key={field.label}>
+          {renderControl(field, product, formDataByProduct[product]?.[field.label] || "", (v) =>
+            handleInputChange(product, field.label, v),
+          )}
         </div>
       ))}
     </div>
   )
 
-  // ── Special layouts ─────────────────────────────────────────────────────────
+  // ── Extraction: many tanks in one shift ─────────────────────────────────────
+  const setTanks = (n: number) => {
+    const next = Math.min(20, Math.max(1, n))
+    setNumberOfTanks(next)
+    setTankData((prev) => {
+      const u = { ...prev }
+      for (let i = 0; i < next; i++) if (!u[i]) u[i] = { data: {}, sameAsFirst: false }
+      return u
+    })
+  }
+
   const renderExtraction = () => (
-    <div className="space-y-5">
-      <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 space-y-3">
-        <Label className="text-sm font-bold text-emerald-900">Number of Tanks</Label>
-        <div className="flex gap-2 flex-wrap">
-          {Array.from({ length: 20 }, (_, i) => i + 1).map((num) => (
-            <button key={num} type="button"
-              onClick={() => { setNumberOfTanks(num); setTankData((prev) => { const u = { ...prev }; for (let i = 0; i < num; i++) if (!u[i]) u[i] = { data: {}, sameAsFirst: false }; return u }) }}
-              className={`w-9 h-9 rounded-lg font-semibold text-sm transition-all ${numberOfTanks === num ? "bg-emerald-600 text-white shadow-sm" : "bg-white border-2 border-emerald-200 text-emerald-800 hover:border-emerald-400"}`}>
-              {num}
-            </button>
-          ))}
+    <div className="space-y-4">
+      {/* A stepper, not twenty 36px buttons. Choosing 17 tanks previously meant
+          hitting a target a third of the recommended size. */}
+      <Card tone="brand" padded>
+        <Label htmlFor="tank-count" className="block text-xs font-bold uppercase tracking-wide text-ink-secondary mb-2">
+          Number of tanks
+        </Label>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setTanks(numberOfTanks - 1)}
+            disabled={numberOfTanks <= 1}
+            aria-label="One tank fewer"
+            className="h-11 w-11 flex items-center justify-center rounded-xl border border-hairline bg-surface-card text-ink-secondary disabled:opacity-40 active:scale-[0.97]"
+          >
+            <Minus className="w-4 h-4" aria-hidden="true" />
+          </button>
+          <input
+            id="tank-count"
+            type="text"
+            inputMode="numeric"
+            value={numberOfTanks}
+            onChange={(e) => setTanks(Number(e.target.value.replace(/\D/g, "")) || 1)}
+            className="h-11 w-20 text-center text-base font-bold tnum rounded-xl border border-hairline bg-surface-card text-ink-primary focus:border-brand focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={() => setTanks(numberOfTanks + 1)}
+            disabled={numberOfTanks >= 20}
+            aria-label="One tank more"
+            className="h-11 w-11 flex items-center justify-center rounded-xl border border-hairline bg-surface-card text-ink-secondary disabled:opacity-40 active:scale-[0.97]"
+          >
+            <Plus className="w-4 h-4" aria-hidden="true" />
+          </button>
+          <span className="text-xs text-ink-muted ml-1">max 20</span>
         </div>
-      </div>
+      </Card>
+
       {Array.from({ length: numberOfTanks }, (_, i) => i).map((idx) => {
         const data = tankData[idx]?.data || {}
         const sameAsFirst = tankData[idx]?.sameAsFirst || false
+        const scope = `tank-${idx}`
+        const hasErrors = !!errors[scope]
         return (
-          <div key={idx} className="bg-white p-5 rounded-2xl border border-emerald-100 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-emerald-900 text-sm">Tank {idx + 1}</h3>
-              {idx > 0 && (
-                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-500">
-                  <input type="checkbox" checked={sameAsFirst} className="w-3.5 h-3.5 accent-emerald-600"
-                    onChange={(e) => setTankData((prev) => ({ ...prev, [idx]: { sameAsFirst: e.target.checked, data: e.target.checked && prev[0]?.data ? JSON.parse(JSON.stringify(prev[0].data)) : prev[idx]?.data || {} } }))} />
-                  Same as Tank 1
-                </label>
-              )}
+          <Card key={idx} padded className={hasErrors ? "border-critical/40" : undefined}>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <SectionTitle>Tank {idx + 1}</SectionTitle>
+              <div className="flex items-center gap-2">
+                {hasErrors && <Chip tone="critical" icon={<AlertCircle className="w-3 h-3" />}>Incomplete</Chip>}
+                {idx > 0 && (
+                  <Choice
+                    type="checkbox"
+                    checked={sameAsFirst}
+                    onChange={(e) =>
+                      setTankData((prev) => ({
+                        ...prev,
+                        [idx]: {
+                          sameAsFirst: e.target.checked,
+                          data: e.target.checked && prev[0]?.data ? { ...prev[0].data } : prev[idx]?.data || {},
+                        },
+                      }))
+                    }
+                    label="Same as Tank 1"
+                    className="px-2"
+                  />
+                )}
+              </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {fields.map((field) => {
-                const locked = sameAsFirst && idx > 0 && field.label !== "Tank Number" && field.label !== "Alcohol Percentage"
-                const val = data[field.label] || ""
-                const set = (v: string) => setTankData((prev) => ({ ...prev, [idx]: { ...(prev[idx] || { sameAsFirst: false, data: {} }), data: { ...(prev[idx]?.data || {}), [field.label]: v } } }))
+                const locked =
+                  sameAsFirst && idx > 0 && field.label !== "Tank Number" && field.label !== "Alcohol Percentage"
                 return (
-                  <div key={`${idx}-${field.label}`} className="space-y-1">
-                    <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{field.label}</Label>
-                    {field.isAlcoholPercentage && field.options ? (
-                      <div className="flex gap-2">
-                        {field.options.map((opt) => (
-                          <label key={opt} className="flex items-center gap-1.5 cursor-pointer">
-                            <input type="radio" name={`tank-${idx}-${field.label}`} value={opt} checked={val === opt} disabled={locked} onChange={(e) => set(e.target.value)} className="w-3.5 h-3.5 accent-emerald-600" />
-                            <span className="text-sm font-medium">{opt}</span>
-                          </label>
-                        ))}
-                      </div>
-                    ) : (
-                      <Input type={field.type} value={val} disabled={locked} onChange={(e) => set(e.target.value)}
-                        className={`w-full px-3 py-2 text-sm rounded-xl h-10 transition-all ${locked ? "bg-emerald-50 border-emerald-100 cursor-not-allowed" : "bg-white border-emerald-100 focus:border-emerald-500"}`} />
-                    )}
+                  <div key={`${idx}-${field.label}`}>
+                    {renderControl(field, scope, data[field.label] || "", (v) => setTankField(idx, field.label, v), locked)}
                   </div>
                 )
               })}
             </div>
-          </div>
+          </Card>
         )
       })}
     </div>
   )
 
+  // ── Concentrate: two strengths, side by side ────────────────────────────────
   const renderConcentrate = () => {
     const t70 = fields.filter((f) => f.label.includes("(70)"))
     const t80 = fields.filter((f) => f.label.includes("(80)"))
     const other = fields.filter((f) => !f.label.includes("(70)") && !f.label.includes("(80)"))
-    const col = (list: FormFieldDef[], title: string) => (
-      <div className="space-y-3">
-        <h3 className="text-center font-bold text-emerald-800 text-sm border-b border-emerald-200 pb-2">{title}</h3>
-        {list.map((field) => (
-          <div key={field.label} className="space-y-1">
-            <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{field.label.replace(/ \((70|80)\)/, "")}</Label>
-            {renderField(field, "default")}
-          </div>
-        ))}
-      </div>
+
+    // The strength stays IN each field's label. Stripping it and relying on a
+    // column heading meant that on a phone — where the two columns stack — you
+    // got two visually identical sets of "Number of tanks / Alcohol used / Water"
+    // distinguished only by a header you had already scrolled past. A real
+    // mis-entry risk on the exact device this is used on.
+    const strengthPanel = (list: FormFieldDef[], title: string, tone: "brand" | "data") => (
+      <Card tone={tone} padded>
+        <div className="flex items-center justify-between mb-3">
+          <SectionTitle>{title}</SectionTitle>
+          <Chip tone={tone === "brand" ? "brand" : "neutral"}>{title.startsWith("70") ? "70%" : "80%"}</Chip>
+        </div>
+        <div className="space-y-4">
+          {list.map((field) => (
+            <div key={field.label}>
+              {renderControl(field, "default", formDataByProduct.default?.[field.label] || "", (v) =>
+                handleInputChange("default", field.label, v),
+              )}
+            </div>
+          ))}
+        </div>
+      </Card>
     )
+
     return (
-      <div className="space-y-5">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">{col(t70, "70% (350L)")}{col(t80, "80% (400L)")}</div>
-        {other.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-emerald-100">
-            {other.map((field) => (
-              <div key={field.label} className="space-y-1">
-                <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{field.label}</Label>
-                {renderField(field, "default")}
-              </div>
-            ))}
-          </div>
-        )}
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {strengthPanel(t70, "70% strength", "brand")}
+          {strengthPanel(t80, "80% strength", "data")}
+        </div>
+        {other.length > 0 && <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{fieldGridFor(other, "default")}</div>}
       </div>
     )
   }
 
+  const fieldGridFor = (list: FormFieldDef[], product: string) =>
+    list.map((field) => (
+      <div key={field.label}>
+        {renderControl(field, product, formDataByProduct[product]?.[field.label] || "", (v) =>
+          handleInputChange(product, field.label, v),
+        )}
+      </div>
+    ))
+
+  // ── Herbs: multi-select, one card each ─────────────────────────────────────
   const renderHerbs = () => (
-    <div className="space-y-5">
-      <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <Label className="text-sm font-bold text-emerald-900">Select Herbs</Label>
-          <button type="button" onClick={() => setShowCreateHerb(true)} className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-colors">
-            <Plus size={13} /> Create Herb
+    <div className="space-y-4">
+      <Card tone="brand" padded>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <SectionTitle>Which herbs?</SectionTitle>
+          <button
+            type="button"
+            onClick={() => { setShowCreateHerb(true); setHerbDialogError(null) }}
+            className="h-9 px-3 flex items-center gap-1.5 rounded-lg bg-brand-solid text-brand-ink text-xs font-bold active:scale-[0.97]"
+          >
+            <Plus className="w-3.5 h-3.5" aria-hidden="true" /> New herb
           </button>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {isLoadingHerbs ? <p className="text-xs text-emerald-700/70">Loading herbs...</p> : herbOptions.map((herb) => (
-            <label key={herb} className="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" checked={selectedHerbs.includes(herb)} className="w-3.5 h-3.5 accent-emerald-600"
-                onChange={() => setSelectedHerbs((prev) => { if (prev.includes(herb)) return prev.filter((h) => h !== herb); fetchHerbPrev(herb); return [...prev, herb] })} />
-              <span className="text-sm text-slate-700 font-medium">{herb}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-      {selectedHerbs.map((herb) => (
-        <div key={herb} className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm">
-          <p className="font-bold text-emerald-900 text-sm mb-3">{herb}</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-            {fields.map((field) => {
-              const disabled = !!field.generated || !!field.carried
-              return (
-                <div key={field.label} className="space-y-1">
-                  <Label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">{field.label}</Label>
-                  <div className="relative">
-                    <input type={field.type === "number" ? "number" : "text"} value={herbsData[herb]?.[field.label] || ""} disabled={disabled}
-                      onChange={(e) => handleHerbField(herb, field.label, e.target.value)}
-                      className="w-full px-2 py-1.5 text-sm rounded-lg border border-emerald-100 bg-white focus:border-emerald-500 focus:outline-none disabled:bg-emerald-50 disabled:cursor-not-allowed transition-all h-9" />
-                    {field.carried && <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-blue-600">🔒</span>}
-                  </div>
-                </div>
-              )
-            })}
+        {isLoadingHerbs ? (
+          <p className="text-sm text-ink-muted">Loading herbs…</p>
+        ) : herbOptions.length === 0 ? (
+          <p className="text-sm text-ink-muted">No herbs yet — add the first one.</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {herbOptions.map((herb) => (
+              <Choice
+                key={herb}
+                type="checkbox"
+                checked={selectedHerbs.includes(herb)}
+                onChange={() => toggleHerb(herb)}
+                label={herb}
+              />
+            ))}
           </div>
-        </div>
+        )}
+      </Card>
+
+      {selectedHerbs.map((herb) => (
+        <Card key={herb} padded className={errors[herb] ? "border-critical/40" : undefined}>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <SectionTitle>{herb}</SectionTitle>
+            <div className="flex items-center gap-2">
+              {herbsPrev[herb] != null && <Chip tone="neutral">{herbsPrev[herb]} carried forward</Chip>}
+              {errors[herb] && <Chip tone="critical" icon={<AlertCircle className="w-3 h-3" />}>Incomplete</Chip>}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {fields.map((field) => (
+              <div key={field.label}>
+                {renderControl(field, herb, herbsData[herb]?.[field.label] || "", (v) =>
+                  handleHerbField(herb, field.label, v),
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
       ))}
+
       <Dialog open={showCreateHerb} onOpenChange={setShowCreateHerb}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader><DialogTitle>Create New Herb</DialogTitle><DialogDescription>Add a new herb type to the system.</DialogDescription></DialogHeader>
-          <div className="py-3">
-            <Label htmlFor="herb-name" className="text-emerald-900 font-semibold text-sm">Herb Name</Label>
-            <Input id="herb-name" placeholder="e.g., Alligator Pepper" value={newHerbName} onChange={(e) => setNewHerbName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleCreateHerb()} className="mt-1.5 rounded-xl border-emerald-100" />
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Add a herb</DialogTitle>
+            <DialogDescription>It becomes available to everyone recording herb stock.</DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <Label htmlFor="herb-name" className="block text-xs font-bold uppercase tracking-wide text-ink-secondary mb-1.5">
+              Herb name
+            </Label>
+            <Input
+              id="herb-name"
+              placeholder="e.g. Alligator pepper"
+              value={newHerbName}
+              onChange={(e) => { setNewHerbName(e.target.value); setHerbDialogError(null) }}
+              onKeyDown={(e) => e.key === "Enter" && handleCreateHerb()}
+              className="h-11 sm:h-10 text-base sm:text-sm rounded-xl"
+              aria-invalid={herbDialogError ? true : undefined}
+            />
+            {herbDialogError && (
+              <p role="alert" aria-live="polite" className="mt-1.5 text-xs font-semibold text-critical-ink">
+                {herbDialogError}
+              </p>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => { setShowCreateHerb(false); setNewHerbName("") }}>Cancel</Button>
-            <Button size="sm" onClick={handleCreateHerb} className="bg-emerald-600 hover:bg-emerald-700 text-white">Create</Button>
+            <Button variant="outline" size="sm" onClick={() => { setShowCreateHerb(false); setNewHerbName(""); setHerbDialogError(null) }}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleCreateHerb} className="bg-brand-solid text-brand-ink hover:bg-brand-solid-hover">
+              Add herb
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
   )
 
+  const carriedSummary = hasPreviousStock && !isLoadingStock && (
+    <Card tone="brand" padded>
+      <div className="flex items-start gap-2.5">
+        <Lock className="w-4 h-4 text-brand shrink-0 mt-0.5" aria-hidden="true" />
+        <div>
+          <p className="text-sm font-semibold text-ink-primary">Carried forward</p>
+          <p className="text-xs text-ink-muted mt-0.5">
+            Read-only. Derived from earlier shifts and management stock counts.
+          </p>
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {supportsMultiProduct
+              ? availableProducts.map((p) =>
+                  perProductPreviousStock[p] != null ? (
+                    <Chip key={p} tone={p === "Bitters" ? "bitters" : "ginger"}>{p}: {perProductPreviousStock[p]}</Chip>
+                  ) : null,
+                )
+              : <Chip tone="neutral">{previousStock}</Chip>}
+          </div>
+        </div>
+      </div>
+    </Card>
+  )
+
   return (
     <>
       {successInfo && (
-        <SuccessToast info={successInfo} onDismiss={() => { setSuccessInfo(null); router.push("/dashboard/forms") }} onAnother={() => { setSuccessInfo(null); router.push("/dashboard/forms") }} />
+        <SuccessToast
+          info={successInfo}
+          onDismiss={() => { setSuccessInfo(null); router.push("/dashboard/forms") }}
+          onAnother={() => { setSuccessInfo(null); router.push("/dashboard/forms") }}
+        />
       )}
 
-      <div className="bg-white rounded-3xl p-5 md:p-8 shadow-sm border border-emerald-100">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {supportsMultiProduct && !isExtraction && (
-            <div className="space-y-1.5">
-              <Label className="text-sm font-bold text-emerald-900">
-                Product Type <span className="text-red-500">*</span>
-                <span className="ml-1 text-xs font-normal text-slate-400">(select all that apply)</span>
-              </Label>
+      {/* noValidate: the browser's own bubbles were a second, competing error
+          voice that fired before our validator ever ran. */}
+      <form onSubmit={handleSubmit} noValidate className="space-y-5">
+        {hasDraft && (
+          <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-surface-sunken border border-hairline">
+            <p className="text-xs font-medium text-ink-secondary">Unsaved entries from earlier were restored.</p>
+            <button
+              type="button"
+              onClick={discardDraft}
+              className="h-9 px-2.5 flex items-center gap-1.5 rounded-lg text-xs font-bold text-ink-muted hover:text-critical-ink hover:bg-critical-subtle transition-colors shrink-0"
+            >
+              <Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> Discard
+            </button>
+          </div>
+        )}
+
+        {supportsMultiProduct && !isExtraction && (
+          <Card padded>
+            <fieldset>
+              <legend className="block text-xs font-bold uppercase tracking-wide text-ink-secondary mb-2">
+                Product <span className="text-critical" aria-hidden="true">*</span>
+                <span className="ml-1.5 font-medium normal-case tracking-normal text-ink-muted">select all that apply</span>
+              </legend>
               <div className="flex flex-wrap gap-2">
                 {availableProducts.map((p) => (
-                  <button key={p} type="button" onClick={() => setProductionTypes((prev) => prev.includes(p) ? prev.filter((t) => t !== p) : [...prev, p])}
-                    className={`px-4 h-9 rounded-xl border-2 text-sm font-semibold transition-all ${productionTypes.includes(p) ? "border-emerald-600 bg-emerald-600 text-white shadow-sm" : "border-emerald-200 bg-white text-slate-600 hover:border-emerald-400"}`}>
-                    {p}
-                  </button>
+                  <Choice
+                    key={p}
+                    type="checkbox"
+                    checked={productionTypes.includes(p)}
+                    onChange={() => {
+                      setFormError(null)
+                      setProductionTypes((prev) => (prev.includes(p) ? prev.filter((t) => t !== p) : [...prev, p]))
+                    }}
+                    label={p}
+                  />
                 ))}
               </div>
-            </div>
-          )}
+            </fieldset>
+          </Card>
+        )}
 
-          {isLoadingStock && (
-            <div className="px-4 py-3 rounded-xl bg-blue-50 border border-blue-200">
-              <p className="text-xs font-semibold text-blue-700">Loading current stock…</p>
-            </div>
-          )}
-          {hasPreviousStock && !isLoadingStock && (
-            <div className="px-4 py-3 rounded-xl bg-blue-50 border border-blue-200">
-              {supportsMultiProduct ? (
-                <div className="space-y-0.5">
-                  <p className="text-xs font-semibold text-blue-700">Current stock carried forward (read-only — set by management):</p>
-                  {availableProducts.map((p) => perProductPreviousStock[p] != null ? <p key={p} className="text-xs text-blue-600">{p}: {perProductPreviousStock[p]}</p> : null)}
-                </div>
-              ) : (
-                <p className="text-xs font-semibold text-blue-700">Current stock carried forward (read-only — set by management): {previousStock}</p>
-              )}
-            </div>
-          )}
+        {isLoadingStock && (
+          <Card padded>
+            <p className="text-sm text-ink-muted">Loading the carried-forward balance…</p>
+          </Card>
+        )}
+        {carriedSummary}
 
-          <hr className="border-emerald-100" />
-
-          <div className="space-y-5">
-            <h3 className="text-base font-bold text-emerald-950">Record Details</h3>
-            {isExtraction ? renderExtraction()
-              : isHerbs ? renderHerbs()
-              : isConcentrate ? renderConcentrate()
-              : supportsMultiProduct && productionTypes.length > 0 ? (
-                productionTypes.map((product) => (
-                  <div key={product} className="bg-slate-50 p-5 rounded-2xl border border-emerald-100">
-                    <h4 className="font-bold text-emerald-900 text-sm mb-3">{product} Form</h4>
-                    {stockErrors[product] && <div className="px-3 py-2 mb-3 rounded-xl bg-red-50 border border-red-200"><p className="text-red-600 text-xs font-semibold">⚠️ {stockErrors[product]}</p></div>}
-                    <FieldGrid product={product} />
+        <div className="space-y-4">
+          {isExtraction ? renderExtraction()
+            : isHerbs ? renderHerbs()
+            : isConcentrate ? renderConcentrate()
+            : supportsMultiProduct && productionTypes.length > 0 ? (
+              productionTypes.map((product) => (
+                <Card key={product} padded className={errors[product] ? "border-critical/40" : undefined}>
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <SectionTitle>{product}</SectionTitle>
+                    {errors[product] && <Chip tone="critical" icon={<AlertCircle className="w-3 h-3" />}>Incomplete</Chip>}
                   </div>
-                ))
-              ) : !supportsMultiProduct ? (
-                <div>
-                  {stockErrors.default && <div className="px-3 py-2 mb-3 rounded-xl bg-red-50 border border-red-200"><p className="text-red-600 text-xs font-semibold">⚠️ {stockErrors.default}</p></div>}
-                  <FieldGrid product="default" />
-                </div>
-              ) : (
-                <p className="text-sm text-slate-400 italic">Select a product type above to begin.</p>
-              )}
-          </div>
+                  {stockErrors[product] && (
+                    <p role="alert" className="mb-3 text-xs font-semibold text-critical-ink">{stockErrors[product]}</p>
+                  )}
+                  {fieldGrid(product)}
+                </Card>
+              ))
+            ) : !supportsMultiProduct ? (
+              <Card padded className={errors.default ? "border-critical/40" : undefined}>
+                {stockErrors.default && (
+                  <p role="alert" className="mb-3 text-xs font-semibold text-critical-ink">{stockErrors.default}</p>
+                )}
+                {fieldGrid("default")}
+              </Card>
+            ) : (
+              <Card padded>
+                <p className="text-sm text-ink-muted">Choose a product above to start entering figures.</p>
+              </Card>
+            )}
+        </div>
 
-          {error && <div className="px-4 py-3 rounded-xl bg-red-50 border border-red-200"><p className="text-sm font-semibold text-red-700">⚠️ {error}</p></div>}
-
-          <div className="pt-3 border-t border-emerald-100 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-3">
-            <Button type="button" variant="outline" onClick={() => router.back()} disabled={isSubmitting}
-              className="h-11 sm:h-10 px-5 text-sm font-semibold border-emerald-200 text-emerald-700 hover:bg-emerald-50 rounded-xl w-full sm:w-auto">Cancel</Button>
-            <Button type="submit" disabled={isSubmitting}
-              className="h-11 sm:h-10 px-6 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl shadow-md shadow-emerald-600/20 w-full sm:w-auto">
-              {isSubmitting ? "Submitting…" : "Submit Record"}
-            </Button>
+        {/* The single form-level message, immediately above the submit button
+            where the action is — not at the far bottom of a long page. */}
+        {formError && (
+          <div role="alert" aria-live="assertive" className="flex items-start gap-2.5 px-4 py-3 rounded-xl bg-critical-subtle border border-critical/30">
+            <AlertCircle className="w-4 h-4 text-critical shrink-0 mt-0.5" aria-hidden="true" />
+            <p className="text-sm font-semibold text-critical-ink">{formError}</p>
           </div>
-        </form>
-      </div>
+        )}
+
+        <div className="pt-3 border-t border-hairline flex flex-col-reverse sm:flex-row items-stretch sm:items-center sm:justify-end gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => router.back()}
+            disabled={isSubmitting}
+            className="h-11 sm:h-10 px-5 text-sm font-semibold rounded-xl w-full sm:w-auto"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            disabled={isSubmitting}
+            className="h-11 sm:h-10 px-6 text-sm font-bold bg-brand-solid text-brand-ink hover:bg-brand-solid-hover rounded-xl w-full sm:w-auto active:scale-[0.97]"
+          >
+            {/* Real progress: a 20-tank extraction is 20 sequential requests, and
+                a bare "Submitting…" gave no sign it was still working. */}
+            {isSubmitting
+              ? progress && progress.total > 1
+                ? `Saving ${progress.done + 1} of ${progress.total}…`
+                : "Saving…"
+              : "Submit record"}
+          </Button>
+        </div>
+      </form>
     </>
   )
 }

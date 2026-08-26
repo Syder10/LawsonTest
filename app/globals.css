@@ -3,78 +3,263 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ============================================================================
+   DESIGN TOKENS
+   ============================================================================
+   Two layers, in this order:
+
+   1. SEMANTIC tokens (--surface-*, --ink-*, --brand-*, --status-*, --series-*).
+      These are the source of truth. Views should only ever use these.
+   2. A shadcn COMPATIBILITY layer (--background, --card, --primary…) mapped onto
+      layer 1 with var(). Custom properties resolve at use time, so `.dark` only
+      needs to override layer 1 — layer 2 follows automatically and the two
+      systems can never disagree.
+
+   Why this exists: the previous file declared 40 tokens and a full `.dark` block
+   that NOTHING user-facing read (`dark:` appeared zero times outside
+   components/ui). Feature code used literal Tailwind classes — 21 colour
+   families, 3 competing card identities, 2 neutral ramps. Its `.dark` values were
+   also semantically wrong (brand green standing in for `--muted`, `--secondary`
+   and `--border`), and had never rendered once.
+   ============================================================================ */
+
 :root {
-  --background: #f8fafc;
-  --foreground: #064e3b;
-  --card: #ffffff;
-  --card-foreground: #064e3b;
-  --popover: #ffffff;
-  --popover-foreground: #064e3b;
-  --primary: #059669;
-  --primary-foreground: #ffffff;
-  --secondary: #ecfdf5;
-  --secondary-foreground: #064e3b;
-  --muted: #f1f5f9;
-  --muted-foreground: #64748b;
-  --accent: #10b981;
-  --accent-foreground: #ffffff;
-  --destructive: #ef4444;
-  --destructive-foreground: #ffffff;
-  --border: #e2e8f0;
-  --input: #e2e8f0;
-  --ring: #059669;
-  --chart-1: #10b981;
-  --chart-2: #059669;
-  --chart-3: #34d399;
-  --chart-4: #6ee7b7;
-  --chart-5: #a7f3d0;
+  color-scheme: light;
+
+  /* ── Surfaces ───────────────────────────────────────────────────────────── */
+  --surface-page: #f4f6f5;
+  --surface-card: #ffffff;
+  --surface-raised: #ffffff;   /* popovers, modals, drawers */
+  --surface-sunken: #edf1ef;   /* table headers, inset wells */
+
+  /* ── Ink ────────────────────────────────────────────────────────────────── */
+  --ink-primary: #0b1512;
+  --ink-secondary: #47534e;
+  --ink-muted: #6d7a75;        /* 4.7:1 on card — fine at 12px+, never below */
+  --ink-inverse: #ffffff;
+
+  /* ── Lines ──────────────────────────────────────────────────────────────── */
+  --line-hairline: #e3e9e6;
+  --line-strong: #cdd6d2;
+
+  /* ── Brand ──────────────────────────────────────────────────────────────────
+     Emerald is the identity, and it is UI chrome ONLY — never a chart series.
+     Two steps because contrast differs by use:
+       --brand        the hue: rings, accents, small marks, active nav, borders
+       --brand-solid  filled surfaces carrying white text. emerald-700 gives
+                      4.8:1 with white; emerald-600 is only ~3.3:1, which fails
+                      AA for normal-weight label text.
+     ------------------------------------------------------------------------- */
+  --brand: #059669;
+  --brand-solid: #047857;
+  --brand-solid-hover: #036b50;
+  --brand-ink: #ffffff;
+  --brand-subtle: #ecfdf5;
+  --brand-subtle-ink: #065f46;
+
+  /* ── Status — RESERVED ──────────────────────────────────────────────────────
+     Never reused for a chart series, and never colour-alone: every status ships
+     an icon + word (see StatusBadge). `base` is the mark fill, `subtle` the chip
+     background, `ink` the chip text (contrast-safe on `subtle`).
+
+     The old viz.ts used #d97706 for BOTH the Ginger series and the warning
+     status, so a warning and a product read as the same colour. Fixed by keeping
+     status here and moving series to teal/orange below.
+     ------------------------------------------------------------------------- */
+  --status-good: #0ca30c;
+  --status-good-subtle: #eaf7ea;
+  --status-good-ink: #05691f;
+
+  --status-warning: #fab219;
+  --status-warning-subtle: #fdf5e3;
+  --status-warning-ink: #8a5a00;
+
+  --status-critical: #d03b3b;
+  --status-critical-subtle: #fdeceb;
+  --status-critical-ink: #9b1c1c;
+
+  /* ── Chart series ───────────────────────────────────────────────────────────
+     Bitters teal / Ginger orange. Chosen by running the dataviz validator, not
+     by eye: the previous emerald+amber pair sat in the 6–8 CVD warn band
+     (protan ΔE 7.9 — green vs orange is the classic protanope confusion) and was
+     therefore only legal with secondary encoding. Teal+orange clears both axes
+     outright (protan ΔE 13.8, tritan 34.5) while keeping the cool/warm product
+     distinction the existing dashboard trained people on.
+
+     `total` is a neutral aggregate, deliberately not a categorical hue — it is a
+     sum of the other two, not a third category.
+     ------------------------------------------------------------------------- */
+  --series-bitters: #0d9488;
+  --series-ginger: #ea580c;
+  --series-total: #475569;
+
+  /* Chart chrome — recessive, hairline, never dashed. */
+  --chart-surface: var(--surface-card);
+  --chart-grid: #e6ebe8;
+  --chart-axis: #7d8a85;
+
+  /* ── Motion ─────────────────────────────────────────────────────────────────
+     Custom curves because the built-in CSS easings are too weak to read as
+     intentional. Never ease-in on UI: it delays the initial movement, which is
+     the exact moment the user is watching, so it feels sluggish at any duration.
+     ------------------------------------------------------------------------- */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer-curve: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --dur-press: 120ms;   /* button/press feedback */
+  --dur-fast: 160ms;    /* tooltips, chips */
+  --dur-base: 200ms;    /* dropdowns, selects */
+  --dur-slow: 240ms;    /* cards, panels */
+  --dur-drawer: 320ms;  /* sheets, drawers */
+
   --radius: 1rem;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #0f3d2d;
-  --sidebar-primary: #10b981;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #d1fae5;
-  --sidebar-accent-foreground: #0f3d2d;
-  --sidebar-border: rgba(16, 185, 129, 0.2);
-  --sidebar-ring: #10b981;
+
+  /* ── shadcn compatibility (mapped onto the semantic layer above) ─────────── */
+  --background: var(--surface-page);
+  --foreground: var(--ink-primary);
+  --card: var(--surface-card);
+  --card-foreground: var(--ink-primary);
+  --popover: var(--surface-raised);
+  --popover-foreground: var(--ink-primary);
+  --primary: var(--brand-solid);
+  --primary-foreground: var(--brand-ink);
+  --secondary: var(--surface-sunken);
+  --secondary-foreground: var(--ink-primary);
+  --muted: var(--surface-sunken);
+  --muted-foreground: var(--ink-muted);
+  --accent: var(--brand-subtle);
+  --accent-foreground: var(--brand-subtle-ink);
+  --destructive: var(--status-critical);
+  --destructive-foreground: #ffffff;
+  --border: var(--line-hairline);
+  --input: var(--line-hairline);
+  --ring: var(--brand);
+  --chart-1: var(--series-bitters);
+  --chart-2: var(--series-ginger);
+  --chart-3: var(--series-total);
+  --chart-4: var(--status-warning);
+  --chart-5: var(--status-critical);
+  --sidebar: var(--surface-card);
+  --sidebar-foreground: var(--ink-primary);
+  --sidebar-primary: var(--brand-solid);
+  --sidebar-primary-foreground: var(--brand-ink);
+  --sidebar-accent: var(--brand-subtle);
+  --sidebar-accent-foreground: var(--brand-subtle-ink);
+  --sidebar-border: var(--line-hairline);
+  --sidebar-ring: var(--brand);
 }
 
+/* ============================================================================
+   DARK
+   Selected, not flipped — each value is chosen for the dark surface. Only the
+   semantic layer is overridden; the shadcn layer follows through var().
+   ============================================================================ */
 .dark {
-  --background: #051f18;
-  --foreground: #e5f8f3;
-  --card: #0f3d2d;
-  --card-foreground: #e5f8f3;
-  --popover: #0f3d2d;
-  --popover-foreground: #e5f8f3;
-  --primary: #10b981;
-  --primary-foreground: #051f18;
-  --secondary: #047857;
-  --secondary-foreground: #e5f8f3;
-  --muted: #059669;
-  --muted-foreground: #a7f3d0;
-  --accent: #34d399;
-  --accent-foreground: #051f18;
-  --destructive: #f87171;
-  --destructive-foreground: #051f18;
-  --border: rgba(16, 185, 129, 0.3);
-  --input: #0f3d2d;
-  --ring: #34d399;
-  --chart-1: #10b981;
-  --chart-2: #059669;
-  --chart-3: #34d399;
-  --chart-4: #6ee7b7;
-  --chart-5: #a7f3d0;
-  --sidebar: #0f3d2d;
-  --sidebar-foreground: #e5f8f3;
-  --sidebar-primary: #10b981;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #047857;
-  --sidebar-accent-foreground: #e5f8f3;
-  --sidebar-border: #047857;
-  --sidebar-ring: #10b981;
+  color-scheme: dark;
+
+  --surface-page: #0a0f0d;
+  --surface-card: #131a17;
+  --surface-raised: #1a2320;
+  --surface-sunken: #0f1614;
+
+  --ink-primary: #f2f6f4;
+  --ink-secondary: #b6c2bd;
+  --ink-muted: #8b9995;
+  --ink-inverse: #0b1512;
+
+  --line-hairline: #232e2a;
+  --line-strong: #33403b;
+
+  /* Brighter brand steps for the dark surface; brand-ink flips to dark because
+     white on a light green fill is unreadable. */
+  --brand: #34d399;
+  --brand-solid: #10b981;
+  --brand-solid-hover: #34d399;
+  --brand-ink: #04231a;
+  --brand-subtle: #06251d;
+  --brand-subtle-ink: #6ee7b7;
+
+  /* Status marks are mode-invariant (all clear 3:1 on this surface); only the
+     chip background and text re-step. */
+  --status-good: #0ca30c;
+  --status-good-subtle: #0d2413;
+  --status-good-ink: #6ee7a5;
+
+  --status-warning: #fab219;
+  --status-warning-subtle: #2a2110;
+  --status-warning-ink: #fcd34d;
+
+  --status-critical: #d03b3b;
+  --status-critical-subtle: #2c1414;
+  --status-critical-ink: #fca5a5;
+
+  /* Series hexes are UNCHANGED between modes — not a flip, a selection. Both were
+     validated against the dark surface (#131a17) as well as the light one:
+     lightness band, chroma, CVD, normal-vision and contrast all pass in both.
+     Lifting them to teal-500/orange-400 was tried first and FAILED the dark
+     lightness band (L 0.704 / 0.758 vs the 0.48–0.67 window), which is exactly
+     the check that keeps a mark readable on a dark surface. */
+  --series-bitters: #0d9488;
+  --series-ginger: #ea580c;
+  --series-total: #94a3b8;
+
+  --chart-grid: #222d29;
+  --chart-axis: #7d8a85;
+}
+
+/* Honour the OS preference too, but let an explicit `.light` stamp win over it. */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light):not(.dark) {
+    color-scheme: dark;
+  }
 }
 
 @theme inline {
+  /* Fonts — these were MISSING, which silently disabled Geist across the whole
+     authenticated app: `font-sans` on the dashboard layout resolved to Tailwind's
+     default ui-sans-serif stack and overrode the font set on <body>. */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Semantic utilities — bg-surface-card, text-ink-muted, border-hairline, … */
+  --color-surface-page: var(--surface-page);
+  --color-surface-card: var(--surface-card);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+
+  --color-ink-primary: var(--ink-primary);
+  --color-ink-secondary: var(--ink-secondary);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-inverse: var(--ink-inverse);
+
+  --color-hairline: var(--line-hairline);
+  --color-line-strong: var(--line-strong);
+
+  --color-brand: var(--brand);
+  --color-brand-solid: var(--brand-solid);
+  --color-brand-solid-hover: var(--brand-solid-hover);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-subtle: var(--brand-subtle);
+  --color-brand-subtle-ink: var(--brand-subtle-ink);
+
+  --color-good: var(--status-good);
+  --color-good-subtle: var(--status-good-subtle);
+  --color-good-ink: var(--status-good-ink);
+  --color-warning: var(--status-warning);
+  --color-warning-subtle: var(--status-warning-subtle);
+  --color-warning-ink: var(--status-warning-ink);
+  --color-critical: var(--status-critical);
+  --color-critical-subtle: var(--status-critical-subtle);
+  --color-critical-ink: var(--status-critical-ink);
+
+  --color-series-bitters: var(--series-bitters);
+  --color-series-ginger: var(--series-ginger);
+  --color-series-total: var(--series-total);
+  --color-chart-grid: var(--chart-grid);
+  --color-chart-axis: var(--chart-axis);
+
+  /* shadcn */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -111,6 +296,12 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Motion curves, exposed as Tailwind ease utilities. Named distinctly from the
+     raw :root values so the mapping is not self-referential. */
+  --ease-out-strong: var(--ease-out);
+  --ease-in-out-strong: var(--ease-in-out);
+  --ease-drawer: var(--ease-drawer-curve);
 }
 
 @layer base {
@@ -120,99 +311,29 @@
   body {
     @apply bg-background text-foreground;
   }
-}
-
-/* Premium glassmorphism effects for production dashboard */
-.glass-panel {
-  @apply rounded-2xl border backdrop-blur-2xl transition-all duration-500;
-  background: rgba(255, 255, 255, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.04), inset 0 0 0 1px rgba(255, 255, 255, 0.4);
-}
-
-.glass-panel:hover {
-  background: rgba(255, 255, 255, 0.6);
-  border-color: rgba(16, 185, 129, 0.3);
-  box-shadow: 0 15px 50px rgba(16, 185, 129, 0.08);
-  transform: translateY(-4px);
-}
-
-.glass-input {
-  @apply w-full px-5 py-4 rounded-xl border transition-all duration-300;
-  background: rgba(255, 255, 255, 0.3);
-  border: 1px solid rgba(16, 185, 129, 0.15);
-  color: #064e3b;
-}
-
-.glass-input:focus {
-  @apply outline-none;
-  background: rgba(255, 255, 255, 0.75);
-  border-color: rgb(16, 185, 129);
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
-}
-
-.glass-input::placeholder {
-  color: rgba(15, 61, 45, 0.5);
-}
-
-.glass-button {
-  @apply rounded-xl border font-semibold transition-all duration-200 px-6 py-3 cursor-pointer;
-  background: rgba(16, 185, 129, 0.18);
-  border: 1px solid rgba(16, 185, 129, 0.35);
-  color: rgb(15, 61, 45);
-  backdrop-filter: blur(12px);
-}
-
-.glass-button:hover {
-  background: rgba(16, 185, 129, 0.28);
-  border-color: rgba(16, 185, 129, 0.5);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.2);
-}
-
-.glass-button:active {
-  transform: translateY(0);
-}
-
-.glass-button-primary {
-  @apply rounded-xl border font-semibold transition-all duration-200 px-6 py-3 cursor-pointer;
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.9) 0%, rgba(5, 150, 105, 0.85) 100%);
-  border: 1px solid rgba(16, 185, 129, 0.5);
-  color: #ffffff;
-  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.25);
-}
-
-.glass-button-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 32px rgba(16, 185, 129, 0.35);
-}
-
-@keyframes shake {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-  25% {
-    transform: translateX(-12px);
-  }
-  75% {
-    transform: translateX(12px);
+  /* Columns of figures must align; large standalone numbers must NOT use
+     tabular-nums (equal-width digits make a value like 121 look loose at display
+     sizes), so this is opt-in per table rather than global. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
   }
 }
 
-.animate-shake {
-  animation: shake 0.5s cubic-bezier(0.36, 0, 0.66, -0.56);
-}
+/* ============================================================================
+   ANIMATION
+   Only what is actually used. The previous file carried ~120 lines of dead
+   glassmorphism plus these defects:
+     • `.animate-slide-up` referenced @keyframes slide-up, which did not exist
+     • a duplicate `.animate-fade-in` referenced a non-existent `fade-in` and
+       SHADOWED the working rule above it, killing both
+     • `.animate-float`, `.animate-pulse-glow` and `.delay-*` were each declared
+       twice
+   ============================================================================ */
 
-.neon-glow-error {
-  box-shadow: 0 0 24px rgba(239, 68, 68, 0.6), inset 0 0 0 1px rgba(239, 68, 68, 0.3);
-}
-
-/* Adding premium animations for landing page */
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(30px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
@@ -220,145 +341,65 @@
   }
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
 @keyframes float {
   0%,
   100% {
-    transform: translateY(0px);
+    transform: translateY(0);
   }
   50% {
     transform: translateY(-20px);
   }
 }
 
-@keyframes pulse-glow {
-  0%,
-  100% {
-    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3), 0 0 40px rgba(16, 185, 129, 0.15);
-  }
-  50% {
-    box-shadow: 0 0 30px rgba(16, 185, 129, 0.5), 0 0 60px rgba(16, 185, 129, 0.25);
-  }
-}
-
-@keyframes slide-in-right {
-  from {
-    opacity: 0;
-    transform: translateX(50px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-@keyframes gradient-shift {
+@keyframes logo-reveal {
   0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
+    transform: scale(0.92);
+    opacity: 0;
+    filter: blur(8px);
   }
   100% {
-    background-position: 0% 50%;
+    transform: scale(1);
+    opacity: 1;
+    filter: blur(0);
   }
+}
+
+/* Submission confirmation. Short and single-purpose: it says "the state changed".
+   Starts at 0.8 rather than 0 — nothing in the real world appears from nothing. */
+@keyframes check-pop {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-check-pop {
+  animation: check-pop 260ms var(--ease-out) both;
 }
 
 .animate-fade-in-up {
-  animation: fadeInUp 0.8s ease-out forwards;
-}
-
-.animate-fade-in {
-  animation: fadeIn 1s ease-out forwards;
+  animation: fadeInUp var(--dur-slow) var(--ease-out) forwards;
 }
 
 .animate-float {
-  animation: float 6s ease-in-out infinite;
+  animation: float 6s var(--ease-in-out) infinite;
 }
 
-.animate-pulse-glow {
-  animation: pulse-glow 3s ease-in-out infinite;
+.animate-logo-reveal {
+  animation: logo-reveal 900ms var(--ease-out) forwards;
 }
 
-.animate-slide-in-right {
-  animation: slide-in-right 0.8s ease-out forwards;
-}
-
-.animate-gradient {
-  background-size: 200% 200%;
-  animation: gradient-shift 8s ease infinite;
-}
-
-/* Adding staggered animation delays */
-.delay-100 {
-  animation-delay: 0.1s;
-}
-
-.delay-200 {
-  animation-delay: 0.2s;
-}
-
-.delay-300 {
-  animation-delay: 0.3s;
-}
-
-.delay-400 {
-  animation-delay: 0.4s;
-}
-
-.delay-500 {
-  animation-delay: 0.5s;
-}
-
-/* Adding decorative elements for landing page */
-.gradient-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.3;
-  pointer-events: none;
-}
-
-.gradient-orb-1 {
-  width: 500px;
-  height: 500px;
-  background: radial-gradient(circle, rgba(16, 185, 129, 0.4) 0%, rgba(16, 185, 129, 0) 70%);
-  top: -10%;
-  right: -5%;
-}
-
-.gradient-orb-2 {
-  width: 400px;
-  height: 400px;
-  background: radial-gradient(circle, rgba(52, 211, 153, 0.3) 0%, rgba(52, 211, 153, 0) 70%);
-  bottom: -5%;
-  left: -10%;
-}
-
-.animate-float {
-  animation: float 6s ease-in-out infinite;
-}
-
-.animate-pulse-glow {
-  animation: pulse-glow 4s ease-in-out infinite;
-}
-
-.animate-slide-up {
-  animation: slide-up 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.animate-fade-in {
-  animation: fade-in 1s ease-out forwards;
-}
-
+/* Stagger for entrance sequences. NOTE: these set animation-delay and therefore
+   shadow Tailwind's own transition-delay `delay-*` utilities on any element that
+   uses both. Kept for the splash screen; prefer inline style for new work. */
 .delay-100 {
   animation-delay: 100ms;
 }
@@ -368,47 +409,99 @@
 .delay-300 {
   animation-delay: 300ms;
 }
+.delay-400 {
+  animation-delay: 400ms;
+}
 .delay-500 {
   animation-delay: 500ms;
 }
 
-/* Refined glassmorphism for a more premium look */
-.glass-card {
-  @apply backdrop-blur-xl border border-white/20 bg-white/40;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.05);
-}
-
-.glass-button-hero {
-  @apply relative overflow-hidden px-8 py-4 rounded-full font-bold text-white transition-all duration-300;
-  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
-  box-shadow: 0 10px 30px rgba(16, 185, 129, 0.3);
-}
-
-.glass-button-hero:hover {
-  @apply scale-105;
-  box-shadow: 0 15px 40px rgba(16, 185, 129, 0.4);
-}
-
-@keyframes logo-reveal {
-  0% {
-    transform: scale(0.8);
-    opacity: 0;
-    filter: blur(10px);
+/* Hover effects only where a real pointer exists — touch devices synthesise
+   hover on tap, which leaves elements stuck in their hover state. */
+@media (hover: hover) and (pointer: fine) {
+  .hover-lift {
+    transition: transform var(--dur-base) var(--ease-out);
   }
-  100% {
-    transform: scale(1);
+  .hover-lift:hover {
+    transform: translateY(-2px);
+  }
+}
+
+/* Reduced motion: fewer and gentler, not zero. Opacity and colour transitions
+   aid comprehension and stay; movement goes. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-fade-in-up,
+  .animate-logo-reveal {
+    animation: none;
     opacity: 1;
-    filter: blur(0);
+    transform: none;
+    filter: none;
+  }
+  .animate-check-pop {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .animate-float {
+    animation: none;
   }
 }
 
-.animate-logo-reveal {
-  animation: logo-reveal 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+/* ── Splash screen (app/page.tsx) ──────────────────────────────────────────── */
+.glass-button-hero {
+  @apply relative overflow-hidden px-8 py-4 rounded-full font-bold transition-all;
+  background: linear-gradient(135deg, var(--brand-solid) 0%, var(--brand) 100%);
+  color: var(--brand-ink);
+  box-shadow: 0 10px 30px color-mix(in oklab, var(--brand) 30%, transparent);
+  transition-duration: var(--dur-base);
+  transition-timing-function: var(--ease-out);
+}
+
+.glass-button-hero:active {
+  transform: scale(0.97);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .glass-button-hero:hover {
+    box-shadow: 0 15px 40px color-mix(in oklab, var(--brand) 40%, transparent);
+  }
+}
+
+.gradient-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.gradient-orb-1 {
+  width: min(500px, 80vw);
+  height: min(500px, 80vw);
+  background: radial-gradient(circle, color-mix(in oklab, var(--brand) 40%, transparent) 0%, transparent 70%);
+  top: -10%;
+  right: -5%;
+}
+
+.gradient-orb-2 {
+  width: min(400px, 70vw);
+  height: min(400px, 70vw);
+  background: radial-gradient(circle, color-mix(in oklab, var(--brand) 25%, transparent) 0%, transparent 70%);
+  bottom: -5%;
+  left: -10%;
 }
 
 .bg-mesh {
-  background-color: #f8fafc;
-  background-image: radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.1) 0, transparent 50%),
-    radial-gradient(at 50% 0%, rgba(52, 211, 153, 0.05) 0, transparent 50%),
-    radial-gradient(at 100% 0%, rgba(5, 150, 105, 0.1) 0, transparent 50%);
+  background-color: var(--surface-page);
+  background-image: radial-gradient(at 0% 0%, color-mix(in oklab, var(--brand) 10%, transparent) 0, transparent 50%),
+    radial-gradient(at 50% 0%, color-mix(in oklab, var(--brand) 5%, transparent) 0, transparent 50%),
+    radial-gradient(at 100% 0%, color-mix(in oklab, var(--brand) 10%, transparent) 0, transparent 50%);
 }

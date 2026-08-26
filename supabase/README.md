@@ -12,20 +12,22 @@ ones before it.
 
 | File | Contents |
 |------|----------|
-| `0001_extensions_types_helpers.sql` | Extensions, enum types (`shift_type`, `user_role`, `product_type`), `set_updated_at()`, and the RLS role helpers (`is_staff`, `is_admin`, `is_procurement_staff`). |
-| `0002_reference_data.sql` | Reference tables + seed: `departments`, `stock_materials`, `consumable_materials`, `herb_types`. |
-| `0003_profiles.sql` | `profiles` (1:1 with `auth.users`) + `handle_new_user()` auto-provision trigger + RLS. |
-| `0004_production_records.sql` | The 7 typed production tables + shared RLS/indexes/triggers. |
-| `0005_stock_records.sql` | Consolidated `stock_records` (replaces 5 old stock tables). |
-| `0006_no_work_records.sql` | `no_work_records`. |
-| `0007_inventory.sql` | `consumable_stock` (replaces 6 balance tables), `packaging_live_stocks`, `packaging_bom`, `raw_materials_received`, and the balance triggers. |
-| `0008_gamification.sql` | `supervisor_streaks`, `supervisor_badges`. |
-| `0009_seed.sql` | Initial balance/live-stock rows. |
-| `0010_functions.sql` | `finished_goods_stock()` (derived finished-goods on-hand). |
-| `0011_stock_counts.sql` | Derived stock ledger: `stock_counts` (baseline/reconciliation anchors) + `shift_rank`, `stock_balance_core`, `stock_opening`, `stock_remaining_asof`, `stock_ledger`, `record_stock_count`. |
-| `0012_profile_privilege_guard.sql` | Blocks a supervisor changing their own `role` / `department` / `group_number` (RLS gates rows, not columns). Admins and the service role still can. |
-| `0013_prevent_duplicate_submissions.sql` | One record per (record type, date, shift, product/variant). Requires **PG15+** for `NULLS NOT DISTINCT`. |
-| `0014_harden_new_user_provisioning.sql` | Makes `handle_new_user()` tolerant of invalid role/department/group metadata, so creating an account can never fail with "Database error saving new user". |
+| `0001_foundation.sql` | Extensions, enum types (`shift_type`, `user_role`, `product_type`), `set_updated_at()`, and the RLS role helpers (`current_user_role`, `is_staff`, `is_admin`, `is_procurement_staff`). |
+| `0002_reference_data.sql` | Reference tables + seed: `departments`, `stock_materials`, `consumable_materials`, `herb_types`, `packaging_bom` (the stamp/carton rates the ledger derives consumption from). |
+| `0003_identity.sql` | `profiles` (1:1 with `auth.users`), the resilient `handle_new_user()` auto-provision trigger, RLS, and the guard that stops a supervisor changing their own `role` / `department` / `group_number`. |
+| `0004_records.sql` | Everything supervisors and procurement write to: the 7 typed production tables, consolidated `stock_records`, `no_work_records`, `consumable_stock` + `raw_materials_received`, `supervisor_streaks` / `supervisor_badges`, shared RLS/indexes/triggers, the PPE seed, and the one-record-per-shift unique indexes. Requires **PG15+** (`NULLS NOT DISTINCT`). |
+| `0005_ledger_and_grants.sql` | The derived stock ledger — `stock_counts` + `shift_rank`, `stock_balance_core`, `stock_opening`, `stock_remaining_asof`, `stock_ledger`, `record_stock_count`, `finished_goods_stock()` — then the Data API grants. **Must run last.** |
+
+> Consolidated from a previous 15-file set. The squash was verified schema-identical
+> with `scripts/verify-squash.sh`, which diffs four independent projections
+> (`pg_dump` structure, privileges/RLS/policies, seed rows, and an md5 of every
+> function body) between the two sets. If you split or merge these files again,
+> run that script.
+
+> **If every request fails with `42501 permission denied for schema public`** while
+> the SQL editor works fine, you dropped and recreated the `public` schema at some
+> point. That destroys Supabase's default grants; the SQL editor still works
+> because it connects as the schema *owner*. Apply `0005_ledger_and_grants.sql`.
 
 ### Option A — Supabase SQL Editor
 Paste the contents of each file, in order, and run.
@@ -75,7 +77,7 @@ metadata role for every account, with a verdict column.
 | Message | Cause | Fix |
 |---|---|---|
 | "This login exists but has no profile record yet." | An `auth.users` row with no `public.profiles` row. Usually the migrations were re-run, rebuilding `public` while `auth` survived. | Run `bootstrap-admin.sql` (step 1 backfills). |
-| "Your profile could not be loaded because of a server configuration problem." | The profiles read errored — a bad `profiles_select` policy, or `SUPABASE_SERVICE_ROLE_KEY` unset. | Re-apply `0003_profiles.sql`; check env vars. Server logs carry the exact error. |
+| "Your profile could not be loaded because of a server configuration problem." | The profiles read errored — a bad `profiles_select` policy, or `SUPABASE_SERVICE_ROLE_KEY` unset. | Re-apply `0003_identity.sql`; check env vars. Server logs carry the exact error. |
 | "This is a Supervisor account, so it cannot sign in here…" | The account's role is genuinely lower than the form requires. | Promote it, then sign out and back in. |
 
 ---
@@ -90,7 +92,8 @@ tsc and the build); `.github/workflows/ci.yml` runs the same files in CI.
 |---|---|
 | `_shim.sql` | Test-only stand-in for Supabase's `auth` schema. Never applied to a real project. |
 | `01_ledger.sql` | Out-of-order shift self-healing, reconciliation variance, preform/stamp/carton derived balances, no drift on edit. |
-| `02_security.sql` | The 0012 privilege guard (incl. that admin + service-role paths still work), the 0013 duplicate guards and their exemptions, and 0014's tolerance of bad metadata. |
+| `02_security.sql` | The profile privilege guard (incl. that admin + service-role paths still work), the duplicate-submission guards and their exemptions, and `handle_new_user`'s tolerance of bad metadata. |
+| `03_api_grants.sql` | The Data API grants, the "every public table has RLS" invariant those grants depend on, and that `anon` cannot execute the SECURITY DEFINER stock functions. |
 
 ```bash
 npm run validate     # everything
@@ -104,7 +107,7 @@ npm run test:run     # unit tests only
 The old repo did not contain the DB triggers the running app relied on. One
 remains reconstructed and worth confirming against your live DB:
 
-1. **`apply_raw_material_received`** (`0007_inventory.sql`) — updates
+1. **`apply_raw_material_received`** (`0004_records.sql`) — updates
    `consumable_stock` when a PPE delivery/issue is logged. *High confidence*
    (derived directly from the submit payload).
 
@@ -112,7 +115,7 @@ Resolved: tax-stamp/carton consumption is no longer a trigger. The rates
 (Bitters 9, Ginger 6 stamps per carton; 1 carton box per carton) are
 user-confirmed, and the balance is **derived on read** (received events +
 cartons produced × rate, anchored to management stock counts) — see
-`0011_stock_counts.sql`. This self-corrects on edit/delete and cannot drift.
+`0005_ledger_and_grants.sql`. This self-corrects on edit/delete and cannot drift.
 
 If you still want to cross-check the old hidden logic, dump the live definitions:
 

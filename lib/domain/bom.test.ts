@@ -1,200 +1,207 @@
 import { describe, it, expect } from "vitest"
 import type { Product } from "@/lib/db/types"
 import {
-  BITTERS_BOM,
-  CARTON_BOM,
-  GINGER_BOM,
-  estimateMaterialUsage,
+  BOTTLES_PER_CARTON,
+  BOTTLE_LITRES,
+  CARTON_LITRES,
+  PRODUCT_BOM,
+  VESSEL,
+  cartonsPerBatch,
+  estimateUsage,
+  recipeBalances,
+  recipeLitres,
+  vesselsPerCarton,
 } from "@/lib/domain/bom"
 
-describe("BITTERS_BOM factors", () => {
-  it("uses 0.01 drums of alcohol per carton", () => {
-    expect(BITTERS_BOM.alcohol).toEqual({ factor: 0.01, unit: "drums" })
-  })
+const PRODUCTS: Product[] = ["Bitters", "Ginger"]
 
-  it("uses 2 litres of concentrate per 900 cartons", () => {
-    expect(BITTERS_BOM.concentrate.factor).toBe(2 / 900)
-    expect(BITTERS_BOM.concentrate.unit).toBe("litres")
-  })
-
-  it("uses 0.1 litres of spices per 1000 cartons", () => {
-    expect(BITTERS_BOM.spices.factor).toBe(0.0001)
-  })
-
-  it("uses 0.002 gallons of caramel per carton", () => {
-    expect(BITTERS_BOM.caramel).toEqual({ factor: 0.002, unit: "gallons" })
-  })
-
-  it("uses 4.36 litres of water per 2500 cartons", () => {
-    expect(BITTERS_BOM.water.factor).toBe(4.36 / 2500)
-  })
-
-  it("covers exactly the five soft (untracked) bitters inputs", () => {
-    expect(Object.keys(BITTERS_BOM)).toEqual([
-      "alcohol",
-      "concentrate",
-      "spices",
-      "caramel",
-      "water",
-    ])
+describe("carton geometry", () => {
+  it("is 12 bottles of 750 mL = 9 litres", () => {
+    expect(BOTTLES_PER_CARTON).toBe(12)
+    expect(BOTTLE_LITRES).toBe(0.75)
+    expect(CARTON_LITRES).toBe(9)
   })
 })
 
-describe("GINGER_BOM factors", () => {
-  it("uses 2.7 drums of alcohol per 250 cartons (a higher alcohol rate than bitters)", () => {
-    expect(GINGER_BOM.alcohol.factor).toBe(2.7 / 250)
-    expect(GINGER_BOM.alcohol.factor).toBeGreaterThan(BITTERS_BOM.alcohol.factor)
+describe("vessels", () => {
+  it("uses the plant's own containers, not generic litres", () => {
+    expect(VESSEL.drum.litres).toBe(250)
+    expect(VESSEL.tank.litres).toBe(1000)
+    expect(VESSEL.rambo.litres).toBe(2500)
   })
 
-  it("uses 5.1165 litres of water per 2500 cartons", () => {
-    expect(GINGER_BOM.water.factor).toBe(5.1165 / 2500)
-  })
-
-  it("uses 1.08 litres of GT juice per carton", () => {
-    expect(GINGER_BOM.gt_juice).toEqual({ factor: 1.08, unit: "litres" })
-  })
-
-  it("uses 0.09 litres of spices per 1000 cartons", () => {
-    expect(GINGER_BOM.spices.factor).toBe(0.09 / 1000)
-  })
-
-  it("uses 0.0135 gallons of caramel per 20 cartons", () => {
-    expect(GINGER_BOM.caramel.factor).toBe(0.0135 / 20)
-    expect(GINGER_BOM.caramel.unit).toBe("gallons")
-  })
-
-  it("covers exactly the five soft (untracked) ginger inputs, including gt_juice", () => {
-    expect(Object.keys(GINGER_BOM)).toEqual([
-      "alcohol",
-      "water",
-      "gt_juice",
-      "spices",
-      "caramel",
-    ])
-  })
-
-  it("has no concentrate line (concentrate is bitters-only)", () => {
-    expect(GINGER_BOM.concentrate).toBeUndefined()
+  it("treats a 'gallon' as the 20 L drum it is on the floor, not a US gallon", () => {
+    // 3.79 L would silently mis-scale every caramel figure by ~5×.
+    expect(VESSEL.gallon.litres).toBe(20)
   })
 })
 
-describe("CARTON_BOM registry", () => {
-  it("maps both products to their BOMs and nothing else", () => {
-    expect(Object.keys(CARTON_BOM)).toEqual(["Bitters", "Ginger"])
-    expect(CARTON_BOM.Bitters).toBe(BITTERS_BOM)
-    expect(CARTON_BOM.Ginger).toBe(GINGER_BOM)
+// ════════════════════════════════════════════════════════════════════════════
+// The invariant that makes this data self-checking: a recipe must exactly fill
+// the carton it claims to produce. This is what caught the original unit error.
+// ════════════════════════════════════════════════════════════════════════════
+describe("recipes fill exactly one carton", () => {
+  it.each(PRODUCTS)("%s ingredients sum to 9 L", (product) => {
+    expect(recipeLitres(product)).toBe(CARTON_LITRES)
+    expect(recipeBalances(product)).toBe(true)
+  })
+})
+
+describe("Bitters recipe (confirmed 2026-08-26)", () => {
+  const bom = PRODUCT_BOM.Bitters
+  const byKey = Object.fromEntries(bom.ingredients.map((i) => [i.key, i]))
+
+  it("is a 900 L batch yielding exactly 100 cartons", () => {
+    expect(bom.batchLitres).toBe(900)
+    expect(bom.cartonsPerBatch).toBe(100)
+    expect(cartonsPerBatch("Bitters")).toBe(100)
   })
 
-  it("gives every material a positive factor and a non-empty unit", () => {
-    for (const [product, bom] of Object.entries(CARTON_BOM)) {
-      for (const [material, { factor, unit }] of Object.entries(bom)) {
-        expect(factor, `${product}/${material} factor`).toBeGreaterThan(0)
-        expect(unit, `${product}/${material} unit`).not.toBe("")
-      }
+  it("matches the stated per-tank quantities when scaled to a batch", () => {
+    // 250 L ethanol · 200 L concentrate · 10 L spices · 4 L caramel · 436 L water
+    const perBatch = estimateUsage("Bitters", 100)
+    const litres = Object.fromEntries(perBatch.map((l) => [l.key, l.litres]))
+    expect(litres.alcohol).toBe(250)
+    expect(litres.concentrate).toBe(200)
+    expect(litres.spices).toBe(10)
+    expect(litres.caramel).toBe(4)
+    expect(litres.water).toBe(436)
+    expect(Object.values(litres).reduce((a, b) => a + b, 0)).toBe(900)
+  })
+
+  it("measures each ingredient in its own vessel", () => {
+    expect(byKey.alcohol.vessel).toBe(VESSEL.drum)
+    expect(byKey.concentrate.vessel).toBe(VESSEL.tank)
+    expect(byKey.water.vessel).toBe(VESSEL.rambo)
+    expect(byKey.spices.vessel).toBe(VESSEL.tank)
+    expect(byKey.caramel.vessel).toBe(VESSEL.gallon)
+  })
+
+  it("reproduces the original vessel factors that were correct", () => {
+    // 2.5 L ÷ 250 L per drum = 0.01 drums per carton — the one factor the old
+    // code got right, because it was the only one labelled with its real vessel.
+    expect(vesselsPerCarton(byKey.alcohol)).toBe(0.01)
+    // 0.04 L ÷ 20 L per gallon = 0.002 gallons — also correct once "gallon" is
+    // understood as 20 L.
+    expect(vesselsPerCarton(byKey.caramel)).toBe(0.002)
+  })
+
+  it("corrects the concentrate denominator", () => {
+    // The old factor was 2/900 = 0.002222, using the BITTERS tank size. The
+    // concentrate tank is 1000 L, so the correct vessel fraction is 2/1000 —
+    // the old value overstated concentrate by ~11%.
+    expect(vesselsPerCarton(byKey.concentrate)).toBe(0.002)
+    expect(vesselsPerCarton(byKey.concentrate)).not.toBeCloseTo(2 / 900, 6)
+  })
+
+  it("is fully confirmed", () => {
+    expect(bom.confirmed).toBe(true)
+    expect(bom.ingredients.every((i) => i.confirmed)).toBe(true)
+  })
+})
+
+describe("Ginger recipe (confirmed 2026-08-26)", () => {
+  const bom = PRODUCT_BOM.Ginger
+  const byKey = Object.fromEntries(bom.ingredients.map((i) => [i.key, i]))
+
+  it("is a 1000 L batch — larger than Bitters' 900 L", () => {
+    expect(bom.batchLitres).toBe(1000)
+    expect(PRODUCT_BOM.Bitters.batchLitres).toBe(900)
+  })
+
+  it("yields a fractional carton count, and does NOT round it", () => {
+    // 1000 L ÷ 9 L = 111.1 cartons. Rounding to 111 would misstate a batch's
+    // yield and quietly break the per-batch reconciliation below.
+    expect(cartonsPerBatch("Ginger")).toBeCloseTo(1000 / 9, 10)
+    expect(Number.isInteger(cartonsPerBatch("Ginger"))).toBe(false)
+  })
+
+  it("matches the stated per-tank quantities when scaled to a batch", () => {
+    // 300 L ethanol · 120 L GT juice · 10 L spices · 1.5 L caramel · 568.5 L water
+    const perBatch = estimateUsage("Ginger", cartonsPerBatch("Ginger"))
+    const litres = Object.fromEntries(perBatch.map((l) => [l.key, l.litres]))
+    expect(litres.alcohol).toBe(300)
+    expect(litres.gt_juice).toBe(120)
+    expect(litres.spices).toBe(10)
+    expect(litres.caramel).toBe(1.5)
+    expect(litres.water).toBe(568.5)
+    expect(Object.values(litres).reduce((a, b) => a + b, 0)).toBeCloseTo(1000, 6)
+  })
+
+  it("carries GT juice and no concentrate", () => {
+    expect(byKey.gt_juice).toBeDefined()
+    expect(byKey.concentrate).toBeUndefined()
+  })
+
+  it("uses more ethanol per carton than Bitters", () => {
+    const bitters = PRODUCT_BOM.Bitters.ingredients.find((i) => i.key === "alcohol")!
+    expect(byKey.alcohol.litresPerCarton).toBeGreaterThan(bitters.litresPerCarton)
+  })
+
+  it("reproduces the original code's numerators exactly", () => {
+    // Every Ginger figure was already correct; only the unit LABELS were wrong.
+    expect(byKey.alcohol.litresPerCarton).toBe(2.7)
+    expect(byKey.water.litresPerCarton).toBe(5.1165)
+    expect(byKey.gt_juice.litresPerCarton).toBe(1.08)
+    expect(byKey.spices.litresPerCarton).toBe(0.09)
+    expect(byKey.caramel.litresPerCarton).toBe(0.0135)
+  })
+
+  it("is fully confirmed", () => {
+    expect(bom.confirmed).toBe(true)
+  })
+})
+
+describe("estimateUsage", () => {
+  it("reports litres AND vessels, because procurement orders vessels", () => {
+    const alcohol = estimateUsage("Bitters", 100).find((l) => l.key === "alcohol")!
+    expect(alcohol.litres).toBe(250)
+    expect(alcohol.vessels).toBe(1) // exactly one 250 L drum
+    expect(alcohol.vessel.name).toBe("drum")
+  })
+
+  it("scales linearly", () => {
+    const one = estimateUsage("Bitters", 100)
+    const two = estimateUsage("Bitters", 200)
+    for (const [i, line] of one.entries()) {
+      expect(two[i].litres).toBeCloseTo(line.litres * 2, 6)
     }
   })
 
-  it("does NOT include tax stamps or cartons (those rates live in the DB packaging_bom table)", () => {
-    for (const bom of Object.values(CARTON_BOM)) {
-      expect(Object.keys(bom)).not.toContain("tax_stamp")
-      expect(Object.keys(bom)).not.toContain("cartons")
+  it("is all zeroes for zero cartons", () => {
+    expect(estimateUsage("Ginger", 0).every((l) => l.litres === 0 && l.vessels === 0)).toBe(true)
+  })
+
+  it("keeps a single carton meaningful, unlike the old 2dp-only rounding", () => {
+    // Previously every small ingredient collapsed to 0 for one carton because the
+    // vessel fraction was rounded, not the litres. Litres stay legible now.
+    const one = estimateUsage("Bitters", 1)
+    expect(one.find((l) => l.key === "water")!.litres).toBe(4.36)
+    expect(one.find((l) => l.key === "caramel")!.litres).toBe(0.04)
+  })
+
+  it("preserves ingredient order", () => {
+    expect(estimateUsage("Bitters", 10).map((l) => l.key)).toEqual(
+      PRODUCT_BOM.Bitters.ingredients.map((i) => i.key),
+    )
+  })
+
+  it("carries the confirmed flag through, so the UI can warn per ingredient", () => {
+    expect(estimateUsage("Bitters", 10).every((l) => l.confirmed)).toBe(true)
+    expect(estimateUsage("Ginger", 10).every((l) => l.confirmed)).toBe(true)
+  })
+
+  it("does not mutate the source recipe", () => {
+    const before = JSON.stringify(PRODUCT_BOM.Bitters)
+    estimateUsage("Bitters", 12345)
+    expect(JSON.stringify(PRODUCT_BOM.Bitters)).toBe(before)
+  })
+
+  it("excludes tax stamps and cartons — those rates live in the DB packaging_bom", () => {
+    for (const p of PRODUCTS) {
+      const keys = PRODUCT_BOM[p].ingredients.map((i) => i.key)
+      expect(keys).not.toContain("tax_stamp")
+      expect(keys).not.toContain("carton")
     }
-  })
-})
-
-describe("estimateMaterialUsage - Bitters", () => {
-  it("estimates a 900-carton batch across all five inputs", () => {
-    expect(estimateMaterialUsage("Bitters", 900)).toEqual({
-      alcohol: { amount: 9, unit: "drums" },
-      concentrate: { amount: 2, unit: "litres" },
-      spices: { amount: 0.09, unit: "litres" },
-      caramel: { amount: 1.8, unit: "gallons" },
-      water: { amount: 1.57, unit: "litres" },
-    })
-  })
-
-  it("scales linearly: 1800 cartons uses twice the alcohol of 900", () => {
-    const single = estimateMaterialUsage("Bitters", 900)
-    const double = estimateMaterialUsage("Bitters", 1800)
-    expect(double.alcohol.amount).toBe(single.alcohol.amount * 2)
-  })
-
-  it("returns 0 for every material when 0 cartons were produced", () => {
-    const out = estimateMaterialUsage("Bitters", 0)
-    expect(Object.values(out).map((m) => m.amount)).toEqual([0, 0, 0, 0, 0])
-  })
-
-  it("rounds amounts to 2 decimal places, collapsing sub-0.005 inputs to 0 for a single carton", () => {
-    // NOTE: intended precision limit of the 2dp rounding - a 1-carton estimate is
-    // meaningless for the small-factor inputs. Documented, not a bug.
-    expect(estimateMaterialUsage("Bitters", 1)).toEqual({
-      alcohol: { amount: 0.01, unit: "drums" },
-      concentrate: { amount: 0, unit: "litres" },
-      spices: { amount: 0, unit: "litres" },
-      caramel: { amount: 0, unit: "gallons" },
-      water: { amount: 0, unit: "litres" },
-    })
-  })
-
-  it("rounds half up at the 2dp boundary (2500 cartons of water = 4.36 -> 4.36)", () => {
-    expect(estimateMaterialUsage("Bitters", 2500).water.amount).toBe(4.36)
-  })
-
-  it("absorbs floating-point drift: 900 x (2/900) rounds to exactly 2", () => {
-    expect(estimateMaterialUsage("Bitters", 900).concentrate.amount).toBe(2)
-  })
-})
-
-describe("estimateMaterialUsage - Ginger", () => {
-  it("estimates a 250-carton batch across all five inputs", () => {
-    expect(estimateMaterialUsage("Ginger", 250)).toEqual({
-      alcohol: { amount: 2.7, unit: "drums" },
-      water: { amount: 0.51, unit: "litres" },
-      gt_juice: { amount: 270, unit: "litres" },
-      spices: { amount: 0.02, unit: "litres" },
-      caramel: { amount: 0.17, unit: "gallons" },
-    })
-  })
-
-  it("uses more alcohol than bitters for the same carton count", () => {
-    const bitters = estimateMaterialUsage("Bitters", 1000)
-    const ginger = estimateMaterialUsage("Ginger", 1000)
-    expect(ginger.alcohol.amount).toBeGreaterThan(bitters.alcohol.amount)
-  })
-
-  it("returns 0 for every material when 0 cartons were produced", () => {
-    const out = estimateMaterialUsage("Ginger", 0)
-    expect(Object.values(out).map((m) => m.amount)).toEqual([0, 0, 0, 0, 0])
-  })
-})
-
-describe("estimateMaterialUsage - shape and safety", () => {
-  it("returns the same material keys as the product's BOM, in the same order", () => {
-    expect(Object.keys(estimateMaterialUsage("Ginger", 100))).toEqual(Object.keys(GINGER_BOM))
-    expect(Object.keys(estimateMaterialUsage("Bitters", 100))).toEqual(Object.keys(BITTERS_BOM))
-  })
-
-  it("carries the BOM unit through unchanged for every material", () => {
-    const out = estimateMaterialUsage("Bitters", 500)
-    for (const [material, { unit }] of Object.entries(BITTERS_BOM)) {
-      expect(out[material].unit, `unit for ${material}`).toBe(unit)
-    }
-  })
-
-  it("does not mutate the source BOM", () => {
-    const before = JSON.stringify(BITTERS_BOM)
-    estimateMaterialUsage("Bitters", 12345)
-    expect(JSON.stringify(BITTERS_BOM)).toBe(before)
-  })
-
-  it("throws for a product outside the registry (no silent empty estimate)", () => {
-    // NOTE: documenting current behaviour. `Object.entries(undefined)` throws, so
-    // an unknown product is a TypeError rather than {} - the Product union is the
-    // only guard.
-    expect(() => estimateMaterialUsage("Vodka" as Product, 100)).toThrow(TypeError)
-  })
-
-  it("returns NaN amounts for a NaN carton count rather than throwing", () => {
-    expect(estimateMaterialUsage("Bitters", Number.NaN).alcohol.amount).toBeNaN()
   })
 })

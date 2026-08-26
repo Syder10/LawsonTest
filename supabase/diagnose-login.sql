@@ -63,18 +63,18 @@ begin
   end if;
 
   if v_denied then
-    raise notice 'VERDICT: `authenticated` has no SELECT grant on public.profiles.';
-    raise notice '         Grants are checked BEFORE RLS, so no policy can let this';
-    raise notice '         through. Fix (section 4 below):';
-    raise notice '           grant usage on schema public to authenticated, anon;';
-    raise notice '           grant select, insert, update on public.profiles to authenticated;';
+    raise notice 'VERDICT: the API role has no privileges on public.profiles (or on the';
+    raise notice '         schema itself). Grants are checked BEFORE RLS, so no policy can';
+    raise notice '         compensate. This is what `drop schema public cascade` leaves';
+    raise notice '         behind — it destroys Supabase''s default grants.';
+    raise notice '         FIX: apply supabase/migrations/0005_ledger_and_grants.sql';
   elsif v_owner = 0 then
     raise notice 'VERDICT: no profile row at all -> run bootstrap-admin.sql';
   elsif v_rls = 0 then
     raise notice 'VERDICT: the row EXISTS but RLS hides it from its own user.';
     raise notice '         The profiles_select policy is missing or wrong (section 2),';
     raise notice '         or is_staff()/is_admin() are absent (0001 not applied).';
-    raise notice '         Re-apply 0003_profiles.sql.';
+    raise notice '         Re-apply 0003_identity.sql.';
   else
     raise notice 'VERDICT: the row is readable by the app. If login still fails,';
     raise notice '         the deployed build is stale, or it points at a DIFFERENT';
@@ -98,7 +98,7 @@ order by grantee, privilege_type;
 --   grant select, insert, update on public.profiles to authenticated;
 --
 -- Missing/incorrect policy (section 2 shows no profiles_select):
---   re-apply supabase/migrations/0003_profiles.sql, or just:
+--   re-apply supabase/migrations/0003_identity.sql, or just:
 --   drop policy if exists "profiles_select" on public.profiles;
 --   create policy "profiles_select" on public.profiles for select to authenticated
 --     using (id = auth.uid() or public.is_staff());

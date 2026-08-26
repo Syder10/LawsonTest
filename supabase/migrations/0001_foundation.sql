@@ -1,7 +1,15 @@
 -- ============================================================================
--- 0001_extensions_types_helpers.sql
--- Extensions, enum types, and shared helper functions (RLS + updated_at).
--- Run order: FIRST. Everything else depends on the types and helpers here.
+-- 0001_foundation.sql
+--
+-- Extensions, enum types, and the shared helper functions everything else
+-- depends on. Run FIRST.
+--
+-- Consolidated from the previous 15-file migration set. The five files are:
+--   0001_foundation        extensions, enums, helpers          (this file)
+--   0002_reference_data    lookup tables + seeds
+--   0003_identity          profiles, provisioning, RLS guards
+--   0004_records           production/stock/inventory/gamification tables
+--   0005_ledger_and_grants derived stock ledger + Data API grants
 -- ============================================================================
 
 -- ── Extensions ──────────────────────────────────────────────────────────────
@@ -24,7 +32,7 @@ exception when duplicate_object then null; end $$;
 
 -- ── updated_at trigger ──────────────────────────────────────────────────────
 -- The old schema defaulted updated_at to now() but never maintained it.
--- This trigger keeps it accurate on every UPDATE. Attached per-table below.
+-- This trigger keeps it accurate on every UPDATE. Attached per-table later.
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql

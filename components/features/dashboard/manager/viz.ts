@@ -1,26 +1,57 @@
-// Validated data-viz tokens for the manager dashboard (light surface).
+// Data-viz tokens for the dashboards.
 //
-// Categorical series (Bitters / Ginger) validated with the dataviz palette
-// checker: L-band PASS, chroma PASS, CVD ΔE 39.3 (well above the 12 floor),
-// contrast PASS. Identity is never colour-alone — every chart is direct-labeled
-// and legended, and the materials table pairs status colour with an icon+label.
+// These read the CSS custom properties from app/globals.css rather than
+// hardcoding hex, so charts follow the light/dark theme. recharts needs concrete
+// colour STRINGS for SVG attributes, and `var(--x)` is valid in SVG fill/stroke,
+// so the indirection works without a JS theme lookup or a re-render on toggle.
+//
+// SERIES vs STATUS is a hard separation. The previous version used #d97706 for
+// BOTH the Ginger series and the warning status, so a low-stock warning and a
+// product read as the same colour. Series now sit on teal/orange and status keeps
+// green/amber/red, with brand emerald reserved for UI chrome.
+//
+// The pair was chosen by running the dataviz validator, not by eye. The old
+// emerald+amber pair measured protan ΔE 7.9 — inside the 6–8 warn band, i.e.
+// green-vs-orange, the classic protanope confusion — despite this file's previous
+// comment claiming "ΔE 39.3, well above the floor". Teal+orange measures protan
+// 13.8 / tritan 34.5 and clears both axes outright.
 
 export const SERIES = {
-  bitters: "#059669", // emerald 600
-  ginger: "#d97706", // amber 600
-  total: "#334155", // slate 700 (neutral aggregate line)
+  bitters: "var(--series-bitters)",
+  ginger: "var(--series-ginger)",
+  total: "var(--series-total)", // neutral: an aggregate, not a third category
 } as const
 
-// Status palette (reserved — not reused for series).
+// Status palette — RESERVED. Never reused for a series, and never colour-alone:
+// every consumer pairs these with an icon and a word (see StatusBadge).
 export const STATUS = {
-  red: { fill: "#dc2626", soft: "bg-red-50", ring: "border-red-200", text: "text-red-700", dot: "bg-red-500" },
-  yellow: { fill: "#d97706", soft: "bg-amber-50", ring: "border-amber-200", text: "text-amber-700", dot: "bg-amber-500" },
-  none: { fill: "#059669", soft: "bg-emerald-50", ring: "border-emerald-200", text: "text-emerald-700", dot: "bg-emerald-500" },
+  red: {
+    fill: "var(--status-critical)",
+    soft: "bg-critical-subtle",
+    ring: "border-critical/30",
+    text: "text-critical-ink",
+    dot: "bg-critical",
+  },
+  yellow: {
+    fill: "var(--status-warning)",
+    soft: "bg-warning-subtle",
+    ring: "border-warning/30",
+    text: "text-warning-ink",
+    dot: "bg-warning",
+  },
+  none: {
+    fill: "var(--status-good)",
+    soft: "bg-good-subtle",
+    ring: "border-good/30",
+    text: "text-good-ink",
+    dot: "bg-good",
+  },
 } as const
 
-export const SURFACE = "#f7f7f5"
-export const GRID = "#e5e7eb"
-export const AXIS = "#94a3b8"
+// Chart chrome: recessive hairlines, one step off the surface, never dashed.
+export const SURFACE = "var(--chart-surface)"
+export const GRID = "var(--chart-grid)"
+export const AXIS = "var(--chart-axis)"
 
 export const fmt = (n: number) => new Intl.NumberFormat().format(Math.round(n))
 export const fmt1 = (n: number) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(n)
@@ -29,6 +60,6 @@ export const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "
 
 // "2026-08-21" → "Aug 21" (UTC-safe, no timezone drift)
 export const shortDay = (iso: string) => {
-  const [y, m, d] = iso.split("-").map(Number)
+  const [, m, d] = iso.split("-").map(Number)
   return `${MONTHS[m - 1]} ${d}`
 }

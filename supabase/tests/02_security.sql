@@ -2,9 +2,9 @@
 -- supabase/tests/02_security.sql
 --
 -- Behaviour tests for the two DB-enforced boundaries:
---   • 0012_profile_privilege_guard.sql — a supervisor cannot change their own
+--   • 0003_identity.sql — a supervisor cannot change their own
 --     role / department / group_number, but an admin (and the service role) can.
---   • 0013_prevent_duplicate_submissions.sql — one record per (type, date,
+--   • 0004_records.sql — one record per (type, date,
 --     shift, product/variant), with the deliberate exemptions preserved.
 --
 -- These run as the TABLE OWNER, so RLS is bypassed. That is the whole point: it
@@ -33,7 +33,7 @@ begin
   raise notice 'PASS fixtures provisioned via handle_new_user';
 end $$;
 
--- ════════════════════════ 0012: profile privilege guard ════════════════════════
+-- ════════════════════════ profile privilege guard (0003) ════════════════════════
 
 -- Act as the SUPERVISOR from here on.
 set request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
@@ -127,7 +127,7 @@ begin
   raise notice 'PASS service-role/owner path can reassign privileged columns';
 end $$;
 
--- ════════════════════ 0013: one record per shift ════════════════════════
+-- ════════════════════ one record per shift (0004) ════════════════════════
 
 -- ── stock_records: keyed by (material, date, shift, product, variant) ────────
 insert into public.stock_records (date, shift, department, material, quantity_received, quantity_used)
@@ -263,8 +263,8 @@ begin
   raise notice 'PASS duplicate no-work blocked';
 end $$;
 
--- ════════════════ 0014: resilient new-user provisioning ════════════════
--- Bad metadata must never abort account creation. Before 0014, each of these
+-- ════════════════ resilient new-user provisioning (0003) ════════════════
+-- Bad metadata must never abort account creation. Before this hardening, each of these
 -- raised out of the AFTER INSERT trigger and surfaced in the Supabase dashboard
 -- as "Database error saving new user".
 set request.jwt.claim.sub = '';

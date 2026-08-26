@@ -1,9 +1,10 @@
 -- ============================================================================
 -- 0002_reference_data.sql
 -- Reference / lookup tables: departments, stock materials, consumable materials,
--- herb types. These carry domain metadata that was previously hardcoded and
--- duplicated across 5+ code locations (department lists, conversion constants,
--- material maps). Now there is one source of truth.
+-- herb types, and the packaging bill of materials. These carry domain metadata
+-- that was previously hardcoded and duplicated across 5+ code locations
+-- (department lists, conversion constants, material maps, stamp rates). Now
+-- there is one source of truth.
 --
 -- Readable by any authenticated user; writable only by admins.
 -- ============================================================================
@@ -95,11 +96,32 @@ create table public.herb_types (
   created_at timestamptz not null default now()
 );
 
+-- ── packaging_bom: materials consumed per carton produced ────────────────────
+-- Single source of truth for the stamp/carton consumption rates that were
+-- previously hardcoded in the procurement route (9 stamps/Bitters, 6/Ginger).
+-- Read by stock_balance_core (0005) to DERIVE stamp/carton consumption from the
+-- packaging records, so it self-corrects on edit/delete and cannot drift.
+--
+-- NOTE on finished-goods stock: there is deliberately NO packaging_live_stocks
+-- table. Finished-goods on-hand is a pure function of the packaging records
+-- (Σ produced − Σ loaded) and is computed on read via finished_goods_stock()
+-- in 0005. Storing it as a running total (the old approach) drifts when records
+-- are edited/deleted and can go negative; deriving it cannot.
+create table public.packaging_bom (
+  product            public.product_type primary key,
+  stamps_per_carton  integer not null,
+  cartons_per_carton integer not null default 1
+);
+insert into public.packaging_bom (product, stamps_per_carton, cartons_per_carton) values
+  ('Bitters', 9, 1),
+  ('Ginger',  6, 1);
+
 -- ── RLS: reference data is world-readable (authenticated), admin-writable ────
 alter table public.departments          enable row level security;
 alter table public.stock_materials       enable row level security;
 alter table public.consumable_materials  enable row level security;
 alter table public.herb_types            enable row level security;
+alter table public.packaging_bom          enable row level security;
 
 create policy "reference_read_departments"          on public.departments          for select to authenticated using (true);
 create policy "reference_read_stock_materials"       on public.stock_materials       for select to authenticated using (true);
@@ -114,3 +136,7 @@ create policy "admin_write_consumable_materials"  on public.consumable_materials
 -- but only through an authenticated session (closes the old public-write hole).
 create policy "herb_types_insert" on public.herb_types for insert to authenticated with check (true);
 create policy "herb_types_admin_delete" on public.herb_types for delete to authenticated using (public.is_admin());
+
+-- BOM is reference data.
+create policy "packaging_bom_read"  on public.packaging_bom for select to authenticated using (true);
+create policy "packaging_bom_admin" on public.packaging_bom for all    to authenticated using (public.is_admin()) with check (public.is_admin());

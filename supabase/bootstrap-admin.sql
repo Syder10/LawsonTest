@@ -50,7 +50,7 @@ order by
 -- ── Optional: assign a supervisor's department + rotation group ───────────────
 -- Both are required before compulsory records, streaks and the roster work. The
 -- app no longer lets supervisors set these themselves (see
--- 0012_profile_privilege_guard.sql) — an admin assigns them in User Management,
+-- 0003_identity.sql) — an admin assigns them in User Management,
 -- or here.
 --
 --   select name from public.departments order by display_order;  -- valid names
@@ -61,7 +61,7 @@ order by
 --    where email = 'someone@llc.com';
 
 -- ── Why the UPDATE above is allowed ──────────────────────────────────────────
--- 0012 installs a trigger that blocks changes to role / department /
+-- 0003_identity.sql installs a trigger that blocks changes to role / department /
 -- group_number. The SQL editor connects as the table owner, so auth.uid() is
 -- NULL and the trigger treats it as a privileged writer. The same applies to the
 -- service-role key used by /api/admin/users. What it blocks is a supervisor

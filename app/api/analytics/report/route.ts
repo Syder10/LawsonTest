@@ -1,39 +1,51 @@
 import { NextResponse } from "next/server"
 import { requireStaff } from "@/lib/auth/guards"
-import { operatingDaysBetween, projectRunOut } from "@/lib/domain/operating-days"
+import { operatingDaysBetween } from "@/lib/domain/operating-days"
+import { buildMaterialStatus, THRESHOLD_PAYLOAD, type MaterialStatus } from "@/lib/domain/stock-status"
+import type { DepartmentReport, KpiValue, OverviewReport } from "@/lib/domain/analytics-contract"
+import {
+  allMaterials,
+  columnsFor,
+  deptMetrics,
+  evaluate,
+  sourceTables,
+  trendSeries,
+  type DeptMaterial,
+} from "@/lib/domain/dept-metrics"
+import { SHIFT_ORDER } from "@/lib/shift-config"
 import type { Product, Shift } from "@/lib/db/types"
 
 // ============================================================================
-// Comprehensive, filterable analytics report for the manager dashboard.
+// Filterable analytics for the manager dashboard.
 //
-// Filters (query params): from, to (YYYY-MM-DD) or date (single day);
-//   shift (Morning|Afternoon|Night), department, product (Bitters|Ginger).
+// TWO SCOPES, one endpoint:
 //
-// Returns: windowed production/usage totals, live finished-goods on hand, a
-// per-day series, a per-shift breakdown, and a materials table with current
-// stock and an operating-day run-out projection (avg burn / operating day, days
-// left, and a projected run-out DATE — Mon–Sat, closed Sundays). Alert level is
-// derived from operating-days-left. Managers/admins read all rows via RLS.
+//   no department  -> "overview": company-wide production, finished goods, and
+//                     every ledger material.
+//   a department   -> "department": THAT department's own metrics and only the
+//                     materials it is responsible for.
+//
+// WHY THE SCOPES DIFFER
+// ---------------------
+// `department` PARTITIONS the data, it does not slice it: each record type belongs
+// to exactly one department. The previous version applied `.eq("department", …)`
+// to every query, so selecting (say) Blowing zeroed out packaging cartons, alcohol,
+// caps, labels and caramel, while `remaining` and `finishedGoods` stayed global.
+// Every material then reported usedInWindow 0 -> avgPerDay 0 -> daysLeft null ->
+// level "none", i.e. "no risk", for materials that were actually being consumed.
+// A half-empty, internally inconsistent dashboard for 4 of the 5 departments.
+//
+// What each department measures, which tables it owns and which materials it
+// carries all come from lib/domain/dept-metrics — the single registry, which
+// derives table membership from the record-type registry. The response shape lives
+// in lib/domain/analytics-contract, shared with the components that read it.
 // ============================================================================
-
-const RED_DAYS = 6 // ≤ ~1 working week
-const AMBER_DAYS = 12 // ≤ ~2 working weeks
-
-const STAMPS_PER_CARTON: Record<Product, number> = { Bitters: 9, Ginger: 6 }
-
-type Level = "red" | "yellow" | "none"
-const levelFromDays = (days: number | null): Level =>
-  days === null ? "none" : days <= RED_DAYS ? "red" : days <= AMBER_DAYS ? "yellow" : "none"
 
 const daysBetween = (from: string, to: string) =>
   Math.max(1, Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000) + 1)
 
-// Sum a numeric column.
-function agg(rows: { date: string }[] | null, pick: (r: any) => number) {
-  let sum = 0
-  for (const r of rows ?? []) sum += pick(r) || 0
-  return { sum }
-}
+type Row = Record<string, unknown>
+const num = (v: unknown) => (typeof v === "number" ? v : Number(v) || 0)
 
 export async function GET(request: Request) {
   const auth = await requireStaff()
@@ -46,120 +58,274 @@ export async function GET(request: Request) {
   const from = single || url.searchParams.get("from") || new Date(Date.now() - 29 * 86_400_000).toISOString().slice(0, 10)
   const to = single || url.searchParams.get("to") || today
   const shift = url.searchParams.get("shift") as Shift | null
-  const department = url.searchParams.get("department")
+  const departmentParam = url.searchParams.get("department")
   const product = url.searchParams.get("product") as Product | null
+  const opDays = operatingDaysBetween(from, to)
 
-  // Apply the common window + optional shift/department filters to a query.
-  const scope = (q: any, opts: { product?: boolean } = {}) => {
+  const filters = {
+    from,
+    to,
+    shift: shift ?? null,
+    department: departmentParam ?? null,
+    product: product ?? null,
+  }
+  const common = {
+    filters,
+    windowDays: daysBetween(from, to),
+    operatingDaysInWindow: opDays,
+    thresholds: THRESHOLD_PAYLOAD,
+    last_updated: new Date().toISOString(),
+  }
+
+  // Current balance for a ledger material, via the derived-ledger RPC. Coerced
+  // with Number(): PostgREST serialises numeric as a STRING, which would break
+  // the arithmetic downstream.
+  const remaining = async (material: string, prod?: Product | null, variant?: string | null) =>
+    Number(
+      (
+        await supabase.rpc("stock_remaining_asof", {
+          p_material: material,
+          p_date: today,
+          p_product: prod ?? null,
+          p_variant: variant ?? null,
+        })
+      ).data ?? 0,
+    )
+
+  // Windowed movement totals for a ledger material. Preform movements live in
+  // blowing_daily_records, not stock_records — see stock_materials in 0002.
+  const movement = async (m: DeptMaterial): Promise<{ used: number; received: number }> => {
+    if (m.material === "preform") {
+      let q = supabase
+        .from("blowing_daily_records")
+        .select("quantity_received_bags, preforms_used_bags")
+        .gte("date", from)
+        .lte("date", to)
+      if (shift) q = q.eq("shift", shift)
+      const rows = ((await q).data ?? []) as Row[]
+      return {
+        used: rows.reduce((s, r) => s + num(r.preforms_used_bags), 0),
+        received: rows.reduce((s, r) => s + num(r.quantity_received_bags), 0),
+      }
+    }
+
+    // tax_stamp / carton are never recorded as used — consumption is DERIVED from
+    // cartons produced × packaging_bom. Mirror that here so "used in window" and
+    // the balance agree.
+    if (m.material === "tax_stamp" || m.material === "carton") {
+      let q = supabase
+        .from("packaging_daily_records")
+        .select("product, quantity_cartons_produced")
+        .gte("date", from)
+        .lte("date", to)
+      if (shift) q = q.eq("shift", shift)
+      if (m.product) q = q.eq("product", m.product)
+      const rows = ((await q).data ?? []) as Row[]
+      const { data: bom } = await supabase.from("packaging_bom").select("product, stamps_per_carton, cartons_per_carton")
+      const rate = (p: unknown) => {
+        const row = (bom ?? []).find((b) => b.product === p)
+        if (!row) return 0
+        return m.material === "tax_stamp" ? num(row.stamps_per_carton) : num(row.cartons_per_carton)
+      }
+      return {
+        used: rows.reduce((s, r) => s + num(r.quantity_cartons_produced) * rate(r.product), 0),
+        received: 0, // receipts are logged in raw_materials_received, not here
+      }
+    }
+
+    let q = supabase
+      .from("stock_records")
+      .select("quantity_received, quantity_used")
+      .eq("material", m.material)
+      .gte("date", from)
+      .lte("date", to)
+    if (shift) q = q.eq("shift", shift)
+    if (m.product) q = q.eq("product", m.product)
+    if (m.perVariant) {
+      // Herb rows are per variant; the tile aggregates them.
+    }
+    const rows = ((await q).data ?? []) as Row[]
+    return {
+      used: rows.reduce((s, r) => s + num(r.quantity_used), 0),
+      received: rows.reduce((s, r) => s + num(r.quantity_received), 0),
+    }
+  }
+
+  const materialStatus = async (m: DeptMaterial): Promise<MaterialStatus> => {
+    const [rem, mv] = await Promise.all([remaining(m.material, m.product ?? null), movement(m)])
+    return buildMaterialStatus({
+      key: m.key,
+      label: m.label,
+      unit: m.unit,
+      remaining: rem,
+      usedInWindow: mv.used,
+      operatingDaysInWindow: opDays,
+      fromISO: today,
+    })
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // DEPARTMENT SCOPE
+  // ══════════════════════════════════════════════════════════════════════════
+  const def = departmentParam ? deptMetrics(departmentParam) : undefined
+  if (departmentParam && def) {
+    const tables = sourceTables(def.department)
+
+    // Fetch each owned table ONCE with just the columns its KPIs need.
+    const perTable = new Map<string, Row[]>()
+    await Promise.all(
+      tables.map(async (table) => {
+        const cols = columnsFor(def.department, table)
+        if (cols.length === 0) {
+          perTable.set(table, [])
+          return
+        }
+        const select = ["date", "shift", ...cols].join(", ")
+        let q = (supabase.from(table) as any).select(select).gte("date", from).lte("date", to)
+        // Every production table stamps `department`, so scoping by it is correct
+        // HERE — unlike the old code, which applied it to unrelated tables too.
+        q = q.eq("department", def.department)
+        if (shift) q = q.eq("shift", shift)
+        if (def.productSplit && product) q = q.eq("product", product)
+        const { data } = await q
+        perTable.set(table, (data ?? []) as Row[])
+      }),
+    )
+
+    const kpis: KpiValue[] = def.kpis.map((kpi) => {
+      const rows = perTable.get(kpi.table) ?? []
+      const sums: Record<string, number> = {}
+      for (const r of rows) {
+        for (const [k, v] of Object.entries(r)) {
+          if (k === "date" || k === "shift") continue
+          sums[k] = (sums[k] ?? 0) + num(v)
+        }
+      }
+      return {
+        key: kpi.key,
+        label: kpi.label,
+        unit: kpi.unit,
+        value: evaluate(kpi.compute, sums, rows.length),
+        goodDirection: kpi.goodDirection,
+        hint: kpi.hint,
+      }
+    })
+
+    // Per-day / per-shift series from THIS department's own trend measure.
+    const trend = trendSeries(def.department)
+    const trendRows = trend ? (perTable.get(trend.table) ?? []) : []
+    const dayMap = new Map<string, { total: number; bitters: number; ginger: number }>()
+    for (const r of trendRows) {
+      const date = String(r.date)
+      const v = trend ? num(r[trend.column]) : 0
+      const d = dayMap.get(date) ?? { total: 0, bitters: 0, ginger: 0 }
+      d.total += v
+      if (def.productSplit && r.product === "Bitters") d.bitters += v
+      if (def.productSplit && r.product === "Ginger") d.ginger += v
+      dayMap.set(date, d)
+    }
+    const byDay = [...dayMap.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([date, v]) => ({ date, ...v }))
+
+    const byShift = SHIFT_ORDER.map((s) => {
+      const rows = trendRows.filter((r) => r.shift === s)
+      const sum = (pred: (r: Row) => boolean) =>
+        rows.filter(pred).reduce((x, r) => x + (trend ? num(r[trend.column]) : 0), 0)
+      return {
+        shift: s,
+        total: sum(() => true),
+        bitters: def.productSplit ? sum((r) => r.product === "Bitters") : 0,
+        ginger: def.productSplit ? sum((r) => r.product === "Ginger") : 0,
+      }
+    })
+
+    const materials = await Promise.all(def.materials.map(materialStatus))
+
+    const payload: DepartmentReport = {
+      ...common,
+      scope: "department",
+      department: def.department,
+      summary: def.summary,
+      productSplit: def.productSplit,
+      kpis,
+      trend: { label: trend?.label ?? "Output", unit: trend?.unit },
+      byDay,
+      byShift,
+      materials,
+    }
+    return NextResponse.json(payload)
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // OVERVIEW SCOPE — company-wide
+  // ══════════════════════════════════════════════════════════════════════════
+  const scopeWindow = (q: any, opts: { product?: boolean } = {}) => {
     q = q.gte("date", from).lte("date", to)
     if (shift) q = q.eq("shift", shift)
-    if (department) q = q.eq("department", department)
     if (opts.product && product) q = q.eq("product", product)
     return q
   }
 
-  // ── Fetch windowed rows ─────────────────────────────────────────────────
-  const [pkgRes, alcRes, preRes, capsRes, labRes, carRes] = await Promise.all([
-    scope(supabase.from("packaging_daily_records").select("date, shift, product, quantity_cartons_produced, quantity_cartons_loaded"), { product: true }),
-    scope(supabase.from("stock_records").select("date, shift, quantity_used").eq("material", "alcohol")),
-    scope(supabase.from("blowing_daily_records").select("date, shift, preforms_used_bags")),
-    scope(supabase.from("stock_records").select("date, shift, quantity_used").eq("material", "caps")),
-    scope(supabase.from("stock_records").select("date, shift, product, quantity_used").eq("material", "labels"), { product: true }),
-    scope(supabase.from("stock_records").select("date, shift, product, quantity_used").eq("material", "caramel"), { product: true }),
-  ])
-  const pkg = pkgRes.data ?? []
-  const bitters = pkg.filter((p: any) => p.product === "Bitters")
-  const ginger = pkg.filter((p: any) => p.product === "Ginger")
-
-  // ── Current remaining (as of today) via the derived-ledger balance ────────
-  const remaining = async (material: string, prod?: Product) =>
-    Number((await supabase.rpc("stock_remaining_asof", { p_material: material, p_date: today, p_product: prod ?? null, p_variant: null })).data ?? 0)
-  const { data: preformRemainRaw } = await supabase.rpc("stock_remaining_asof", { p_material: "preform", p_date: today })
-  const preformRemain = Number(preformRemainRaw ?? 0)
-
-  const [alcRemain, capsRemain, labBitRemain, labGinRemain, carBitRemain, carGinRemain, cartonBitRemain, cartonGinRemain, stampRemain] = await Promise.all([
-    remaining("alcohol"), remaining("caps"), remaining("labels", "Bitters"),
-    remaining("labels", "Ginger"), remaining("caramel", "Bitters"), remaining("caramel", "Ginger"),
-    remaining("carton", "Bitters"), remaining("carton", "Ginger"), remaining("tax_stamp"),
+  const [pkgRes, alcRes, preRes] = await Promise.all([
+    scopeWindow(
+      supabase
+        .from("packaging_daily_records")
+        .select("date, shift, product, quantity_cartons_produced, quantity_cartons_loaded"),
+      { product: true },
+    ),
+    scopeWindow(supabase.from("stock_records").select("quantity_used").eq("material", "alcohol")),
+    scopeWindow(supabase.from("blowing_daily_records").select("preforms_used_bags")),
   ])
 
-  const opDays = operatingDaysBetween(from, to)
+  const pkg = (pkgRes.data ?? []) as Row[]
+  const ofProduct = (p: string) => pkg.filter((r) => r.product === p)
+  const sumProduced = (rows: Row[]) => rows.reduce((s, r) => s + num(r.quantity_cartons_produced), 0)
 
-  // ── Build a material row: remaining + operating-day run-out projection ─────
-  const material = (key: string, label: string, unit: string, rem: number, used: { sum: number }) => {
-    const ro = projectRunOut(rem, used.sum, opDays, today)
-    return {
-      key, label, unit, remaining: Math.round(rem * 100) / 100,
-      usedInWindow: Math.round(used.sum * 100) / 100,
-      avgPerDay: ro.avgPerOperatingDay, daysLeft: ro.operatingDaysLeft, runOutDate: ro.runOutDate,
-      level: levelFromDays(ro.operatingDaysLeft),
-    }
-  }
-
-  const stampUsed = {
-    sum: bitters.reduce((s: number, r: any) => s + (r.quantity_cartons_produced || 0) * STAMPS_PER_CARTON.Bitters, 0)
-       + ginger.reduce((s: number, r: any) => s + (r.quantity_cartons_produced || 0) * STAMPS_PER_CARTON.Ginger, 0),
-  }
-
-  const materials = [
-    material("alcohol", "Alcohol", "litres", alcRemain, agg(alcRes.data, (r) => r.quantity_used)),
-    material("preforms", "Preforms", "bags", preformRemain, agg(preRes.data, (r) => r.preforms_used_bags)),
-    material("caps", "Caps", "pcs", capsRemain, agg(capsRes.data, (r) => r.quantity_used)),
-    material("labels_bitters", "Labels — Bitters", "pcs", labBitRemain, agg((labRes.data ?? []).filter((r: any) => r.product === "Bitters"), (r) => r.quantity_used)),
-    material("labels_ginger", "Labels — Ginger", "pcs", labGinRemain, agg((labRes.data ?? []).filter((r: any) => r.product === "Ginger"), (r) => r.quantity_used)),
-    material("caramel_bitters", "Caramel — Bitters", "units", carBitRemain, agg((carRes.data ?? []).filter((r: any) => r.product === "Bitters"), (r) => r.quantity_used)),
-    material("caramel_ginger", "Caramel — Ginger", "units", carGinRemain, agg((carRes.data ?? []).filter((r: any) => r.product === "Ginger"), (r) => r.quantity_used)),
-    material("cartons_bitters", "Cartons — Bitters", "pcs", cartonBitRemain, agg(bitters, (r) => r.quantity_cartons_produced)),
-    material("cartons_ginger", "Cartons — Ginger", "pcs", cartonGinRemain, agg(ginger, (r) => r.quantity_cartons_produced)),
-    material("tax_stamp", "Tax Stamps", "pcs", stampRemain, stampUsed),
-  ]
-
-  // ── Per-day production series ──────────────────────────────────────────────
   const dayMap = new Map<string, { total: number; bitters: number; ginger: number }>()
   for (const r of pkg) {
-    const d = dayMap.get(r.date) ?? { total: 0, bitters: 0, ginger: 0 }
-    d.total += r.quantity_cartons_produced || 0
-    if (r.product === "Bitters") d.bitters += r.quantity_cartons_produced || 0
-    if (r.product === "Ginger") d.ginger += r.quantity_cartons_produced || 0
-    dayMap.set(r.date, d)
+    const date = String(r.date)
+    const v = num(r.quantity_cartons_produced)
+    const d = dayMap.get(date) ?? { total: 0, bitters: 0, ginger: 0 }
+    d.total += v
+    if (r.product === "Bitters") d.bitters += v
+    if (r.product === "Ginger") d.ginger += v
+    dayMap.set(date, d)
   }
   const byDay = [...dayMap.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([date, v]) => ({ date, ...v }))
 
-  // ── Per-shift breakdown ────────────────────────────────────────────────────
-  const SHIFTS: Shift[] = ["Morning", "Afternoon", "Night"]
-  const byShift = SHIFTS.map((s) => {
-    const rows = pkg.filter((r: any) => r.shift === s)
+  const byShift = SHIFT_ORDER.map((s) => {
+    const rows = pkg.filter((r) => r.shift === s)
     return {
       shift: s,
-      total: rows.reduce((x: number, r: any) => x + (r.quantity_cartons_produced || 0), 0),
-      bitters: rows.filter((r: any) => r.product === "Bitters").reduce((x: number, r: any) => x + (r.quantity_cartons_produced || 0), 0),
-      ginger: rows.filter((r: any) => r.product === "Ginger").reduce((x: number, r: any) => x + (r.quantity_cartons_produced || 0), 0),
+      total: sumProduced(rows),
+      bitters: sumProduced(rows.filter((r) => r.product === "Bitters")),
+      ginger: sumProduced(rows.filter((r) => r.product === "Ginger")),
     }
   })
 
-  // ── Live finished-goods on-hand (derived: Σ produced − Σ loaded, all-time) ─
-  const { data: fg } = await supabase.rpc("finished_goods_stock")
-  const finishedGoods = {
-    bitters: fg?.find((r) => r.product === "Bitters")?.available ?? 0,
-    ginger: fg?.find((r) => r.product === "Ginger")?.available ?? 0,
-  }
+  const [materials, fgRes] = await Promise.all([
+    Promise.all(allMaterials().map(materialStatus)),
+    supabase.rpc("finished_goods_stock"),
+  ])
+  const fg = fgRes.data ?? []
 
-  return NextResponse.json({
-    filters: { from, to, shift: shift ?? null, department: department ?? null, product: product ?? null },
-    windowDays: daysBetween(from, to),
+  const payload: OverviewReport = {
+    ...common,
+    scope: "overview",
     totals: {
-      production_cartons: pkg.reduce((s: number, r: any) => s + (r.quantity_cartons_produced || 0), 0),
-      bitters_cartons: bitters.reduce((s: number, r: any) => s + (r.quantity_cartons_produced || 0), 0),
-      ginger_cartons: ginger.reduce((s: number, r: any) => s + (r.quantity_cartons_produced || 0), 0),
-      cartons_loaded: pkg.reduce((s: number, r: any) => s + (r.quantity_cartons_loaded || 0), 0),
-      alcohol_used: agg(alcRes.data, (r) => r.quantity_used).sum,
-      preforms_used: agg(preRes.data, (r) => r.preforms_used_bags).sum,
+      production_cartons: sumProduced(pkg),
+      bitters_cartons: sumProduced(ofProduct("Bitters")),
+      ginger_cartons: sumProduced(ofProduct("Ginger")),
+      cartons_loaded: pkg.reduce((s, r) => s + num(r.quantity_cartons_loaded), 0),
+      alcohol_used: ((alcRes.data ?? []) as Row[]).reduce((s, r) => s + num(r.quantity_used), 0),
+      preforms_used: ((preRes.data ?? []) as Row[]).reduce((s, r) => s + num(r.preforms_used_bags), 0),
     },
-    finishedGoods,
+    finishedGoods: {
+      bitters: Number(fg.find((r) => r.product === "Bitters")?.available ?? 0),
+      ginger: Number(fg.find((r) => r.product === "Ginger")?.available ?? 0),
+    },
     byDay,
     byShift,
     materials,
-    thresholds: { redDays: RED_DAYS, amberDays: AMBER_DAYS },
-    last_updated: new Date().toISOString(),
-  })
+  }
+  return NextResponse.json(payload)
 }

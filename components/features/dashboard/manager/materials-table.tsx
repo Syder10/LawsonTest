@@ -1,23 +1,12 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { AlertTriangle, AlertCircle, CheckCircle2, ClipboardCheck } from "lucide-react"
+import { ClipboardCheck } from "lucide-react"
 import { STATUS, fmt, fmt1, shortDay } from "./viz"
-import type { MaterialStatus, Level } from "./types"
+import type { MaterialStatus } from "./types"
+import { byUrgency } from "@/lib/domain/stock-status"
+import { StatusBadge } from "@/components/primitives"
 import { ReconcileModal, ledgerTargetForKey, type ReconcileTarget } from "@/components/features/stock/reconcile-modal"
-
-const ORDER: Record<Level, number> = { red: 0, yellow: 1, none: 2 }
-
-const StatusBadge = ({ level }: { level: Level }) => {
-  const s = STATUS[level]
-  const Icon = level === "red" ? AlertCircle : level === "yellow" ? AlertTriangle : CheckCircle2
-  const text = level === "red" ? "Critical" : level === "yellow" ? "Low" : "OK"
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black ${s.soft} ${s.text} border ${s.ring}`}>
-      <Icon className="w-3 h-3" /> {text}
-    </span>
-  )
-}
 
 interface StockCount {
   id: string; date: string; shift: string | null; material: string
@@ -31,7 +20,7 @@ interface StockCount {
 // Management can record a baseline/reconciliation count per ledger material; the
 // resulting variances surface in the panel below.
 export function MaterialsTable({ materials, redDays, amberDays, onReconciled }: { materials: MaterialStatus[]; redDays: number; amberDays: number; onReconciled?: () => void }) {
-  const sorted = [...materials].sort((a, b) => ORDER[a.level] - ORDER[b.level] || (a.operatingDaysLeft ?? Infinity) - (b.operatingDaysLeft ?? Infinity))
+  const sorted = [...materials].sort(byUrgency)
   const [reconcile, setReconcile] = useState<ReconcileTarget | null>(null)
   const [open, setOpen] = useState(false)
   const [counts, setCounts] = useState<StockCount[]>([])

@@ -76,7 +76,7 @@ export function buildRecordRow(
   // filling_line / labels / caramel accept NULL and would have stored a row that
   // is invisible to every per-product analytic AND occupies a different slot in
   // the one-record-per-(date,shift,product) uniqueness guard
-  // (0013_prevent_duplicate_submissions.sql).
+  // (0004_records.sql).
   if (def.products.length > 0) {
     if (!env.product) {
       return {

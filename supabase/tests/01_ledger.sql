@@ -1,7 +1,7 @@
 -- ============================================================================
 -- supabase/tests/01_ledger.sql
 --
--- Behaviour tests for the DERIVED STOCK LEDGER (0005 + 0011).
+-- Behaviour tests for the DERIVED STOCK LEDGER (0004 + 0005).
 -- Proves the properties the whole stock model rests on:
 --   • out-of-order shift submissions self-heal (no frozen "opening" to corrupt)
 --   • a management stock_count re-anchors the balance and records the variance

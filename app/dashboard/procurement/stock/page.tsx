@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
-import { RefreshCw, ArrowLeft, Loader2, AlertCircle, AlertTriangle, CheckCircle2, PackageCheck, Send, ClipboardCheck } from "lucide-react"
+import { RefreshCw, ArrowLeft, Loader2, AlertCircle, AlertTriangle, PackageCheck, Send, ClipboardCheck } from "lucide-react"
 import { StatTile } from "@/components/features/dashboard/manager/stat-tile"
 import { STATUS, fmt, fmt1, shortDay } from "@/components/features/dashboard/manager/viz"
 import type { Level } from "@/components/features/dashboard/manager/types"
+import { byUrgency } from "@/lib/domain/stock-status"
+import { StatusBadge } from "@/components/primitives"
 import { ReconcileModal, ledgerTargetForKey, type ReconcileTarget } from "@/components/features/stock/reconcile-modal"
 
 interface MaterialRow {
@@ -43,15 +45,6 @@ const MAT_LABEL: Record<string, string> = {
   tax_stamp: "Tax Stamps", carton_bitters: "Cartons — Bitters", carton_ginger: "Cartons — Ginger",
   seal_tape: "Seal Tape", hair_net: "Hair Nets", nose_mask: "Nose Masks", gloves: "Gloves",
 }
-
-function StatusBadge({ level }: { level: Level }) {
-  const s = STATUS[level]
-  const Icon = level === "red" ? AlertCircle : level === "yellow" ? AlertTriangle : CheckCircle2
-  const text = level === "red" ? "Critical" : level === "yellow" ? "Low" : "OK"
-  return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black ${s.soft} ${s.text} border ${s.ring}`}><Icon className="w-3 h-3" /> {text}</span>
-}
-
-const ORDER: Record<Level, number> = { red: 0, yellow: 1, none: 2 }
 
 export default function ProcurementStockPage() {
   const [from, setFrom] = useState(daysAgo(29))
@@ -94,7 +87,7 @@ export default function ProcurementStockPage() {
     return () => clearInterval(iv)
   }, [load])
 
-  const sorted = data ? [...data.materials].sort((a, b) => ORDER[a.level] - ORDER[b.level] || (a.operatingDaysLeft ?? Infinity) - (b.operatingDaysLeft ?? Infinity)) : []
+  const sorted = data ? [...data.materials].sort(byUrgency) : []
   const critical = sorted.filter((m) => m.level === "red").length
   const low = sorted.filter((m) => m.level === "yellow").length
 

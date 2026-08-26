@@ -18,7 +18,7 @@ export default function ProfileForm({ initialData, username }: ProfileFormProps)
     const [isSubmitting, setIsSubmitting] = useState(false)
     // Only full_name is self-editable. Department, group and role are privileged
     // columns assigned by an administrator and enforced by a DB trigger
-    // (0012_profile_privilege_guard.sql) — they are shown read-only here.
+    // (0003_identity.sql) — they are shown read-only here.
     const [formData, setFormData] = useState({
         full_name: initialData.full_name || "",
     })

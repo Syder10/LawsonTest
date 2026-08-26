@@ -1,10 +1,9 @@
 import { createServerSupabase } from "@/lib/supabase/server"
-import Link from "next/link"
-import { ArrowLeft } from "lucide-react"
 import { notFound } from "next/navigation"
 import RecordEntryForm from "./record-entry-form"
 import { getRecordType } from "@/lib/domain/record-types"
 import { currentGhanaShift, expectedShiftForGroup, shiftDateFor } from "@/lib/shift-config"
+import { PageHeader } from "@/components/primitives"
 
 export const dynamic = "force-dynamic"
 
@@ -60,29 +59,26 @@ export default async function RecordTypePage(
     const isNightRollover = initialShift === "Night" && initialDate !== isoToday(now)
 
     return (
-        <div className="space-y-8 max-w-4xl mx-auto animate-fade-in-up">
-            <div className="flex items-center gap-4">
-                <Link
-                    href="/dashboard/forms"
-                    className="p-2 bg-white rounded-full border border-emerald-100 hover:bg-emerald-50 transition-colors text-emerald-700"
-                >
-                    <ArrowLeft className="w-5 h-5" />
-                </Link>
-                <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-emerald-950">{recordType}</h2>
-                    <p className="text-emerald-700/80 font-medium mt-1">
-                        {department} · {supervisorName} · {initialShift} Shift ·{" "}
+        <div className="space-y-6 max-w-4xl mx-auto animate-fade-in-up">
+            <PageHeader
+                backHref="/dashboard/forms"
+                backLabel="Back to record types"
+                title={recordType}
+                description={
+                    <>
+                        {department} · {supervisorName} · {initialShift} shift ·{" "}
                         {new Date(initialDate + "T00:00:00Z").toLocaleDateString(undefined, {
                             weekday: "short", month: "short", day: "numeric", timeZone: "UTC",
                         })}
-                    </p>
-                    {isNightRollover && (
-                        <p className="mt-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-1.5 inline-block">
-                            Dated to the day this Night shift started, so all three of that day’s shifts share one date.
-                        </p>
-                    )}
-                </div>
-            </div>
+                    </>
+                }
+            />
+
+            {isNightRollover && (
+                <p className="text-xs font-medium text-brand-subtle-ink bg-brand-subtle border border-brand/20 rounded-xl px-3 py-2">
+                    Dated to the day this Night shift started, so all three of that day’s shifts share one date.
+                </p>
+            )}
 
             <RecordEntryForm
                 recordType={recordType}

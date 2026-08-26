@@ -37,13 +37,16 @@ function explain(code: string | undefined, message: string): string {
       "were never applied here, or NEXT_PUBLIC_SUPABASE_URL points at a DIFFERENT Supabase project."
   }
   if (c === "42501" || /permission denied/i.test(message)) {
-    return "Missing table grants. Grants are checked BEFORE RLS, so no policy can compensate. Run: " +
-      "`grant usage on schema public to authenticated, anon; " +
-      "grant select, insert, update on public.profiles to authenticated;`"
+    return /schema/i.test(message)
+      ? "The API roles have no USAGE on schema `public`. This is what a " +
+        "`drop schema public cascade` leaves behind — it destroys Supabase's default " +
+        "grants. Apply supabase/migrations/0005_ledger_and_grants.sql."
+      : "Missing table grants. Grants are checked BEFORE RLS, so no policy can " +
+        "compensate. Apply supabase/migrations/0005_ledger_and_grants.sql."
   }
   if (c === "42P17" || /infinite recursion/i.test(message)) {
     return "A profiles RLS policy queries profiles without SECURITY DEFINER. Re-apply " +
-      "0001_extensions_types_helpers.sql (is_staff/is_admin) then 0003_profiles.sql."
+      "0001_foundation.sql (is_staff/is_admin) then 0003_identity.sql."
   }
   if (/fetch failed|ENOTFOUND|ETIMEDOUT|getaddrinfo/i.test(message)) {
     return "Could not reach Supabase at all. Check NEXT_PUBLIC_SUPABASE_URL."

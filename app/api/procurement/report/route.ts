@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { requireProcurement } from "@/lib/auth/guards"
 import { STAMP_PCS_PER_COIL, STAMP_COILS_PER_BOX, TAPE_PCS_PER_BOX, HAIRNET_PACKS_PER_BOX, NOSEMASK_PACKS_PER_BOX, GLOVES_PACKS_PER_BOX } from "@/lib/domain/materials"
-import { operatingDaysBetween, projectRunOut } from "@/lib/domain/operating-days"
+import { operatingDaysBetween } from "@/lib/domain/operating-days"
+import { buildMaterialStatus, THRESHOLD_PAYLOAD, type ProcurementMaterialStatus } from "@/lib/domain/stock-status"
 import type { Product } from "@/lib/db/types"
 
 // ============================================================================
@@ -17,14 +18,12 @@ import type { Product } from "@/lib/db/types"
 // "Days left" is projected over OPERATING DAYS (Mon–Sat, closed Sundays): burn
 // rate = used in window ÷ operating days in window; the run-out DATE walks
 // forward over operating days until the balance hits zero.
+//
+// The row shape, thresholds and level function come from lib/domain/stock-status,
+// shared with /api/analytics/report so the two contracts cannot diverge.
 // ============================================================================
 
-const RED_DAYS = 6
-const AMBER_DAYS = 12
 const STAMPS_PER_CARTON = { Bitters: 9, Ginger: 6 } as const
-
-type Level = "red" | "yellow" | "none"
-const levelOf = (days: number | null): Level => (days === null ? "none" : days <= RED_DAYS ? "red" : days <= AMBER_DAYS ? "yellow" : "none")
 
 function breakdown(key: string, pcs: number): string | null {
   switch (key) {
@@ -52,16 +51,24 @@ export async function GET(request: Request) {
   const opDays = operatingDaysBetween(from, to)
 
   // Build a material row with an operating-day run-out projection.
-  const build = (o: { key: string; label: string; unit: string; group: "procurement" | "production"; remaining: number; used: number; received: number }) => {
-    const ro = projectRunOut(o.remaining, o.used, opDays, today)
-    return {
-      key: o.key, label: o.label, unit: o.unit, group: o.group,
-      remaining: Math.round(o.remaining * 100) / 100,
-      receivedInWindow: Math.round(o.received), usedInWindow: Math.round(o.used * 100) / 100,
-      avgPerDay: ro.avgPerOperatingDay, operatingDaysLeft: ro.operatingDaysLeft, runOutDate: ro.runOutDate,
-      level: levelOf(ro.operatingDaysLeft), breakdown: breakdown(o.key, o.remaining),
-    }
-  }
+  const build = (o: {
+    key: string; label: string; unit: string
+    group: "procurement" | "production"
+    remaining: number; used: number; received: number
+  }): ProcurementMaterialStatus => ({
+    ...buildMaterialStatus({
+      key: o.key,
+      label: o.label,
+      unit: o.unit,
+      remaining: o.remaining,
+      usedInWindow: o.used,
+      operatingDaysInWindow: opDays,
+      fromISO: today,
+    }),
+    group: o.group,
+    receivedInWindow: Math.round(o.received),
+    breakdown: breakdown(o.key, o.remaining),
+  })
 
   const [balancesRes, liveRes, pkgRes, receiptsRes, stockRes, blowingRes] = await Promise.all([
     supabase.from("consumable_stock").select("material, product, remaining_pcs"),
@@ -149,7 +156,7 @@ export async function GET(request: Request) {
       received_pcs: r.material_type === "tax_stamp" ? r.stamp_total_pcs : r.material_type.startsWith("carton") ? r.carton_total_pcs : r.ppe_pcs_in,
       given_pcs: r.ppe_given_pcs || 0, given_to: r.ppe_given_to || null, remarks: r.remarks || null,
     })),
-    thresholds: { redDays: RED_DAYS, amberDays: AMBER_DAYS },
+    thresholds: THRESHOLD_PAYLOAD,
     last_updated: new Date().toISOString(),
   })
 }

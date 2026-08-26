@@ -2,7 +2,7 @@
 -- verify-install.sql
 --
 -- Paste into the Supabase SQL editor to confirm which migrations actually landed
--- on THIS database. Applying 0001–0011 but not 0012–0014 leaves the app working
+-- on THIS database. Applying only some of the five files leaves the app working
 -- while the security fixes are silently absent, which is easy to miss.
 --
 -- Every row should read INSTALLED / none / a list of admins.
@@ -17,7 +17,7 @@ select 'auto-provision profile trigger (0003)' as item,
        end as status
 
 union all
-select 'derived stock ledger (0011)',
+select 'derived stock ledger (0005)',
        case when exists (
               select 1 from pg_proc p
               join pg_namespace n on n.oid = p.pronamespace
@@ -27,7 +27,7 @@ select 'derived stock ledger (0011)',
        end
 
 union all
-select 'profile privilege guard (0012)',
+select 'profile privilege guard (0003)',
        case when exists (
               select 1 from pg_trigger
               where not tgisinternal and tgname = 'profiles_guard_privileged_columns')
@@ -36,7 +36,7 @@ select 'profile privilege guard (0012)',
        end
 
 union all
-select 'duplicate-submission guards (0013)',
+select 'duplicate-submission guards (0004)',
        case when (select count(*) from pg_indexes
                    where schemaname = 'public'
                      and indexname like '%\_one\_per\_shift\_uidx') = 8
@@ -48,7 +48,7 @@ select 'duplicate-submission guards (0013)',
        end
 
 union all
-select 'hardened user provisioning (0014)',
+select 'hardened user provisioning (0003)',
        case when coalesce((
               select pg_get_functiondef(p.oid) from pg_proc p
               join pg_namespace n on n.oid = p.pronamespace
