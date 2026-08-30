@@ -1,44 +1,71 @@
 import Link from "next/link"
-import { Users, ShieldCheck } from "lucide-react"
+import { ArrowRight, History, ShieldCheck, Users, Warehouse } from "lucide-react"
+import { Card, Chip, PageHeader, SectionTitle } from "@/components/primitives"
+
+// Admin landing. Was zinc-only — the ONLY screen in the app on a second neutral
+// ramp, which made it look like a different product. Now on the shared tokens.
+//
+// With real navigation in place this no longer has to be the only route out, but
+// it stays a hub: cards state what each area is for, which a tab label cannot.
+const AREAS = [
+  {
+    href: "/dashboard/admin/users",
+    Icon: Users,
+    title: "User management",
+    body: "Create accounts, assign roles, departments and rotation groups, reset passwords.",
+  },
+  {
+    href: "/dashboard/procurement/stock",
+    Icon: Warehouse,
+    title: "Stock levels",
+    body: "Every tracked material with its remaining balance and days of cover.",
+  },
+  {
+    href: "/dashboard/history",
+    Icon: History,
+    title: "Submission history",
+    body: "Every record submitted across all five departments.",
+  },
+]
 
 export function AdminDashboard() {
-    return (
-        <div className="space-y-6 sm:space-y-10 animate-fade-in-up">
-            <div>
-                <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-zinc-900">
-                    Administrator Panel
-                </h2>
-                <p className="text-base text-zinc-500 font-medium mt-1 sm:mt-3">
-                    Manage users, roles, departments and access.
-                </p>
-            </div>
+  return (
+    <div className="space-y-6 animate-fade-in-up">
+      <PageHeader title="Administrator" description="Manage users, roles, departments and access." />
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 max-w-2xl">
-                <Link href="/dashboard/admin/users" className="group">
-                    <div className="bg-white px-5 py-5 sm:p-8 rounded-2xl sm:rounded-3xl shadow-sm border border-zinc-100 hover:shadow-xl hover:shadow-zinc-500/10 active:scale-[0.98] transition-all duration-200 flex items-center gap-4 sm:flex-col sm:items-start sm:gap-4">
-                        <div className="w-12 h-12 sm:w-14 sm:h-14 bg-zinc-50 text-zinc-600 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 group-hover:bg-zinc-800 group-hover:text-white transition-colors duration-300">
-                            <Users className="w-6 h-6 sm:w-7 sm:h-7" />
-                        </div>
-                        <div className="min-w-0">
-                            <h3 className="text-base sm:text-xl font-bold text-zinc-900">User Management</h3>
-                            <p className="text-zinc-500 mt-0.5 sm:mt-2 text-xs sm:text-sm leading-relaxed hidden sm:block">
-                                Create accounts, assign roles and departments, reset passwords.
-                            </p>
-                            <p className="text-zinc-400 text-xs mt-0.5 sm:hidden">Create, edit and manage users</p>
-                        </div>
-                    </div>
-                </Link>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {AREAS.map(({ href, Icon, title, body }) => (
+          <Link key={href} href={href} className="group">
+            <Card padded className="h-full hover-lift">
+              <span className="w-11 h-11 rounded-xl bg-brand-subtle text-brand flex items-center justify-center shrink-0 transition-colors group-hover:bg-brand group-hover:text-brand-ink">
+                <Icon className="w-5 h-5" aria-hidden="true" />
+              </span>
+              <div className="mt-3">
+                <h3 className="text-base font-bold text-ink-primary flex items-center gap-1.5">
+                  {title}
+                  <ArrowRight className="w-3.5 h-3.5 text-ink-muted transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                </h3>
+                <p className="text-sm text-ink-secondary mt-1">{body}</p>
+              </div>
+            </Card>
+          </Link>
+        ))}
 
-                <div className="bg-zinc-50 px-5 py-5 sm:p-8 rounded-2xl sm:rounded-3xl border border-zinc-100 flex items-center gap-4 sm:flex-col sm:items-start sm:gap-4 opacity-50">
-                    <div className="w-12 h-12 sm:w-14 sm:h-14 bg-zinc-100 text-zinc-400 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0">
-                        <ShieldCheck className="w-6 h-6 sm:w-7 sm:h-7" />
-                    </div>
-                    <div className="min-w-0">
-                        <h3 className="text-base sm:text-xl font-bold text-zinc-400">Permissions</h3>
-                        <p className="text-zinc-400 text-xs mt-0.5">Coming soon</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    )
+        {/* Not a link, and says why — an unexplained disabled card reads as a bug. */}
+        <Card padded className="h-full opacity-70">
+          <span className="w-11 h-11 rounded-xl bg-surface-sunken text-ink-muted flex items-center justify-center shrink-0">
+            <ShieldCheck className="w-5 h-5" aria-hidden="true" />
+          </span>
+          <div className="mt-3">
+            <SectionTitle className="flex items-center gap-2">
+              Permissions <Chip tone="neutral">Not yet available</Chip>
+            </SectionTitle>
+            <p className="text-sm text-ink-secondary mt-1">
+              Roles currently carry fixed permissions, set in the database.
+            </p>
+          </div>
+        </Card>
+      </div>
+    </div>
+  )
 }

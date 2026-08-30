@@ -1,197 +1,125 @@
 "use client"
 
-import { login } from "./actions"
+import { useActionState } from "react"
 import Image from "next/image"
+import { AlertCircle, Eye, EyeOff, LogIn } from "lucide-react"
+import { useState } from "react"
+import { login } from "./actions"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { useActionState, useState } from "react"
+import { Card, Field, TextInput } from "@/components/primitives"
 
-type Mode = "supervisor" | "manager" | "admin"
-
-const MODE_CONFIG = {
-  supervisor: {
-    heading:         "Welcome!",
-    sub:             "Sign in to your account",
-    btnLabel:        "Sign In",
-    btnClass:        "bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 shadow-emerald-600/20",
-    userPlaceholder: "Username",
-  },
-  manager: {
-    heading:         "Manager Login",
-    sub:             "Sign in to your manager account",
-    btnLabel:        "Sign In",
-    btnClass:        "bg-slate-800 hover:bg-slate-900 active:bg-slate-950 shadow-slate-800/20",
-    userPlaceholder: "Username",
-  },
-  admin: {
-    heading:         "System Access",
-    sub:             "Authorised personnel only",
-    btnLabel:        "Access System",
-    btnClass:        "bg-zinc-900 hover:bg-zinc-950 active:bg-black shadow-zinc-900/20",
-    userPlaceholder: "Admin username",
-  },
-}
+// ============================================================================
+// Sign in.
+//
+// ONE form for everybody. There were previously three (supervisor / manager /
+// admin), with the admin one reachable only by clicking a 10×10px dot three
+// times — and that dot was `aria-hidden` with `tabIndex={-1}`, so keyboard and
+// screen-reader users could never reach the admin form at all.
+//
+// The modes never provided security either: `profiles.role` decides everything
+// after sign-in (app/dashboard/page.tsx routes on it, lib/auth/guards.ts enforces
+// it). All the modes did was let someone pick the wrong door and get bounced. Now
+// everyone signs in the same way and lands on their own dashboard.
+// ============================================================================
 
 export default function LoginPage() {
   const [state, formAction, isPending] = useActionState(login, null)
-  const [mode, setMode] = useState<Mode>("supervisor")
-  const [dotClicks, setDotClicks] = useState(0)
-
-  const cfg = MODE_CONFIG[mode]
-
-  const handleDotClick = () => {
-    const next = dotClicks + 1
-    if (next >= 3) {
-      setMode("admin")
-      setDotClicks(0)
-    } else {
-      setDotClicks(next)
-    }
-  }
-
-  const switchMode = (m: Mode) => {
-    setMode(m)
-    setDotClicks(0)
-  }
+  const [showPassword, setShowPassword] = useState(false)
 
   return (
-    <div className="relative w-full min-h-screen flex flex-col items-center justify-center overflow-hidden px-4 bg-gradient-to-br from-emerald-50 via-white to-green-50">
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-emerald-300/30 rounded-full blur-[100px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-green-300/30 rounded-full blur-[100px] pointer-events-none" />
+    <div className="relative min-h-dvh flex flex-col items-center justify-center px-4 py-10 bg-surface-page">
+      <div className="gradient-orb gradient-orb-1" aria-hidden="true" />
+      <div className="gradient-orb gradient-orb-2" aria-hidden="true" />
 
-      <div className={`w-full max-w-md backdrop-blur-xl border shadow-2xl rounded-3xl p-6 sm:p-8 z-10 transition-all duration-300 ${
-        mode === "admin"
-          ? "bg-zinc-50/90 border-zinc-300"
-          : mode === "manager"
-          ? "bg-white/80 border-slate-200"
-          : "bg-white/80 border-white/50"
-      }`}>
-
-        {/* Logo + heading */}
-        <div className="flex flex-col items-center space-y-4 mb-6 sm:mb-8">
+      <main className="w-full max-w-sm z-10">
+        <div className="flex flex-col items-center text-center mb-6">
           <Image
             src="/logo.png"
-            alt="Lawson LLC Logo"
-            width={100}
-            height={100}
-            className={`w-20 h-20 sm:w-[100px] sm:h-[100px] drop-shadow-lg rounded-full bg-white p-2 transition-all duration-300 ${
-              mode === "admin" ? "grayscale opacity-50" : ""
-            }`}
+            alt="Lawson Limited Company"
+            width={80}
+            height={80}
+            className="w-16 h-16 sm:w-20 sm:h-20 object-contain"
             priority
           />
-          <div className="text-center space-y-1">
-            <h1 className={`text-xl sm:text-2xl font-bold tracking-tight transition-colors duration-200 ${
-              mode === "admin" ? "text-zinc-700" : "text-emerald-950"
-            }`}>
-              {cfg.heading}
-            </h1>
-            <p className={`text-sm font-medium tracking-wide transition-colors duration-200 ${
-              mode === "admin" ? "text-zinc-400" : "text-emerald-700/70"
-            }`}>
-              {cfg.sub}
-            </p>
-          </div>
+          <h1 className="mt-4 text-2xl font-bold tracking-tight text-ink-primary">Lawson Production</h1>
+          <p className="mt-1 text-sm text-ink-secondary">Sign in to continue</p>
         </div>
 
-        {/* Login form */}
-        <form action={formAction} className="space-y-4">
-          <input type="hidden" name="mode" value={mode} />
+        <Card padded>
+          <form action={formAction} className="space-y-4">
+            <Field label="Username" required>
+              {(a11y) => (
+                <TextInput
+                  {...a11y}
+                  name="username"
+                  type="text"
+                  placeholder="your username"
+                  required
+                  disabled={isPending}
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                />
+              )}
+            </Field>
 
-          <div className="space-y-2">
-            <Label htmlFor="username" className={`font-semibold text-sm ${
-              mode === "admin" ? "text-zinc-600" : "text-emerald-900"
-            }`}>
-              Username
-            </Label>
-            <Input
-              id="username"
-              name="username"
-              type="text"
-              placeholder={cfg.userPlaceholder}
-              required
+            <Field label="Password" required>
+              {(a11y) => (
+                <div className="relative">
+                  <TextInput
+                    {...a11y}
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    required
+                    disabled={isPending}
+                    autoComplete="current-password"
+                    className="pr-12"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-10 w-10 flex items-center justify-center rounded-lg text-ink-muted hover:text-ink-secondary transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" aria-hidden="true" /> : <Eye className="w-4 h-4" aria-hidden="true" />}
+                  </button>
+                </div>
+              )}
+            </Field>
+
+            {/* role="alert" + aria-live so a failure is announced, not just drawn. */}
+            {state?.error && (
+              <div
+                role="alert"
+                aria-live="assertive"
+                className="flex items-start gap-2.5 px-3 py-2.5 rounded-xl bg-critical-subtle border border-critical/30"
+              >
+                <AlertCircle className="w-4 h-4 text-critical shrink-0 mt-0.5" aria-hidden="true" />
+                <p className="text-sm font-medium text-critical-ink">{state.error}</p>
+              </div>
+            )}
+
+            <Button
+              type="submit"
               disabled={isPending}
-              autoComplete="username"
-              className={`w-full px-4 py-3 text-base rounded-xl transition-all ${
-                mode === "admin"
-                  ? "border-zinc-300 bg-white focus:border-zinc-500 focus:ring-zinc-400/20"
-                  : "border-emerald-100 bg-white/50 focus:border-emerald-500 focus:ring-emerald-500/20"
-              }`}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="password" className={`font-semibold text-sm ${
-              mode === "admin" ? "text-zinc-600" : "text-emerald-900"
-            }`}>
-              Password
-            </Label>
-            <Input
-              id="password"
-              name="password"
-              type="password"
-              placeholder="••••••••"
-              required
-              disabled={isPending}
-              autoComplete="current-password"
-              className={`w-full px-4 py-3 text-base rounded-xl transition-all ${
-                mode === "admin"
-                  ? "border-zinc-300 bg-white focus:border-zinc-500 focus:ring-zinc-400/20"
-                  : "border-emerald-100 bg-white/50 focus:border-emerald-500 focus:ring-emerald-500/20"
-              }`}
-            />
-          </div>
-
-          {state?.error && (
-            <div className="p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm text-center font-medium">
-              {state.error}
-            </div>
-          )}
-
-          <Button
-            type="submit"
-            disabled={isPending}
-            className={`w-full py-4 text-base font-bold text-white rounded-xl shadow-lg transition-all active:scale-[0.98] disabled:opacity-70 mt-1 ${cfg.btnClass}`}
-          >
-            {isPending ? "Signing In..." : cfg.btnLabel}
-          </Button>
-        </form>
-
-        {/* Supervisor mode: show "Manager" switch below */}
-        {mode === "supervisor" && (
-          <div className="mt-5 flex items-center gap-3">
-            <div className="flex-1 h-px bg-emerald-100" />
-            <button
-              type="button"
-              onClick={() => switchMode("manager")}
-              className="text-xs font-semibold text-slate-400 hover:text-slate-600 transition-colors px-2 py-1 rounded-lg hover:bg-slate-50"
+              className="w-full h-12 text-base font-bold bg-brand-solid hover:bg-brand-solid-hover text-brand-ink rounded-xl active:scale-[0.98] disabled:opacity-70"
             >
-              Manager
-            </button>
-            <div className="flex-1 h-px bg-emerald-100" />
-          </div>
-        )}
+              {isPending ? (
+                "Signing in…"
+              ) : (
+                <>
+                  <LogIn className="w-4 h-4 mr-1.5" aria-hidden="true" /> Sign in
+                </>
+              )}
+            </Button>
+          </form>
+        </Card>
 
-        {/* Manager / admin mode: show back link */}
-        {mode !== "supervisor" && (
-          <button
-            type="button"
-            onClick={() => switchMode("supervisor")}
-            className="mt-5 w-full text-xs text-slate-400 hover:text-slate-500 transition-colors text-center"
-          >
-            ← Back
-          </button>
-        )}
-      </div>
-
-      {/* Hidden admin trigger — tiny dot bottom-right, click 3× to reveal admin form */}
-      <button
-        type="button"
-        onClick={handleDotClick}
-        aria-hidden="true"
-        tabIndex={-1}
-        className="fixed bottom-5 right-5 w-2.5 h-2.5 rounded-full bg-slate-300 opacity-30 hover:opacity-50 transition-opacity cursor-default focus:outline-none"
-      />
+        <p className="mt-5 text-center text-xs text-ink-muted">
+          Accounts are created by an administrator. If you cannot sign in, ask your manager.
+        </p>
+      </main>
     </div>
   )
 }

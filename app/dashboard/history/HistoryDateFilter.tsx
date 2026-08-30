@@ -3,6 +3,8 @@
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { useCallback } from "react"
 import { X } from "lucide-react"
+import { SHIFT_ORDER } from "@/lib/shift-config"
+import { Card, Field, Select, TextInput } from "@/components/primitives"
 
 interface HistoryDateFilterProps {
   selectedDate: string | null
@@ -10,100 +12,96 @@ interface HistoryDateFilterProps {
 }
 
 export default function HistoryDateFilter({ selectedDate, selectedShift }: HistoryDateFilterProps) {
-  const router      = useRouter()
-  const pathname    = usePathname()
+  const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
 
   const updateParams = useCallback(
     (key: string, value: string | null) => {
       const params = new URLSearchParams(searchParams.toString())
-      if (value) {
-        params.set(key, value)
-      } else {
-        params.delete(key)
-      }
+      if (value) params.set(key, value)
+      else params.delete(key)
       router.push(`${pathname}?${params.toString()}`)
     },
-    [router, pathname, searchParams]
+    [router, pathname, searchParams],
   )
 
-  const clearAll = () => {
-    router.push(pathname)
-  }
-
+  const clearAll = () => router.push(pathname)
   const hasFilter = !!selectedDate || !!selectedShift
 
   return (
-    <div className="bg-white rounded-2xl border border-emerald-100 shadow-sm p-4">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        {/* Date picker */}
-        <div className="flex-1 space-y-1">
-          <label className="text-xs font-bold text-emerald-900 uppercase tracking-widest">
-            Filter by Date
-          </label>
-          <input
-            type="date"
-            value={selectedDate || ""}
-            max={new Date().toISOString().split("T")[0]}
-            onChange={(e) => updateParams("date", e.target.value || null)}
-            className="w-full h-10 px-3 text-sm font-medium rounded-xl border border-emerald-200 bg-white text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none transition-all"
-          />
-        </div>
+    <Card padded>
+      <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+        <Field label="Date" className="flex-1">
+          {(a11y) => (
+            <TextInput
+              {...a11y}
+              type="date"
+              value={selectedDate || ""}
+              max={new Date().toISOString().split("T")[0]}
+              onChange={(e) => updateParams("date", e.target.value || null)}
+            />
+          )}
+        </Field>
 
-        {/* Shift filter */}
-        <div className="sm:w-44 space-y-1">
-          <label className="text-xs font-bold text-emerald-900 uppercase tracking-widest">
-            Filter by Shift
-          </label>
-          <select
-            value={selectedShift || ""}
-            onChange={(e) => updateParams("shift", e.target.value || null)}
-            className="w-full h-10 px-3 text-sm font-medium rounded-xl border border-emerald-200 bg-white text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none appearance-none transition-all"
-          >
-            <option value="">All Shifts</option>
-            <option value="Morning">Morning</option>
-            <option value="Afternoon">Afternoon</option>
-            <option value="Night">Night</option>
-          </select>
-        </div>
+        <Field label="Shift" className="sm:w-44">
+          {(a11y) => (
+            <Select {...a11y} value={selectedShift || ""} onChange={(e) => updateParams("shift", e.target.value || null)}>
+              <option value="">All shifts</option>
+              {SHIFT_ORDER.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </Select>
+          )}
+        </Field>
 
-        {/* Clear button — only shows when a filter is active */}
         {hasFilter && (
-          <div className="sm:self-end">
-            <button
-              onClick={clearAll}
-              className="flex items-center gap-1.5 h-10 px-4 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 text-sm font-semibold transition-all"
-            >
-              <X className="w-3.5 h-3.5" />
-              Clear
-            </button>
-          </div>
+          <button
+            onClick={clearAll}
+            className="flex items-center justify-center gap-1.5 h-11 sm:h-10 px-4 rounded-xl border border-hairline bg-surface-card hover:bg-surface-sunken text-ink-secondary text-sm font-semibold transition-colors shrink-0 active:scale-[0.97]"
+          >
+            <X className="w-3.5 h-3.5" aria-hidden="true" />
+            Clear
+          </button>
         )}
       </div>
 
-      {/* Active filter badge */}
       {hasFilter && (
         <div className="mt-3 flex flex-wrap gap-2">
           {selectedDate && (
-            <span className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-2.5 py-1 rounded-full">
-              {new Date(selectedDate + "T00:00:00").toLocaleDateString(undefined, {
-                weekday: "short", month: "short", day: "numeric", year: "numeric",
+            <FilterChip
+              label={new Date(selectedDate + "T00:00:00Z").toLocaleDateString(undefined, {
+                weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC",
               })}
-              <button onClick={() => updateParams("date", null)} className="hover:text-emerald-900">
-                <X className="w-3 h-3" />
-              </button>
-            </span>
+              onRemove={() => updateParams("date", null)}
+            />
           )}
           {selectedShift && (
-            <span className="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-2.5 py-1 rounded-full">
-              {selectedShift} Shift
-              <button onClick={() => updateParams("shift", null)} className="hover:text-emerald-900">
-                <X className="w-3 h-3" />
-              </button>
-            </span>
+            <FilterChip label={`${selectedShift} shift`} onRemove={() => updateParams("shift", null)} />
           )}
         </div>
       )}
-    </div>
+    </Card>
+  )
+}
+
+/**
+ * An active filter, with its own remove control.
+ *
+ * The remove button is a 32px target rather than the 12px icon it wraps — a
+ * `w-3 h-3` hit area is unhittable on a phone.
+ */
+function FilterChip({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 bg-brand-subtle border border-brand/20 text-brand-subtle-ink text-xs font-semibold pl-2.5 pr-1 py-1 rounded-full">
+      {label}
+      <button
+        onClick={onRemove}
+        aria-label={`Remove ${label} filter`}
+        className="h-8 w-8 -my-1 flex items-center justify-center rounded-full hover:bg-brand/10 transition-colors"
+      >
+        <X className="w-3 h-3" aria-hidden="true" />
+      </button>
+    </span>
   )
 }

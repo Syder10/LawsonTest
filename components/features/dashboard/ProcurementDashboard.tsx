@@ -1,9 +1,10 @@
 "use client"
 
-import { FileText, BarChart2, Package } from "lucide-react"
+import { BarChart2, FileText, History, Package } from "lucide-react"
 import { ActionBtn } from "@/components/features/shared/action-btn"
+import { Eyebrow } from "@/components/primitives"
 
-// Procurement home: hero + entry points. All stock detail lives on the stock
+// Procurement home: hero plus entry points. All stock detail lives on the stock
 // dashboard; the receive/issue form lives at /submit.
 export function ProcurementDashboard() {
   const hour = new Date().getHours()
@@ -11,20 +12,24 @@ export function ProcurementDashboard() {
 
   return (
     <div className="space-y-4 animate-fade-in-up max-w-lg mx-auto">
-      <div className="rounded-3xl overflow-hidden shadow-lg shadow-emerald-900/10">
-        <div className="bg-gradient-to-br from-slate-900 via-emerald-950 to-emerald-900 px-5 pt-8 pb-8 sm:px-6 text-center">
-          <div className="w-14 h-14 rounded-2xl bg-emerald-600/30 border border-emerald-500/30 flex items-center justify-center mx-auto mb-4">
-            <Package className="w-7 h-7 text-emerald-300" />
-          </div>
-          <p className="text-emerald-400/70 text-[9px] font-black uppercase tracking-[0.2em]">{greeting}</p>
-          <h2 className="text-white text-2xl font-black tracking-tight mt-1">Stock Office</h2>
-          <p className="text-emerald-400/60 text-xs font-medium mt-1">Procurement &amp; Raw Materials</p>
+      {/* The dark hero is the app's most distinctive surface. It is deliberately
+          the same gradient on both themes — it reads as a deep brand panel rather
+          than as "light mode", so it does not need a dark variant. */}
+      <div className="rounded-3xl overflow-hidden shadow-lg">
+        <div className="bg-gradient-to-br from-[#0b1512] via-[#04231a] to-[#065f46] px-5 py-8 sm:px-6 text-center">
+          <span className="w-14 h-14 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center mx-auto mb-4">
+            <Package className="w-7 h-7 text-white" aria-hidden="true" />
+          </span>
+          <Eyebrow className="text-white/60">{greeting}</Eyebrow>
+          <h2 className="text-white text-2xl font-bold tracking-tight mt-1">Stock Office</h2>
+          <p className="text-white/70 text-sm font-medium mt-1">Procurement &amp; raw materials</p>
         </div>
       </div>
 
       <div className="space-y-2">
-        <ActionBtn href="/dashboard/procurement/stock" icon={BarChart2} label="Stock Dashboard" primary />
-        <ActionBtn href="/dashboard/procurement/submit" icon={FileText} label="Log Receipt / Issue Materials" />
+        <ActionBtn href="/dashboard/procurement/stock" icon={BarChart2} label="Stock levels & days of cover" primary />
+        <ActionBtn href="/dashboard/procurement/submit" icon={FileText} label="Log a receipt or issue" />
+        <ActionBtn href="/dashboard/history" icon={History} label="Submission history" />
       </div>
     </div>
   )

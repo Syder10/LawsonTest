@@ -31,12 +31,15 @@ function Select({
   children,
   disabled,
   title,
+  label,
 }: {
   value: string
   onChange: (v: string) => void
   children: React.ReactNode
   disabled?: boolean
   title?: string
+  /** Names the control for assistive tech — the visible text is only the option. */
+  label: string
 }) {
   return (
     <div className="relative" title={title}>
@@ -44,6 +47,7 @@ function Select({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
+        aria-label={label}
         className="h-9 pl-3 pr-8 text-xs font-semibold rounded-lg border border-hairline bg-surface-card text-ink-secondary focus:border-brand focus:outline-none appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {children}
@@ -71,38 +75,67 @@ export function FilterBar({ filters, onChange }: { filters: Filters; onChange: (
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-3 flex flex-wrap items-center gap-2">
+    // ONE filter row above everything it scopes — never per-chart. Every chart,
+    // stat and table below re-renders against the same slice, so the numbers on
+    // screen always agree with each other.
+    <div className="bg-surface-card rounded-2xl border border-hairline p-3 flex flex-wrap items-center gap-2">
       <div className="flex items-center gap-1 mr-1">
         {PRESETS.map((p) => (
-          <button key={p.label} onClick={() => set(p.range())}
-            className={`h-9 px-3 text-xs font-bold rounded-lg border transition-colors ${isActivePreset(p) ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-slate-200 hover:border-emerald-400"}`}>
+          <button
+            key={p.label}
+            onClick={() => set(p.range())}
+            aria-pressed={isActivePreset(p)}
+            className={`h-9 px-3 text-xs font-bold rounded-lg border transition-colors ${
+              isActivePreset(p)
+                ? "bg-brand-solid text-brand-ink border-brand-solid"
+                : "bg-surface-card text-ink-secondary border-hairline hover:border-brand"
+            }`}
+          >
             {p.label}
           </button>
         ))}
       </div>
 
       <div className="flex items-center gap-1.5">
-        <input type="date" value={filters.from} max={filters.to} onChange={(e) => set({ from: e.target.value })}
-          className="h-9 px-2 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-700 focus:border-emerald-500 focus:outline-none" />
-        <span className="text-slate-400 text-xs">→</span>
-        <input type="date" value={filters.to} min={filters.from} max={iso(new Date())} onChange={(e) => set({ to: e.target.value })}
-          className="h-9 px-2 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-700 focus:border-emerald-500 focus:outline-none" />
+        <input
+          type="date"
+          value={filters.from}
+          max={filters.to}
+          onChange={(e) => set({ from: e.target.value })}
+          aria-label="From date"
+          className="h-9 px-2 text-xs font-semibold rounded-lg border border-hairline bg-surface-card text-ink-secondary focus:border-brand focus:outline-none"
+        />
+        <span className="text-ink-muted text-xs" aria-hidden="true">→</span>
+        <input
+          type="date"
+          value={filters.to}
+          min={filters.from}
+          max={iso(new Date())}
+          onChange={(e) => set({ to: e.target.value })}
+          aria-label="To date"
+          className="h-9 px-2 text-xs font-semibold rounded-lg border border-hairline bg-surface-card text-ink-secondary focus:border-brand focus:outline-none"
+        />
       </div>
 
-      <Select value={filters.shift} onChange={(v) => set({ shift: v })}>
+      <Select value={filters.shift} onChange={(v) => set({ shift: v })} label="Shift">
         <option value="">All shifts</option>
         {SHIFT_ORDER.map((s) => (
           <option key={s} value={s}>{s}</option>
         ))}
       </Select>
 
-      <Select value={filters.department} onChange={selectDepartment}>
+      <Select value={filters.department} onChange={selectDepartment} label="Department">
         <option value="">All departments</option>
         {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
       </Select>
 
-      <Select value={filters.product} onChange={(v) => set({ product: v })} disabled={!productApplies}
-        title={productApplies ? undefined : `${filters.department} records carry no product`}>
+      <Select
+        value={filters.product}
+        onChange={(v) => set({ product: v })}
+        disabled={!productApplies}
+        label="Product"
+        title={productApplies ? undefined : `${filters.department} records carry no product`}
+      >
         <option value="">Both products</option>
         {PRODUCTS.map((p) => (
           <option key={p} value={p}>{p}</option>
@@ -110,8 +143,10 @@ export function FilterBar({ filters, onChange }: { filters: Filters; onChange: (
       </Select>
 
       {(filters.shift || filters.department || filters.product) && (
-        <button onClick={() => set({ shift: "", department: "", product: "" })}
-          className="h-9 px-3 text-xs font-semibold rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors">
+        <button
+          onClick={() => set({ shift: "", department: "", product: "" })}
+          className="h-9 px-3 text-xs font-semibold rounded-lg text-ink-muted hover:text-ink-primary hover:bg-surface-sunken transition-colors"
+        >
           Clear
         </button>
       )}

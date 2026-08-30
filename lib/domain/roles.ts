@@ -56,3 +56,63 @@ export function roleSatisfiesMode(role: string, mode: LoginMode): boolean {
   if (mode === "manager") return role === "manager" || role === "admin"
   return isKnownRole(role)
 }
+
+// ── Navigation ──────────────────────────────────────────────────────────────
+// Routes as pure data (icons are mapped in the nav component, which is where JSX
+// belongs). This exists because navigation was previously ROLE-ABSENT, not just
+// role-unaware: only the supervisor dashboard linked anywhere, so managers,
+// admins and procurement had NO path to /dashboard/history or /dashboard/profile
+// at all — not even to change their own password. Both were URL-typing-only,
+// even though history/page.tsx explicitly builds an all-departments manager view.
+//
+// Each list is capped at FIVE so it fits a thumb-reachable bottom tab bar without
+// a "More" overflow. That cap is a real constraint, so each role gets the four or
+// five things it actually does rather than every route it may access.
+
+export type NavKey = "home" | "submit" | "receive" | "history" | "stock" | "users" | "profile"
+
+export interface NavItem {
+  key: NavKey
+  href: string
+  /** Short enough for a tab label under an icon. */
+  label: string
+}
+
+const ITEM: Record<NavKey, NavItem> = {
+  home: { key: "home", href: "/dashboard", label: "Home" },
+  submit: { key: "submit", href: "/dashboard/forms", label: "Submit" },
+  receive: { key: "receive", href: "/dashboard/procurement/submit", label: "Receive" },
+  history: { key: "history", href: "/dashboard/history", label: "History" },
+  stock: { key: "stock", href: "/dashboard/procurement/stock", label: "Stock" },
+  users: { key: "users", href: "/dashboard/admin/users", label: "Users" },
+  profile: { key: "profile", href: "/dashboard/profile", label: "Profile" },
+}
+
+const NAV_BY_ROLE: Record<UserRole, NavKey[]> = {
+  supervisor: ["home", "submit", "history", "profile"],
+  manager: ["home", "submit", "history", "stock", "profile"],
+  procurement: ["home", "receive", "stock", "history", "profile"],
+  // Admins get Users over Submit: they manage accounts rather than sit on a
+  // shift roster, and the cap is five.
+  admin: ["home", "users", "history", "stock", "profile"],
+}
+
+export function navFor(role: string): NavItem[] {
+  const keys = isKnownRole(role) ? NAV_BY_ROLE[role] : NAV_BY_ROLE.supervisor
+  return keys.map((k) => ITEM[k])
+}
+
+/**
+ * Whether `href` is the active nav destination for `pathname`.
+ *
+ * Longest-prefix, not `startsWith` alone: "/dashboard" prefixes every route, so a
+ * naive check would light up Home on every page.
+ */
+export function isActiveNav(href: string, pathname: string, all: NavItem[]): boolean {
+  const matches = all
+    .map((i) => i.href)
+    .filter((h) => pathname === h || pathname.startsWith(`${h}/`))
+  if (matches.length === 0) return false
+  const best = matches.reduce((a, b) => (b.length > a.length ? b : a))
+  return href === best
+}

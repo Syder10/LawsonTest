@@ -2,8 +2,12 @@
 
 import Link from "next/link"
 import { ChevronRight } from "lucide-react"
+import { cn } from "@/lib/utils"
 
-// Shared quick-action button (was duplicated in Supervisor & Procurement dashboards).
+// Shared quick-action row, on tokens rather than literal colours.
+//
+// h-14 (56px) because these are the primary targets on the supervisor and
+// procurement home screens — comfortably above the 44px minimum for a thumb.
 export function ActionBtn({
   href,
   icon: Icon,
@@ -17,19 +21,32 @@ export function ActionBtn({
   primary?: boolean
   external?: boolean
 }) {
-  const cls = `group flex items-center gap-3 rounded-2xl px-4 py-3.5 transition-all duration-150 active:scale-[0.97]
-    ${primary
-      ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/25"
-      : "bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/80 shadow-sm"
-    }`
+  const cls = cn(
+    "group flex items-center gap-3 rounded-2xl px-4 min-h-14 transition-colors active:scale-[0.97]",
+    primary
+      ? "bg-brand-solid hover:bg-brand-solid-hover text-brand-ink shadow-sm"
+      : "bg-surface-card hover:bg-surface-sunken text-ink-secondary border border-hairline shadow-sm",
+  )
   const inner = (
     <>
-      <span className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-colors ${primary ? "bg-white/10 group-hover:bg-white/20" : "bg-slate-100 group-hover:bg-slate-200"}`}>
-        <Icon className={`w-4 h-4 ${primary ? "text-white" : "text-slate-500"}`} />
+      <span
+        className={cn(
+          "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors",
+          primary ? "bg-white/15 group-hover:bg-white/25" : "bg-surface-sunken group-hover:bg-brand-subtle",
+        )}
+      >
+        <Icon className={cn("w-4 h-4", primary ? "text-brand-ink" : "text-brand")} aria-hidden="true" />
       </span>
-      <p className="text-sm font-bold">{label}</p>
-      <ChevronRight className={`w-4 h-4 ml-auto shrink-0 opacity-0 group-hover:opacity-40 transition-opacity ${primary ? "text-white" : "text-slate-400"}`} />
+      <span className="text-sm font-bold">{label}</span>
+      <ChevronRight
+        className={cn("w-4 h-4 ml-auto shrink-0 transition-transform group-hover:translate-x-0.5", primary ? "text-brand-ink/70" : "text-ink-muted")}
+        aria-hidden="true"
+      />
     </>
   )
-  return external ? <a href={href} className={cls}>{inner}</a> : <Link href={href} className={cls}>{inner}</Link>
+  return external ? (
+    <a href={href} className={cls}>{inner}</a>
+  ) : (
+    <Link href={href} className={cls}>{inner}</Link>
+  )
 }

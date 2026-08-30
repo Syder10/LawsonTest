@@ -3,11 +3,91 @@ import {
   ROLES,
   ROLE_COLORS,
   ROLE_LABELS,
+  isActiveNav,
   isKnownRole,
+  navFor,
   normalizeLoginMode,
   roleLabel,
   roleSatisfiesMode,
 } from "@/lib/domain/roles"
+
+describe("navFor", () => {
+  it("gives every role a navigation list", () => {
+    for (const r of ROLES) expect(navFor(r).length).toBeGreaterThan(0)
+  })
+
+  it("caps every role at five items so a bottom tab bar stays thumb-reachable", () => {
+    for (const r of ROLES) expect(navFor(r).length).toBeLessThanOrEqual(5)
+  })
+
+  it("gives EVERY role a route to history and profile", () => {
+    // The bug this fixes: only supervisors had links anywhere, so managers,
+    // admins and procurement could not reach history or their own profile —
+    // not even to change their password.
+    for (const r of ROLES) {
+      const keys = navFor(r).map((i) => i.key)
+      expect(keys, `${r} cannot reach history`).toContain("history")
+      expect(keys, `${r} cannot reach profile`).toContain("profile")
+    }
+  })
+
+  it("always starts at home", () => {
+    for (const r of ROLES) expect(navFor(r)[0].key).toBe("home")
+  })
+
+  it("routes each role to the work it actually does", () => {
+    expect(navFor("supervisor").map((i) => i.key)).toContain("submit")
+    expect(navFor("procurement").map((i) => i.key)).toContain("receive")
+    expect(navFor("admin").map((i) => i.key)).toContain("users")
+    expect(navFor("manager").map((i) => i.key)).toContain("stock")
+  })
+
+  it("does not offer stock to supervisors or users to anyone but admins", () => {
+    expect(navFor("supervisor").map((i) => i.key)).not.toContain("stock")
+    for (const r of ROLES) {
+      if (r !== "admin") expect(navFor(r).map((i) => i.key)).not.toContain("users")
+    }
+  })
+
+  it("has no duplicate destinations", () => {
+    for (const r of ROLES) {
+      const hrefs = navFor(r).map((i) => i.href)
+      expect(new Set(hrefs).size).toBe(hrefs.length)
+    }
+  })
+
+  it("falls back to the supervisor list for an unrecognised role", () => {
+    expect(navFor("nonsense")).toEqual(navFor("supervisor"))
+  })
+})
+
+describe("isActiveNav", () => {
+  const nav = navFor("manager")
+
+  it("marks the exact route active", () => {
+    expect(isActiveNav("/dashboard/history", "/dashboard/history", nav)).toBe(true)
+  })
+
+  it("does NOT light up Home on every page", () => {
+    // "/dashboard" prefixes every route, so a naive startsWith would always match.
+    expect(isActiveNav("/dashboard", "/dashboard/history", nav)).toBe(false)
+    expect(isActiveNav("/dashboard", "/dashboard", nav)).toBe(true)
+  })
+
+  it("keeps the parent active on a nested route", () => {
+    expect(isActiveNav("/dashboard/forms", "/dashboard/forms/Caps%20Stock", nav)).toBe(true)
+  })
+
+  it("prefers the longest match when routes nest", () => {
+    const path = "/dashboard/procurement/stock"
+    expect(isActiveNav("/dashboard/procurement/stock", path, nav)).toBe(true)
+    expect(isActiveNav("/dashboard", path, nav)).toBe(false)
+  })
+
+  it("marks nothing active on an unrelated route", () => {
+    expect(nav.some((i) => isActiveNav(i.href, "/login", nav))).toBe(false)
+  })
+})
 
 describe("isKnownRole", () => {
   it("accepts every configured role", () => {

@@ -4,42 +4,40 @@ import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { createServerSupabase } from "@/lib/supabase/server"
 import { getProfileForUser } from "@/lib/auth/profile"
-import { isKnownRole, normalizeLoginMode, roleLabel, roleSatisfiesMode } from "@/lib/domain/roles"
+import { isKnownRole } from "@/lib/domain/roles"
 
+// Sign in. ONE path for every role — see app/login/page.tsx for why the three
+// "modes" were removed. What a user can do afterwards is decided entirely by
+// profiles.role, which app/dashboard/page.tsx and lib/auth/guards.ts read.
 export async function login(state: unknown, formData: FormData) {
-    const supabase  = await createServerSupabase()
+    const supabase = await createServerSupabase()
     const rawUsername = (formData.get("username") as string)?.trim()
-    const password    = formData.get("password") as string
-    const mode        = normalizeLoginMode(formData.get("mode") as string | null)
+    const password = formData.get("password") as string
 
     if (!rawUsername || !password) {
-        return { error: "Username and password are required." }
+        return { error: "Enter your username and password." }
     }
 
-    // All accounts use @llc.com — just append if the user typed a bare username
-    const emailToUse = rawUsername.includes("@")
-        ? rawUsername
-        : `${rawUsername}@llc.com`
+    // All accounts use @llc.com — append it if a bare username was typed.
+    const emailToUse = rawUsername.includes("@") ? rawUsername : `${rawUsername}@llc.com`
 
-    const { error } = await supabase.auth.signInWithPassword({
-        email:    emailToUse,
-        password,
-    })
+    const { error } = await supabase.auth.signInWithPassword({ email: emailToUse, password })
 
     if (error) {
-        // Give a friendly message regardless of mode
-        return { error: "Incorrect username or password." }
+        // Deliberately not specific about WHICH is wrong: saying "no such user"
+        // would let anyone enumerate valid accounts.
+        return { error: "That username and password don’t match." }
     }
 
-    // Verify the account's role clears the bar for the form they used. This stops
-    // a supervisor walking into the manager/admin panel by clicking the wrong
-    // button; it does NOT stop a manager/admin using the default form.
     const { data: { user }, error: userError } = await supabase.auth.getUser()
     if (userError || !user) {
         await supabase.auth.signOut()
-        return { error: "Unable to load this account. Please try again." }
+        return { error: "Couldn’t load this account. Please try again." }
     }
 
+    // A login without a profile has no role, department or rotation, so nothing
+    // downstream can decide what it may do. Sign back out rather than land the
+    // user on a dashboard that will fail every request.
     const { profile, reason } = await getProfileForUser(supabase, user.id)
 
     if (!profile) {
@@ -60,24 +58,10 @@ export async function login(state: unknown, formData: FormData) {
         return { error: messages[reason as keyof typeof messages] ?? messages.unreadable }
     }
 
-    const role = profile.role
-
-    if (!isKnownRole(role)) {
+    if (!isKnownRole(profile.role)) {
         await supabase.auth.signOut()
-        return { error: `This account has an unrecognised role ("${role}"). Please contact an administrator.` }
-    }
-
-    if (!roleSatisfiesMode(role, mode)) {
-        await supabase.auth.signOut()
-        // Naming the account's ACTUAL role matters: the password already verified
-        // who they are, and a generic refusal makes a mis-assigned role almost
-        // impossible to diagnose from the outside.
-        const required = mode === "admin" ? "Administrator" : "Manager"
         return {
-            error:
-                `This is a ${roleLabel(role)} account, so it cannot sign in here — ` +
-                `${required} access is required. If that is wrong, ask an administrator ` +
-                `to update your role (it is stored on your profile, not on your login).`,
+            error: `This account has an unrecognised role ("${profile.role}"). Please contact an administrator.`,
         }
     }
 
