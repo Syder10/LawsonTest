@@ -14,6 +14,11 @@ echo "──────── unit tests ────────"
 npx vitest run --reporter=dot 2>&1 | tail -20
 [ "${PIPESTATUS[0]}" = "0" ] && echo "vitest passed" || { echo "vitest FAILED"; FAIL=1; }
 
+echo "──────── lint ────────"
+# Warnings are tolerated (see eslint.config.mjs); errors are not.
+npx eslint . 2>&1 | tail -5
+[ "${PIPESTATUS[0]}" = "0" ] && echo "eslint: 0 errors" || { echo "eslint FAILED"; FAIL=1; }
+
 if [ "${1:-}" = "full" ]; then
   echo "──────── build ────────"
   npm run build 2>&1 | tail -25

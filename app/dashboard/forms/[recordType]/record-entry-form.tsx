@@ -11,7 +11,7 @@ import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { AlertCircle, Lock, Minus, Plus, Sparkles, Trash2 } from "lucide-react"
 import { SuccessToast, type SuccessInfo } from "./success-toast"
-import { Card, Chip, Choice, Field, NumberInput, SectionTitle, Select, TextArea, TextInput } from "@/components/primitives"
+import { Card, Chip, Choice, Field, NumberInput, SectionTitle, TextArea, TextInput } from "@/components/primitives"
 
 // ============================================================================
 // Record entry — the screen supervisors use many times a day, on a phone, often

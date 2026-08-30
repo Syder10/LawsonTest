@@ -19,7 +19,7 @@ export default async function DashboardPage() {
     const role = profile.role
 
     if (role === "admin")        return <AdminDashboard />
-    if (role === "manager")      return <ManagerDashboard userId={user.id} />
+    if (role === "manager")      return <ManagerDashboard />
     if (role === "procurement")  return <ProcurementDashboard />
     return <SupervisorDashboard userId={user.id} />
 }

@@ -98,6 +98,16 @@
   --chart-grid: #e6ebe8;
   --chart-axis: #7d8a85;
 
+  /* ── Hero panel ─────────────────────────────────────────────────────────────
+     The one deliberately dark surface in the app (supervisor home). It stays dark
+     in BOTH modes because it is an identity panel rather than a page surface, so
+     the white text on it is safe either way — which is also why the widgets that
+     live on it use white rather than the ink tokens. Tokens, not a JSX gradient,
+     so the two stops are spelled once.
+     ------------------------------------------------------------------------- */
+  --hero-from: #0e1a17;
+  --hero-to: #064e3b;
+
   /* ── Motion ─────────────────────────────────────────────────────────────────
      Custom curves because the built-in CSS easings are too weak to read as
      intentional. Never ease-in on UI: it delays the initial movement, which is
@@ -206,6 +216,11 @@
 
   --chart-grid: #222d29;
   --chart-axis: #7d8a85;
+
+  /* Deeper than the light-mode hero so the panel recedes into the darker page
+     instead of glowing against it. */
+  --hero-from: #0b1412;
+  --hero-to: #04382b;
 }
 
 /* Honour the OS preference too, but let an explicit `.light` stamp win over it. */
@@ -453,6 +468,11 @@
   .animate-float {
     animation: none;
   }
+}
+
+/* ── Hero panel (SupervisorDashboard) ──────────────────────────────────────── */
+.hero-panel {
+  background-image: linear-gradient(135deg, var(--hero-from) 0%, var(--hero-to) 100%);
 }
 
 /* ── Splash screen (app/page.tsx) ──────────────────────────────────────────── */

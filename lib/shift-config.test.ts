@@ -8,6 +8,7 @@ import {
   buildOnTimeWindowInfo,
   currentGhanaShift,
   expectedShiftForGroup,
+  groupsForDepartment,
   isBackdated,
   isDayOff,
   isEarlyBird,
@@ -231,6 +232,35 @@ describe("weekRotationOffset", () => {
 
   it("handles weeks before the anchor without going negative", () => {
     expect(weekRotationOffset(at("2026-04-06T12:00:00Z"))).toBe(2)
+  })
+})
+
+describe("groupsForDepartment", () => {
+  it("gives the standard departments three groups", () => {
+    for (const dept of ["Blowing", "Filling Line", "Packaging", "Concentrate"]) {
+      expect(groupsForDepartment(dept), dept).toEqual([1, 2, 3])
+    }
+  })
+
+  it("gives Alcohol and Blending only two", () => {
+    expect(groupsForDepartment("Alcohol and Blending")).toEqual([1, 2])
+    expect(groupsForDepartment("alcohol and blending")).toEqual([1, 2])
+  })
+
+  // The point of the helper: every group it offers must have a rostered shift,
+  // because a group without one loses its on-time window, streak and ranking.
+  it("only lists groups the rotation actually assigns a shift", () => {
+    const monday = at("2026-04-13T12:00:00Z")
+    for (const dept of ["Blowing", "Alcohol and Blending", "Concentrate"]) {
+      for (const g of groupsForDepartment(dept)) {
+        expect(expectedShiftForGroup(dept, g, monday), `${dept} group ${g}`).not.toBeNull()
+      }
+    }
+  })
+
+  it("excludes groups the rotation has no shift for", () => {
+    expect(groupsForDepartment("Alcohol and Blending")).not.toContain(3)
+    expect(expectedShiftForGroup("Alcohol and Blending", 3, at("2026-04-13T12:00:00Z"))).toBeNull()
   })
 })
 

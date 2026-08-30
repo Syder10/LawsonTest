@@ -2,31 +2,33 @@
 
 import { useState, useEffect } from "react"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
-import Link from "next/link"
-import { ArrowLeft, CheckCircle2 } from "lucide-react"
+import { CheckCircle2 } from "lucide-react"
 import { toast } from "sonner"
 import {
   STAMP_COILS_PER_BOX, STAMP_PCS_PER_COIL, STAMP_PCS_PER_BOX, TAPE_PCS_PER_BOX,
   PPE_TYPES, pcsPerBox, type MaterialType,
 } from "@/lib/domain/materials"
+import { DEPARTMENTS } from "@/lib/domain/record-types"
+import { groupsForDepartment } from "@/lib/shift-config"
+import { Card, Choice, Eyebrow, Field, NumberInput, PageHeader, Select, TextArea, TextInput } from "@/components/primitives"
+import { Button } from "@/components/ui/button"
 
-const MATERIALS: { type: MaterialType; label: string; color: string; bg: string }[] = [
-  { type: "tax_stamp",      label: "Tax Stamps",        color: "text-violet-700", bg: "bg-violet-50 border-violet-300"  },
-  { type: "carton_bitters", label: "Cartons — Bitters", color: "text-slate-700",  bg: "bg-slate-50 border-slate-300"   },
-  { type: "carton_ginger",  label: "Cartons — Ginger",  color: "text-amber-700",  bg: "bg-amber-50 border-amber-300"   },
-  { type: "seal_tape",      label: "Seal Tapes",        color: "text-sky-700",    bg: "bg-sky-50 border-sky-300"       },
-  { type: "hair_net",       label: "Hair Nets",         color: "text-pink-700",   bg: "bg-pink-50 border-pink-300"     },
-  { type: "nose_mask",      label: "Nose Masks",        color: "text-teal-700",   bg: "bg-teal-50 border-teal-300"     },
-  { type: "gloves",         label: "Gloves",            color: "text-orange-700", bg: "bg-orange-50 border-orange-300" },
+// Materials no longer carry a hue each. Seven decorative colour families made the
+// selected material read as a status, and the same seven had to be repeated in a
+// second map for the banners; selection is now shown by the Choice primitive.
+const MATERIALS: { type: MaterialType; label: string }[] = [
+  { type: "tax_stamp",      label: "Tax stamps" },
+  { type: "carton_bitters", label: "Cartons — Bitters" },
+  { type: "carton_ginger",  label: "Cartons — Ginger" },
+  { type: "seal_tape",      label: "Seal tapes" },
+  { type: "hair_net",       label: "Hair nets" },
+  { type: "nose_mask",      label: "Nose masks" },
+  { type: "gloves",         label: "Gloves" },
 ]
 
-const DEPT_GROUPS: { dept: string; groups: number[] }[] = [
-  { dept: "Blowing",              groups: [1, 2, 3] },
-  { dept: "Alcohol and Blending", groups: [1, 2]    },
-  { dept: "Filling Line",         groups: [1, 2, 3] },
-  { dept: "Packaging",            groups: [1, 2, 3] },
-  { dept: "Concentrate",          groups: [1, 2, 3] },
-]
+// Derived from the roster so a recipient group that works no shift cannot be
+// offered (Alcohol and Blending has two groups, not three).
+const DEPT_GROUPS = DEPARTMENTS.map((dept) => ({ dept, groups: groupsForDepartment(dept) }))
 
 const GIVEN_OUT_UNITS = ["Boxes", "Packs"]
 
@@ -38,12 +40,23 @@ function ppeUnit(t: MaterialType): string {
   return "packs"
 }
 
-function ppeBgColor(t: MaterialType): string {
-  if (t === "seal_tape") return "bg-sky-50 border-sky-200 text-sky-700"
-  if (t === "hair_net")  return "bg-pink-50 border-pink-200 text-pink-700"
-  if (t === "nose_mask") return "bg-teal-50 border-teal-200 text-teal-700"
-  if (t === "gloves")    return "bg-orange-50 border-orange-200 text-orange-700"
-  return ""
+/** Small derived-figure tile: the system's arithmetic, shown before submitting. */
+function Derived({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-hairline bg-surface-sunken px-3 py-3 text-center">
+      <p className="text-xs font-bold uppercase tracking-wide text-ink-muted">{label}</p>
+      <p className="mt-1 text-xl font-bold tnum text-ink-primary">{value}</p>
+    </div>
+  )
+}
+
+/** Explanatory note above a quantity field — a pack/box conversion or a rate. */
+function Note({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-brand/20 bg-brand-subtle px-4 py-2.5 text-xs font-semibold text-brand-subtle-ink space-y-0.5">
+      {children}
+    </div>
+  )
 }
 
 export default function ProcurementSubmitPage() {
@@ -76,7 +89,7 @@ export default function ProcurementSubmitPage() {
       setUserName(data?.full_name || "Procurement Officer")
     }
     load()
-  }, [])
+  }, [supabase])
 
   const switchMaterial = (t: MaterialType) => {
     setMaterial(t)
@@ -148,98 +161,76 @@ export default function ProcurementSubmitPage() {
   }
 
   const meta = MATERIALS.find(m => m.type === material)!
-  const inp  = "w-full h-11 px-3 text-sm font-medium rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none transition-all"
-  const sel  = "w-full h-11 px-3 text-sm font-medium rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-emerald-500 focus:outline-none appearance-none transition-all"
 
   return (
     <div className="space-y-5 max-w-xl mx-auto animate-fade-in-up">
 
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Link href="/dashboard"
-          className="p-2 bg-white rounded-full border border-emerald-100 hover:bg-emerald-50 transition-colors text-emerald-700">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <div>
-          <h2 className="text-xl font-black tracking-tight text-emerald-950">Submit Raw Materials</h2>
-          <p className="text-emerald-700/70 font-medium mt-0.5 text-xs">Log incoming stock</p>
-        </div>
-      </div>
+      <PageHeader title="Submit raw materials" description="Log incoming stock" backHref="/dashboard" />
 
       {/* Success */}
       {submitted && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-5 py-4 flex items-center gap-3">
-          <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
-          <p className="font-bold text-emerald-800 text-sm flex-1">Submitted — stock updated</p>
-          <button onClick={() => setSubmitted(false)} className="text-xs font-bold text-emerald-600 underline shrink-0">
+        <div className="flex items-center gap-3 rounded-2xl border border-good/30 bg-good-subtle px-5 py-4">
+          <CheckCircle2 className="w-5 h-5 shrink-0 text-good-ink" aria-hidden="true" />
+          <p className="flex-1 text-sm font-bold text-good-ink">Submitted — stock updated</p>
+          <button onClick={() => setSubmitted(false)} className="shrink-0 text-xs font-bold text-good-ink underline">
             Submit another
           </button>
         </div>
       )}
 
       {/* Date + received by */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 space-y-4">
-        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Entry Details</p>
+      <Card padded className="space-y-4">
+        <Eyebrow>Entry details</Eyebrow>
         <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-600">Date *</label>
-            <input type="date" value={date} max={todayStr()} onChange={e => setDate(e.target.value)} className={inp} />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-600">Received by</label>
-            <input type="text" value={userName} readOnly
-              className="w-full h-11 px-3 text-sm font-medium rounded-xl border border-slate-100 bg-slate-50 text-slate-400" />
-          </div>
+          <Field label="Date" required>
+            {p => <TextInput {...p} type="date" value={date} max={todayStr()} onChange={e => setDate(e.target.value)} />}
+          </Field>
+          <Field label="Received by" hint="From your profile.">
+            {p => <TextInput {...p} type="text" value={userName} readOnly disabled />}
+          </Field>
         </div>
-      </div>
+      </Card>
 
-      {/* Material selector */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 space-y-3">
-        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Material Type *</p>
-        <div className="grid grid-cols-2 gap-2">
-          {MATERIALS.map(m => {
-            const on = material === m.type
-            return (
-              <button key={m.type} onClick={() => switchMaterial(m.type)}
-                className={`px-4 py-3 rounded-xl border-2 text-left text-sm font-bold transition-all
-                  ${on ? `${m.bg} ${m.color}` : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"}`}>
-                {m.label}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      {/* Material selector — real radios: it is a single choice, and the old
+          buttons exposed no pressed state to assistive tech. */}
+      <Card padded className="space-y-3">
+        <fieldset>
+          <legend className="mb-3"><Eyebrow as="span">Material type *</Eyebrow></legend>
+          <div className="grid grid-cols-2 gap-2">
+            {MATERIALS.map(m => (
+              <Choice
+                key={m.type}
+                type="radio"
+                name="material"
+                label={m.label}
+                value={m.type}
+                checked={material === m.type}
+                onChange={() => switchMaterial(m.type)}
+              />
+            ))}
+          </div>
+        </fieldset>
+      </Card>
 
       {/* Quantity fields */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 space-y-4">
-        <p className={`text-[9px] font-black uppercase tracking-[0.2em] ${meta.color}`}>{meta.label}</p>
+      <Card padded className="space-y-4">
+        <Eyebrow>{meta.label}</Eyebrow>
 
         {/* ── TAX STAMPS — boxes only, system calculates coils + pcs ── */}
         {material === "tax_stamp" && (
           <div className="space-y-4">
-            <div className="bg-violet-50 border border-violet-200 rounded-xl px-4 py-2.5 text-[10px] text-violet-700 font-semibold space-y-0.5">
+            <Note>
               <p>1 box = {STAMP_COILS_PER_BOX} coils &nbsp;·&nbsp; 1 coil = {fmt(STAMP_PCS_PER_COIL)} pcs</p>
               <p>Bitters = 9 stamps/carton &nbsp;·&nbsp; Ginger = 6 stamps/carton</p>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-600">Boxes received *</label>
-              <input type="number" min="0" placeholder="0" value={stampBoxes}
-                onChange={e => setStampBoxes(e.target.value)} inputMode="numeric" className={inp} />
-            </div>
+            </Note>
+            <Field label="Boxes received" required>
+              {p => <NumberInput {...p} placeholder="0" value={stampBoxes} onChange={e => setStampBoxes(e.target.value)} />}
+            </Field>
             {stampBoxesN > 0 && (
               <div className="grid grid-cols-3 gap-2">
-                <div className="bg-violet-50 border border-violet-100 rounded-xl py-3 px-3 text-center">
-                  <p className="text-[9px] font-black uppercase tracking-wider text-violet-400">Boxes</p>
-                  <p className="text-xl font-black text-violet-700 tabular-nums mt-1">{stampBoxesN}</p>
-                </div>
-                <div className="bg-violet-50 border border-violet-100 rounded-xl py-3 px-3 text-center">
-                  <p className="text-[9px] font-black uppercase tracking-wider text-violet-400">Coils</p>
-                  <p className="text-xl font-black text-violet-700 tabular-nums mt-1">{fmt(stampCoils)}</p>
-                </div>
-                <div className="bg-violet-50 border border-violet-100 rounded-xl py-3 px-3 text-center">
-                  <p className="text-[9px] font-black uppercase tracking-wider text-violet-400">Pcs</p>
-                  <p className="text-xl font-black text-violet-700 tabular-nums mt-1">{fmt(stampPcs)}</p>
-                </div>
+                <Derived label="Boxes" value={fmt(stampBoxesN)} />
+                <Derived label="Coils" value={fmt(stampCoils)} />
+                <Derived label="Pcs" value={fmt(stampPcs)} />
               </div>
             )}
           </div>
@@ -248,20 +239,14 @@ export default function ProcurementSubmitPage() {
         {/* ── CARTONS — pcs only ── */}
         {(material === "carton_bitters" || material === "carton_ginger") && (
           <div className="space-y-3">
-            <div className={`border rounded-xl px-4 py-2.5 text-[10px] font-semibold
-              ${material === "carton_bitters" ? "bg-slate-50 border-slate-200 text-slate-500" : "bg-amber-50 border-amber-200 text-amber-700"}`}>
-              Enter total carton pieces received
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-600">Quantity received (pcs) *</label>
-              <input type="number" min="0" placeholder="0" value={cartonPcs}
-                onChange={e => setCartonPcs(e.target.value)} inputMode="numeric" className={inp} />
-            </div>
+            <Note>Enter total carton pieces received.</Note>
+            <Field label="Quantity received (pcs)" required>
+              {p => <NumberInput {...p} placeholder="0" value={cartonPcs} onChange={e => setCartonPcs(e.target.value)} />}
+            </Field>
             {Number(cartonPcs) > 0 && (
-              <div className={`border rounded-xl px-4 py-2.5 flex items-center justify-between
-                ${material === "carton_bitters" ? "bg-slate-50 border-slate-200" : "bg-amber-50 border-amber-200"}`}>
-                <p className="text-xs font-bold text-slate-500">Total to add</p>
-                <p className="text-lg font-black text-slate-700 tabular-nums">{fmt(Number(cartonPcs))} pcs</p>
+              <div className="flex items-center justify-between rounded-xl border border-hairline bg-surface-sunken px-4 py-2.5">
+                <p className="text-xs font-bold text-ink-secondary">Total to add</p>
+                <p className="text-lg font-bold tnum text-ink-primary">{fmt(Number(cartonPcs))} pcs</p>
               </div>
             )}
           </div>
@@ -270,61 +255,55 @@ export default function ProcurementSubmitPage() {
         {/* ── PPE (seal tape, hair net, nose mask, gloves) — received + given out ── */}
         {PPE_TYPES.includes(material) && (
           <div className="space-y-4">
-            {/* Info banner */}
-            <div className={`border rounded-xl px-4 py-2.5 text-[10px] font-semibold ${ppeBgColor(material)}`}>
+            <Note>
               {material === "seal_tape"  && `1 box = ${TAPE_PCS_PER_BOX} pcs`}
               {material === "hair_net"   && `1 box = ${pcsPerBox("hair_net")} packs`}
               {material === "nose_mask"  && `1 box = ${pcsPerBox("nose_mask")} packs`}
               {material === "gloves"     && `1 box = ${pcsPerBox("gloves")} packs`}
-            </div>
+            </Note>
 
-            {/* Boxes received */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-600">Boxes received</label>
-              <input type="number" min="0" placeholder="0" value={ppeBoxesIn}
-                onChange={e => setPpeBoxesIn(e.target.value)} inputMode="numeric" className={inp} />
-              {ppeBoxesN > 0 && (
-                <p className="text-[10px] font-semibold text-slate-400 pl-1">
-                  = {fmt(ppePcsIn)} {ppeUnit(material)} received
-                </p>
-              )}
-            </div>
+            <Field
+              label="Boxes received"
+              hint={ppeBoxesN > 0 ? `= ${fmt(ppePcsIn)} ${ppeUnit(material)} received` : undefined}
+            >
+              {p => <NumberInput {...p} placeholder="0" value={ppeBoxesIn} onChange={e => setPpeBoxesIn(e.target.value)} />}
+            </Field>
 
-            <div className="border-t border-slate-100" />
+            <div className="border-t border-hairline" />
 
             {/* Given out */}
             <div className="space-y-3">
-              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Given Out (optional)</p>
+              <Eyebrow>Given out (optional)</Eyebrow>
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-600">Quantity given out</label>
-                  <input type="number" min="0" placeholder="0" value={ppeGivenOut}
-                    onChange={e => setPpeGivenOut(e.target.value)} inputMode="numeric" className={inp} />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-600">Unit</label>
-                  <select value={ppeGivenUnit} onChange={e => setPpeGivenUnit(e.target.value)} className={sel}>
-                    {GIVEN_OUT_UNITS.map(u => <option key={u}>{u}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-600">Given to (Department — Group)</label>
-                <select value={ppeGivenTo} onChange={e => setPpeGivenTo(e.target.value)} className={sel}>
-                  <option value="">Select recipient…</option>
-                  {DEPT_GROUPS.flatMap(({ dept, groups }) =>
-                    groups.map(g => (
-                      <option key={`${dept}-${g}`} value={`${dept} — Group ${g}`}>
-                        {dept} — Group {g}
-                      </option>
-                    ))
+                <Field label="Quantity given out">
+                  {p => <NumberInput {...p} placeholder="0" value={ppeGivenOut} onChange={e => setPpeGivenOut(e.target.value)} />}
+                </Field>
+                <Field label="Unit">
+                  {p => (
+                    <Select {...p} value={ppeGivenUnit} onChange={e => setPpeGivenUnit(e.target.value)}>
+                      {GIVEN_OUT_UNITS.map(u => <option key={u}>{u}</option>)}
+                    </Select>
                   )}
-                </select>
+                </Field>
               </div>
+              <Field label="Given to (department — group)">
+                {p => (
+                  <Select {...p} value={ppeGivenTo} onChange={e => setPpeGivenTo(e.target.value)}>
+                    <option value="">Select recipient…</option>
+                    {DEPT_GROUPS.flatMap(({ dept, groups }) =>
+                      groups.map(g => (
+                        <option key={`${dept}-${g}`} value={`${dept} — Group ${g}`}>
+                          {dept} — Group {g}
+                        </option>
+                      ))
+                    )}
+                  </Select>
+                )}
+              </Field>
               {ppeGivenOutN > 0 && ppeGivenPcs > 0 && (
-                <div className={`border rounded-xl px-4 py-2.5 flex items-center justify-between ${ppeBgColor(material)}`}>
-                  <p className="text-xs font-bold opacity-70">Giving out</p>
-                  <p className="text-lg font-black tabular-nums">
+                <div className="flex items-center justify-between rounded-xl border border-hairline bg-surface-sunken px-4 py-2.5">
+                  <p className="text-xs font-bold text-ink-secondary">Giving out</p>
+                  <p className="text-lg font-bold tnum text-ink-primary">
                     {fmt(ppeGivenPcs)} {ppeUnit(material)}
                   </p>
                 </div>
@@ -332,20 +311,26 @@ export default function ProcurementSubmitPage() {
             </div>
           </div>
         )}
-      </div>
+      </Card>
 
       {/* Remarks */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 space-y-2">
-        <label className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Remarks (optional)</label>
-        <textarea value={remarks} onChange={e => setRemarks(e.target.value)} rows={2}
-          placeholder="Supplier, delivery note, condition…"
-          className="w-full px-3 py-2.5 text-sm font-medium rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none transition-all resize-none" />
-      </div>
+      <Card padded className="space-y-2">
+        <Field label="Remarks (optional)">
+          {p => (
+            <TextArea
+              {...p}
+              value={remarks}
+              onChange={e => setRemarks(e.target.value)}
+              rows={2}
+              placeholder="Supplier, delivery note, condition…"
+            />
+          )}
+        </Field>
+      </Card>
 
-      <button onClick={handleSubmit} disabled={submitting}
-        className="w-full py-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm tracking-wide transition-all shadow-md shadow-emerald-600/20 disabled:opacity-50 disabled:cursor-not-allowed">
-        {submitting ? "Saving…" : "Submit — Raw Materials Received"}
-      </button>
+      <Button onClick={handleSubmit} disabled={submitting} className="w-full h-14 text-sm font-bold">
+        {submitting ? "Saving…" : "Submit — raw materials received"}
+      </Button>
 
     </div>
   )

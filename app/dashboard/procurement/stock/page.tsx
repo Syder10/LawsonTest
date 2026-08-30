@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { RefreshCw, Loader2, AlertCircle, AlertTriangle, PackageCheck, Send, ClipboardCheck } from "lucide-react"
 import { fmt, fmt1, shortDay } from "@/components/features/dashboard/manager/viz"
@@ -75,8 +75,6 @@ export default function ProcurementStockPage() {
   const [counts, setCounts] = useState<StockCount[]>([])
   const [reconcile, setReconcile] = useState<ReconcileTarget | null>(null)
   const [showReconcile, setShowReconcile] = useState(false)
-  const params = useRef({ from, to })
-  params.current = { from, to }
 
   const loadCounts = useCallback(async () => {
     try {
@@ -85,11 +83,14 @@ export default function ProcurementStockPage() {
     } catch { /* silent — the panel simply stays empty */ }
   }, [])
 
+  // The date range is a dependency rather than a ref written during render (a
+  // render-phase ref write is unsafe under concurrent rendering). The 60s poll
+  // therefore restarts when the filter changes, which is what you want anyway:
+  // the next tick already refetches the range now on screen.
   const load = useCallback(async () => {
     setLoading(true)
     setError(false)
     try {
-      const { from, to } = params.current
       const res = await fetch(`/api/procurement/report?from=${from}&to=${to}`)
       if (!res.ok) throw new Error()
       setData(await res.json())
@@ -99,9 +100,9 @@ export default function ProcurementStockPage() {
     } finally {
       setLoading(false)
     }
-  }, [loadCounts])
+  }, [from, to, loadCounts])
 
-  useEffect(() => { load() }, [load, from, to])
+  useEffect(() => { load() }, [load])
   useEffect(() => {
     const iv = setInterval(load, 60_000)
     return () => clearInterval(iv)

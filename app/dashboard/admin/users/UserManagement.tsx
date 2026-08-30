@@ -1,11 +1,14 @@
 "use client"
 
 import { useState } from "react"
-import Link from "next/link"
-import { ArrowLeft, Plus, Pencil, KeyRound, Trash2, X, Check, Eye, EyeOff, Search } from "lucide-react"
+import { Plus, Pencil, KeyRound, Trash2, X, Check, Eye, EyeOff, Search } from "lucide-react"
 import { toast } from "sonner"
 import { DEPARTMENTS } from "@/lib/domain/record-types"
 import { ROLES, ROLE_LABELS, ROLE_COLORS } from "@/lib/domain/roles"
+import { groupsForDepartment } from "@/lib/shift-config"
+import { Card, Chip, EmptyState, Field, PageHeader, Select, TextInput } from "@/components/primitives"
+import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { CreateUserModal } from "./CreateUserModal"
 
 interface UserProfile {
@@ -120,142 +123,147 @@ export default function UserManagement({ initialUsers }: { initialUsers: UserPro
         <div className="space-y-6 max-w-5xl mx-auto animate-fade-in-up">
 
             {/* Header */}
-            <div className="flex items-center gap-4">
-                <Link href="/dashboard" className="p-2 bg-white rounded-full border border-zinc-200 hover:bg-zinc-50 transition-colors text-zinc-600">
-                    <ArrowLeft className="w-5 h-5" />
-                </Link>
-                <div className="flex-1 min-w-0">
-                    <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900">User Management</h2>
-                    <p className="text-zinc-500 font-medium mt-0.5 text-sm">{users.length} account{users.length !== 1 ? "s" : ""} total</p>
-                </div>
-                <button
-                    onClick={() => setShowCreate(true)}
-                    className="flex items-center gap-2 bg-zinc-900 hover:bg-zinc-800 active:bg-black text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-sm"
-                >
-                    <Plus className="w-4 h-4" />
-                    <span className="hidden sm:inline">New User</span>
-                </button>
-            </div>
+            <PageHeader
+                title="User Management"
+                description={`${users.length} account${users.length !== 1 ? "s" : ""} total`}
+                backHref="/dashboard"
+                actions={
+                    <Button onClick={() => setShowCreate(true)} className="h-11">
+                        <Plus className="w-4 h-4" aria-hidden="true" />
+                        <span className="hidden sm:inline">New user</span>
+                        <span className="sr-only sm:hidden">New user</span>
+                    </Button>
+                }
+            />
 
             {/* Search */}
             <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                <input
-                    type="text"
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted pointer-events-none" aria-hidden="true" />
+                <TextInput
+                    type="search"
+                    aria-label="Search users"
                     placeholder="Search by name, email or department…"
                     value={search}
                     onChange={e => setSearch(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2.5 text-sm rounded-xl border border-zinc-200 bg-white focus:border-zinc-400 focus:outline-none transition-all"
+                    className="pl-9"
                 />
             </div>
 
             {/* User list */}
-            <div className="bg-white rounded-3xl border border-zinc-100 shadow-sm overflow-hidden">
+            <Card>
                 {filtered.length === 0 ? (
-                    <div className="p-12 text-center text-zinc-400 font-medium">No users found.</div>
+                    <EmptyState
+                        icon={<Search className="w-5 h-5" aria-hidden="true" />}
+                        title={users.length === 0 ? "No accounts yet" : "No users match that search"}
+                        description={users.length === 0 ? "Create the first account to get started." : "Try a name, an email address, or a department."}
+                    />
                 ) : (
-                    <div className="divide-y divide-zinc-50">
+                    <div className="divide-y divide-hairline">
                         {filtered.map(u => (
-                            <div key={u.id} className="p-4 sm:p-5 hover:bg-zinc-50/50 transition-colors">
+                            <div key={u.id} className="p-4 sm:p-5 hover:bg-surface-sunken/60 transition-colors">
                                 {editId === u.id ? (
                                     /* ── Inline edit row ── */
                                     <div className="space-y-3">
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                            <div>
-                                                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wide">Full Name</label>
-                                                <input
-                                                    value={editData.full_name || ""}
-                                                    onChange={e => setEditData(p => ({ ...p, full_name: e.target.value }))}
-                                                    className="mt-1 w-full px-3 py-2 text-sm rounded-xl border border-zinc-200 bg-white focus:border-zinc-400 focus:outline-none"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wide">Role</label>
-                                                <select
-                                                    value={editData.role || "supervisor"}
-                                                    onChange={e => setEditData(p => ({ ...p, role: e.target.value }))}
-                                                    className="mt-1 w-full px-3 py-2 text-sm rounded-xl border border-zinc-200 bg-white focus:border-zinc-400 focus:outline-none"
-                                                >
-                                                    {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wide">Department</label>
-                                                <select
-                                                    value={editData.department || ""}
-                                                    onChange={e => setEditData(p => ({ ...p, department: e.target.value }))}
-                                                    className="mt-1 w-full px-3 py-2 text-sm rounded-xl border border-zinc-200 bg-white focus:border-zinc-400 focus:outline-none"
-                                                >
-                                                    <option value="">— None —</option>
-                                                    {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="text-xs font-bold text-zinc-500 uppercase tracking-wide">Group</label>
-                                                <select
-                                                    value={editData.group_number || ""}
-                                                    onChange={e => setEditData(p => ({ ...p, group_number: e.target.value ? Number(e.target.value) : undefined }))}
-                                                    className="mt-1 w-full px-3 py-2 text-sm rounded-xl border border-zinc-200 bg-white focus:border-zinc-400 focus:outline-none"
-                                                >
-                                                    <option value="">— None —</option>
-                                                    <option value="1">Group 1</option>
-                                                    <option value="2">Group 2</option>
-                                                    <option value="3">Group 3</option>
-                                                </select>
-                                            </div>
+                                            <Field label="Full name">
+                                                {p => (
+                                                    <TextInput
+                                                        {...p}
+                                                        value={editData.full_name || ""}
+                                                        onChange={e => setEditData(prev => ({ ...prev, full_name: e.target.value }))}
+                                                    />
+                                                )}
+                                            </Field>
+                                            <Field label="Role">
+                                                {p => (
+                                                    <Select
+                                                        {...p}
+                                                        value={editData.role || "supervisor"}
+                                                        onChange={e => setEditData(prev => ({ ...prev, role: e.target.value }))}
+                                                    >
+                                                        {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                                                    </Select>
+                                                )}
+                                            </Field>
+                                            <Field label="Department">
+                                                {p => (
+                                                    <Select
+                                                        {...p}
+                                                        value={editData.department || ""}
+                                                        onChange={e => {
+                                                            const department = e.target.value
+                                                            const allowed = department ? groupsForDepartment(department) : []
+                                                            setEditData(prev => ({
+                                                                ...prev,
+                                                                department,
+                                                                group_number: prev.group_number && allowed.includes(prev.group_number) ? prev.group_number : undefined,
+                                                            }))
+                                                        }}
+                                                    >
+                                                        <option value="">— None —</option>
+                                                        {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                                                    </Select>
+                                                )}
+                                            </Field>
+                                            <Field label="Group" hint={editData.department ? undefined : "Pick a department first."}>
+                                                {p => (
+                                                    <Select
+                                                        {...p}
+                                                        value={editData.group_number || ""}
+                                                        disabled={!editData.department}
+                                                        onChange={e => setEditData(prev => ({ ...prev, group_number: e.target.value ? Number(e.target.value) : undefined }))}
+                                                    >
+                                                        <option value="">— None —</option>
+                                                        {(editData.department ? groupsForDepartment(editData.department) : []).map(g => (
+                                                            <option key={g} value={g}>Group {g}</option>
+                                                        ))}
+                                                    </Select>
+                                                )}
+                                            </Field>
                                         </div>
                                         <div className="flex items-center gap-2 pt-1">
-                                            <button onClick={handleSave} disabled={saving}
-                                                className="flex items-center gap-1.5 px-4 py-2 bg-zinc-900 text-white text-xs font-bold rounded-xl hover:bg-zinc-800 disabled:opacity-50 transition-all">
-                                                <Check className="w-3.5 h-3.5" />
+                                            <Button onClick={handleSave} disabled={saving} className="h-11">
+                                                <Check className="w-4 h-4" aria-hidden="true" />
                                                 {saving ? "Saving…" : "Save"}
-                                            </button>
-                                            <button onClick={() => setEditId(null)}
-                                                className="flex items-center gap-1.5 px-4 py-2 bg-zinc-100 text-zinc-600 text-xs font-bold rounded-xl hover:bg-zinc-200 transition-all">
-                                                <X className="w-3.5 h-3.5" />
+                                            </Button>
+                                            <Button variant="secondary" onClick={() => setEditId(null)} className="h-11">
+                                                <X className="w-4 h-4" aria-hidden="true" />
                                                 Cancel
-                                            </button>
+                                            </Button>
                                         </div>
                                     </div>
                                 ) : (
                                     /* ── Display row ── */
                                     <div className="flex items-center gap-3 sm:gap-4">
-                                        <div className="w-9 h-9 rounded-full bg-zinc-100 flex items-center justify-center shrink-0 text-sm font-bold text-zinc-600">
+                                        <div className="w-9 h-9 rounded-full bg-surface-sunken flex items-center justify-center shrink-0 text-sm font-bold text-ink-secondary" aria-hidden="true">
                                             {(u.full_name || u.email)[0].toUpperCase()}
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="flex flex-wrap items-center gap-2">
-                                                <span className="font-bold text-zinc-900 text-sm">{u.full_name || "—"}</span>
-                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${ROLE_COLORS[u.role] || ROLE_COLORS.supervisor}`}>
+                                                <span className="font-bold text-ink-primary text-sm">{u.full_name || "—"}</span>
+                                                <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${ROLE_COLORS[u.role] || ROLE_COLORS.supervisor}`}>
                                                     {ROLE_LABELS[u.role] || u.role}
                                                 </span>
                                             </div>
-                                            <p className="text-xs text-zinc-400 mt-0.5 truncate">{u.email}</p>
+                                            <p className="text-xs text-ink-muted mt-0.5 truncate">{u.email}</p>
                                             <div className="flex flex-wrap gap-2 mt-1">
-                                                {u.department && (
-                                                    <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-50 border border-zinc-200 px-2 py-0.5 rounded-full">
-                                                        {u.department}
-                                                    </span>
-                                                )}
-                                                {u.group_number && (
-                                                    <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-50 border border-zinc-200 px-2 py-0.5 rounded-full">
-                                                        Group {u.group_number}
-                                                    </span>
-                                                )}
+                                                {u.department && <Chip>{u.department}</Chip>}
+                                                {u.group_number && <Chip>Group {u.group_number}</Chip>}
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-1 shrink-0">
-                                            <button onClick={() => startEdit(u)} title="Edit"
-                                                className="p-2 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition-all">
-                                                <Pencil className="w-4 h-4" />
+                                        {/* 44px targets: these were 32px icon buttons sitting 4px apart. */}
+                                        <div className="flex items-center gap-0.5 shrink-0">
+                                            <button onClick={() => startEdit(u)} aria-label={`Edit ${u.full_name || u.email}`}
+                                                className="h-11 w-11 flex items-center justify-center text-ink-muted hover:text-ink-primary hover:bg-surface-sunken rounded-xl transition-colors">
+                                                <Pencil className="w-4 h-4" aria-hidden="true" />
                                             </button>
-                                            <button onClick={() => { setResetId(u.id); setTempPass("") }} title="Reset password"
-                                                className="p-2 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition-all">
-                                                <KeyRound className="w-4 h-4" />
+                                            <button onClick={() => { setResetId(u.id); setTempPass("") }} aria-label={`Reset password for ${u.full_name || u.email}`}
+                                                className="h-11 w-11 flex items-center justify-center text-ink-muted hover:text-ink-primary hover:bg-surface-sunken rounded-xl transition-colors">
+                                                <KeyRound className="w-4 h-4" aria-hidden="true" />
                                             </button>
-                                            <button onClick={() => setDeleteId(u.id)} title="Delete"
-                                                className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all">
-                                                <Trash2 className="w-4 h-4" />
+                                            <button onClick={() => setDeleteId(u.id)} aria-label={`Delete ${u.full_name || u.email}`}
+                                                className="h-11 w-11 flex items-center justify-center text-ink-muted hover:text-critical-ink hover:bg-critical-subtle rounded-xl transition-colors">
+                                                <Trash2 className="w-4 h-4" aria-hidden="true" />
                                             </button>
                                         </div>
                                     </div>
@@ -264,77 +272,75 @@ export default function UserManagement({ initialUsers }: { initialUsers: UserPro
                         ))}
                     </div>
                 )}
-            </div>
+            </Card>
 
             {/* ── Create user modal ─────────────────────────────────────────────── */}
             {showCreate && <CreateUserModal onClose={() => setShowCreate(false)} onCreated={reloadUsers} />}
 
-            {/* ── Reset password modal ──────────────────────────────────────────── */}
-            {resetId && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 space-y-5">
-                        <div className="flex items-center justify-between">
-                            <h3 className="text-lg font-bold text-zinc-900">Reset Password</h3>
-                            <button onClick={() => setResetId(null)} className="p-1.5 hover:bg-zinc-100 rounded-lg transition-all">
-                                <X className="w-4 h-4 text-zinc-500" />
-                            </button>
-                        </div>
-                        <p className="text-sm text-zinc-500">
-                            Set a temporary password for <strong className="text-zinc-700">{users.find(u => u.id === resetId)?.full_name || "this user"}</strong>. 
+            {/* ── Reset password ────────────────────────────────────────────────────
+                On the Dialog primitive: the two modals here were hand-rolled
+                `fixed inset-0` overlays with no focus trap, no Escape and no
+                scroll lock — and this one holds a password field. */}
+            <Dialog open={!!resetId} onOpenChange={o => { if (!o) { setResetId(null); setTempPass("") } }}>
+                <DialogContent className="sm:max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>Reset password</DialogTitle>
+                        <DialogDescription>
+                            Set a temporary password for{" "}
+                            <strong className="text-ink-primary">{users.find(u => u.id === resetId)?.full_name || "this user"}</strong>.
                             Ask them to change it after logging in.
-                        </p>
-                        <div className="space-y-1">
-                            <label className="text-xs font-bold text-zinc-600 uppercase tracking-wide">Temporary Password</label>
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <Field label="Temporary password" hint="At least 6 characters.">
+                        {p => (
                             <div className="relative">
-                                <input
+                                <TextInput
+                                    {...p}
                                     type={showTempPass ? "text" : "password"}
+                                    autoComplete="new-password"
                                     placeholder="Min 6 characters"
                                     value={tempPass}
                                     onChange={e => setTempPass(e.target.value)}
-                                    className="w-full px-3 py-2.5 pr-10 text-sm rounded-xl border border-zinc-200 bg-white focus:border-zinc-400 focus:outline-none"
+                                    className="pr-12"
                                 />
                                 <button type="button" onClick={() => setShowTempPass(v => !v)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600">
-                                    {showTempPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    aria-label={showTempPass ? "Hide password" : "Show password"}
+                                    className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 flex items-center justify-center rounded-lg text-ink-muted hover:text-ink-primary hover:bg-surface-sunken transition-colors">
+                                    {showTempPass ? <EyeOff className="w-4 h-4" aria-hidden="true" /> : <Eye className="w-4 h-4" aria-hidden="true" />}
                                 </button>
                             </div>
-                        </div>
-                        <div className="flex gap-3">
-                            <button onClick={() => setResetId(null)}
-                                className="flex-1 py-2.5 rounded-xl border border-zinc-200 text-sm font-semibold text-zinc-600 hover:bg-zinc-50 transition-all">
-                                Cancel
-                            </button>
-                            <button onClick={handleReset} disabled={resetting || !tempPass}
-                                className="flex-1 py-2.5 rounded-xl bg-zinc-900 text-white text-sm font-bold hover:bg-zinc-800 disabled:opacity-50 transition-all">
-                                {resetting ? "Resetting…" : "Reset Password"}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+                        )}
+                    </Field>
 
-            {/* ── Delete confirm modal ──────────────────────────────────────────── */}
-            {deleteId && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 space-y-5">
-                        <h3 className="text-lg font-bold text-zinc-900">Delete User?</h3>
-                        <p className="text-sm text-zinc-500">
-                            This will permanently delete <strong className="text-zinc-700">{users.find(u => u.id === deleteId)?.full_name || "this user"}</strong> and all their login access. 
-                            Their submitted records will remain.
-                        </p>
-                        <div className="flex gap-3">
-                            <button onClick={() => setDeleteId(null)}
-                                className="flex-1 py-2.5 rounded-xl border border-zinc-200 text-sm font-semibold text-zinc-600 hover:bg-zinc-50 transition-all">
-                                Cancel
-                            </button>
-                            <button onClick={handleDelete} disabled={deleting}
-                                className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold hover:bg-red-700 disabled:opacity-50 transition-all">
-                                {deleting ? "Deleting…" : "Yes, Delete"}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => { setResetId(null); setTempPass("") }} disabled={resetting}>Cancel</Button>
+                        <Button onClick={handleReset} disabled={resetting || !tempPass}>
+                            {resetting ? "Resetting…" : "Reset password"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ── Delete confirm ──────────────────────────────────────────────────── */}
+            <Dialog open={!!deleteId} onOpenChange={o => !o && setDeleteId(null)}>
+                <DialogContent className="sm:max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>Delete this user?</DialogTitle>
+                        <DialogDescription>
+                            This permanently deletes{" "}
+                            <strong className="text-ink-primary">{users.find(u => u.id === deleteId)?.full_name || "this user"}</strong>{" "}
+                            and their login access. Their submitted records remain.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setDeleteId(null)} disabled={deleting}>Cancel</Button>
+                        <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+                            {deleting ? "Deleting…" : "Yes, delete"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

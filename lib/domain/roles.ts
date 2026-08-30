@@ -11,11 +11,20 @@ export const ROLE_LABELS: Record<string, string> = {
   procurement: "Stock Office",
 }
 
+/**
+ * Role badge styling, on the semantic tokens.
+ *
+ * This is an EMPHASIS ramp, not four hues: privilege reads as weight, from a
+ * filled brand fill for admin down to a plain outline for the most common role.
+ * The obvious alternative — a colour per role — would have had to borrow from the
+ * status or series ramps, and a role badge that looks like a stock warning is
+ * exactly the collision the token layer exists to prevent.
+ */
 export const ROLE_COLORS: Record<string, string> = {
-  supervisor: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  manager: "bg-slate-100 text-slate-700 border-slate-200",
-  admin: "bg-zinc-800 text-zinc-100 border-zinc-700",
-  procurement: "bg-blue-50 text-blue-700 border-blue-200",
+  admin: "bg-brand-solid text-brand-ink border-brand-solid",
+  manager: "bg-brand-subtle text-brand-subtle-ink border-brand/25",
+  procurement: "bg-surface-sunken text-ink-secondary border-line-strong",
+  supervisor: "bg-surface-card text-ink-muted border-hairline",
 }
 
 // Object.hasOwn, not `?? "Supervisor"`: a key that collides with an inherited

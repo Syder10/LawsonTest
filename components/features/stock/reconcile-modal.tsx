@@ -3,8 +3,7 @@
 import { useState } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { Field, NumberInput, Select, TextInput } from "@/components/primitives"
 import { toast } from "sonner"
 import type { Product, Shift } from "@/lib/db/types"
 
@@ -142,103 +141,109 @@ export function ReconcileModal({
         {result ? (
           <div className="py-2 space-y-3">
             <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-                <p className="text-[10px] uppercase font-bold text-slate-400">Counted</p>
-                <p className="text-lg font-black text-slate-800 tabular-nums">{result.counted}</p>
+              <div className="rounded-xl border border-hairline bg-surface-sunken p-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-ink-muted">Counted</p>
+                <p className="text-lg font-bold tnum text-ink-primary">{result.counted}</p>
               </div>
-              <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-                <p className="text-[10px] uppercase font-bold text-slate-400">System</p>
-                <p className="text-lg font-black text-slate-800 tabular-nums">{result.computed}</p>
+              <div className="rounded-xl border border-hairline bg-surface-sunken p-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-ink-muted">System</p>
+                <p className="text-lg font-bold tnum text-ink-primary">{result.computed}</p>
               </div>
-              <div className={`rounded-xl border p-3 ${result.variance === 0 ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"}`}>
-                <p className="text-[10px] uppercase font-bold text-slate-400">Variance</p>
-                <p className={`text-lg font-black tabular-nums ${result.variance === 0 ? "text-emerald-700" : "text-amber-700"}`}>
+              <div
+                className={`rounded-xl border p-3 ${
+                  result.variance === 0 ? "border-good/30 bg-good-subtle" : "border-warning/30 bg-warning-subtle"
+                }`}
+              >
+                <p className="text-xs font-bold uppercase tracking-wide text-ink-muted">Variance</p>
+                <p className={`text-lg font-bold tnum ${result.variance === 0 ? "text-good-ink" : "text-warning-ink"}`}>
                   {result.variance > 0 ? "+" : ""}{result.variance}
                 </p>
               </div>
             </div>
-            <p className="text-xs text-slate-500 text-center">
+            <p className="text-xs text-ink-secondary text-center">
               {result.variance === 0 ? "No discrepancy — the ledger matched." : result.variance > 0 ? "Surplus found vs the ledger." : "Shortfall vs the ledger (shrinkage/loss)."}
             </p>
             <DialogFooter>
-              <Button size="sm" onClick={close} className="bg-emerald-600 hover:bg-emerald-700 text-white">Done</Button>
+              <Button size="sm" onClick={close}>Done</Button>
             </DialogFooter>
           </div>
         ) : (
           <div className="py-1 space-y-3">
             {generic && (
               <div className="grid grid-cols-1 gap-3">
-                <div>
-                  <Label className="text-xs font-semibold text-slate-500">Material</Label>
-                  <select value={materialCode} onChange={(e) => { setMaterialCode(e.target.value); setProduct(""); setVariant("") }}
-                    className="mt-1 w-full h-10 px-3 text-sm rounded-xl border border-slate-200 bg-white focus:border-emerald-500 focus:outline-none">
-                    {LEDGER_MATERIALS.map((m) => <option key={m.code} value={m.code}>{m.name}</option>)}
-                  </select>
-                </div>
+                <Field label="Material">
+                  {(p) => (
+                    <Select
+                      {...p}
+                      value={materialCode}
+                      onChange={(e) => { setMaterialCode(e.target.value); setProduct(""); setVariant("") }}
+                    >
+                      {LEDGER_MATERIALS.map((m) => <option key={m.code} value={m.code}>{m.name}</option>)}
+                    </Select>
+                  )}
+                </Field>
                 {needsProduct && (
-                  <div>
-                    <Label className="text-xs font-semibold text-slate-500">Product</Label>
-                    <select value={product} onChange={(e) => setProduct(e.target.value as Product)}
-                      className="mt-1 w-full h-10 px-3 text-sm rounded-xl border border-slate-200 bg-white focus:border-emerald-500 focus:outline-none">
-                      <option value="">Select…</option>
-                      <option value="Bitters">Bitters</option>
-                      <option value="Ginger">Ginger</option>
-                    </select>
-                  </div>
+                  <Field label="Product">
+                    {(p) => (
+                      <Select {...p} value={product} onChange={(e) => setProduct(e.target.value as Product)}>
+                        <option value="">Select…</option>
+                        <option value="Bitters">Bitters</option>
+                        <option value="Ginger">Ginger</option>
+                      </Select>
+                    )}
+                  </Field>
                 )}
                 {needsVariant && (
-                  <div>
-                    <Label className="text-xs font-semibold text-slate-500">Herb variant</Label>
-                    <Input value={variant} onChange={(e) => setVariant(e.target.value)} placeholder="e.g. Alligator Pepper" className="mt-1 rounded-xl border-slate-200" />
-                  </div>
+                  <Field label="Herb variant">
+                    {(p) => (
+                      <TextInput {...p} value={variant} onChange={(e) => setVariant(e.target.value)} placeholder="e.g. Alligator Pepper" />
+                    )}
+                  </Field>
                 )}
               </div>
             )}
 
             {target?.currentRemaining !== undefined && (
-              <p className="text-xs font-semibold text-slate-500">
-                System balance now: <span className="tabular-nums text-slate-800">{target.currentRemaining} {unit}</span>
+              <p className="text-xs font-semibold text-ink-secondary">
+                System balance now: <span className="tnum text-ink-primary">{target.currentRemaining} {unit}</span>
               </p>
             )}
 
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs font-semibold text-slate-500">Counted quantity ({unit})</Label>
-                <Input type="number" value={counted} onChange={(e) => setCounted(e.target.value)} placeholder="0" className="mt-1 rounded-xl border-slate-200" />
-              </div>
-              <div>
-                <Label className="text-xs font-semibold text-slate-500">As of date</Label>
-                <Input type="date" value={date} max={today()} onChange={(e) => setDate(e.target.value)} className="mt-1 rounded-xl border-slate-200" />
-              </div>
+              <Field label={`Counted quantity (${unit})`}>
+                {(p) => <NumberInput {...p} value={counted} onChange={(e) => setCounted(e.target.value)} placeholder="0" />}
+              </Field>
+              <Field label="As of date">
+                {(p) => <TextInput {...p} type="date" value={date} max={today()} onChange={(e) => setDate(e.target.value)} />}
+              </Field>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs font-semibold text-slate-500">Shift (optional)</Label>
-                <select value={shift} onChange={(e) => setShift(e.target.value as Shift)}
-                  className="mt-1 w-full h-10 px-3 text-sm rounded-xl border border-slate-200 bg-white focus:border-emerald-500 focus:outline-none">
-                  <option value="">End of day</option>
-                  {SHIFTS.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div>
-                <Label className="text-xs font-semibold text-slate-500">Type</Label>
-                <select value={kind} onChange={(e) => setKind(e.target.value as "baseline" | "reconciliation")}
-                  className="mt-1 w-full h-10 px-3 text-sm rounded-xl border border-slate-200 bg-white focus:border-emerald-500 focus:outline-none">
-                  <option value="reconciliation">Reconciliation</option>
-                  <option value="baseline">Baseline (day one)</option>
-                </select>
-              </div>
+              <Field label="Shift (optional)">
+                {(p) => (
+                  <Select {...p} value={shift} onChange={(e) => setShift(e.target.value as Shift)}>
+                    <option value="">End of day</option>
+                    {SHIFTS.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </Select>
+                )}
+              </Field>
+              <Field label="Type">
+                {(p) => (
+                  <Select {...p} value={kind} onChange={(e) => setKind(e.target.value as "baseline" | "reconciliation")}>
+                    <option value="reconciliation">Reconciliation</option>
+                    <option value="baseline">Baseline (day one)</option>
+                  </Select>
+                )}
+              </Field>
             </div>
 
-            <div>
-              <Label className="text-xs font-semibold text-slate-500">Note (optional)</Label>
-              <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Reason / who counted" className="mt-1 rounded-xl border-slate-200" />
-            </div>
+            <Field label="Note (optional)">
+              {(p) => <TextInput {...p} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Reason / who counted" />}
+            </Field>
 
             <DialogFooter>
               <Button variant="outline" size="sm" onClick={close} disabled={submitting}>Cancel</Button>
-              <Button size="sm" onClick={submit} disabled={submitting} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+              <Button size="sm" onClick={submit} disabled={submitting}>
                 {submitting ? "Saving…" : "Record count"}
               </Button>
             </DialogFooter>

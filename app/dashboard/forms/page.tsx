@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { ClipboardList, CheckCircle2, AlertTriangle, Clock, CalendarClock, X } from "lucide-react"
 import { toast } from "sonner"
 import { DEPARTMENTS, RECORD_TYPES } from "@/lib/domain/record-types"

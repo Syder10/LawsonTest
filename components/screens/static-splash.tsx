@@ -4,19 +4,22 @@ import Image from "next/image"
 import { ArrowRight } from "lucide-react"
 
 // ============================================================================
-// Splash screen.
+// Static splash — the fallback, and the first thing rendered on every visit.
 //
-// FIXES A REAL CLIPPING BUG. The previous version combined `min-h-screen` +
-// `justify-center` + `overflow-hidden` with a fixed 280px logo, `space-y-12` and a
-// 48px headline. On a 360×640 phone the content measured ~680px, and centred
-// overflow inside `overflow-hidden` clips at BOTH ends — so "Get Started" could
-// become unreachable on short viewports.
+// This is what ships when WebGL2 is unavailable or the GL context is lost, so it
+// has to stand on its own rather than look like a degraded state: same tokens, same
+// CTA, no mention of a shader. It is also the server-rendered markup, which is why
+// the glass splash can swap in on mount without a flash — both paint `bg-mesh`.
 //
-// Now: `min-h-dvh` (accounts for mobile browser chrome), no `overflow-hidden` on
-// the scroll container, a viewport-relative logo, and a clamped headline.
+// FIXES A REAL CLIPPING BUG (kept from the previous landing page). Combining
+// `min-h-screen` + `justify-center` + `overflow-hidden` with a fixed 280px logo
+// measured ~680px on a 360×640 phone, and centred overflow inside `overflow-hidden`
+// clips at BOTH ends — so "Get started" could become unreachable. Now: `min-h-dvh`,
+// no `overflow-hidden` on the scroll container, a viewport-relative logo, and a
+// clamped headline.
 // ============================================================================
 
-export default function LandingPage({ onStart }: { onStart: () => void }) {
+export function StaticSplash({ onStart }: { onStart: () => void }) {
   return (
     <div className="relative min-h-dvh flex flex-col items-center justify-center px-6 py-12 bg-mesh">
       {/* The orbs are the only decorative motion, and they sit behind everything
@@ -27,10 +30,9 @@ export default function LandingPage({ onStart }: { onStart: () => void }) {
       <main className="flex flex-col items-center text-center gap-8 z-10 max-w-lg">
         <Image
           src="/logo.png"
-          alt="Lawson Limited Company"
+          alt=""
           width={280}
           height={280}
-          // Scales with the viewport instead of forcing 280px onto a 360px screen.
           className="w-32 h-32 sm:w-44 sm:h-44 object-contain animate-logo-reveal"
           priority
         />

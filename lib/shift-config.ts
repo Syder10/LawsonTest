@@ -267,6 +267,21 @@ export function isSaturdayOff(department: string, groupNumber: number, date: Dat
   return false
 }
 
+/**
+ * The group numbers a department actually rosters: 1–3 everywhere except Alcohol
+ * and Blending, which runs two groups on its own 2-week swap.
+ *
+ * DERIVED from the rotation tables rather than restated, so no screen can offer a
+ * group the rotation has no shift for — a supervisor assigned Alcohol and
+ * Blending group 3 gets `expectedShiftForGroup() === null`, and with no rostered
+ * shift their on-time window, streak and leaderboard entry all silently vanish.
+ * The user-management and PPE-issuance screens both need this list.
+ */
+export function groupsForDepartment(department: string): number[] {
+  const table = department.toLowerCase() === "alcohol and blending" ? BLENDING_ROTATION[0] : STANDARD_ROTATION[0]
+  return Object.keys(table).map(Number).sort((a, b) => a - b)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // buildOnTimeWindowInfo
 //

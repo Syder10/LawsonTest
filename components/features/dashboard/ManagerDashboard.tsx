@@ -28,7 +28,7 @@ import { Card, Eyebrow, EmptyState, StatTile } from "@/components/primitives"
 /** A value that may be uncomputable (rate with no production) — never NaN. */
 const kpiValue = (v: number | null) => (v === null ? "—" : v)
 
-export function ManagerDashboard(_props: { userId?: string }) {
+export function ManagerDashboard() {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS)
   const [report, setReport] = useState<AnalyticsResponse | null>(null)
   const [loading, setLoading] = useState(true)
