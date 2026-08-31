@@ -98,19 +98,25 @@ describe("unit", () => {
 })
 
 describe("LAYOUT", () => {
-  it("stacks logo, headline, CTA and hint in reading order", () => {
+  it("stacks logo, headline and hint in reading order", () => {
     expect(LAYOUT.logo).toBeLessThan(LAYOUT.headline)
-    expect(LAYOUT.headline).toBeLessThan(LAYOUT.cta)
-    expect(LAYOUT.cta).toBeLessThan(LAYOUT.hint)
+    expect(LAYOUT.headline).toBeLessThan(LAYOUT.hint)
   })
 
-  it("keeps the CTA above the resting lens", () => {
+  it("puts the hint inside the resting lens, where it is refracted", () => {
     // The puck rests at y = 1.19h with radius 0.95·unit; on the reference aspect its
-    // top edge is at 1.19h − 0.95·402 = 0.752h. A CTA below that would sit on top of
-    // the lens, where a crisp DOM button next to refracted pixels looks like a bug.
+    // top edge is at 1.19h − 0.95·402 = 0.752h. The hint sitting BELOW that line is
+    // deliberate — it is the one piece of copy the glass distorts, which is what
+    // tells you the lens is there and grabbable.
     const h = 874
     const topOfLens = (1.19 * h - 0.95 * unit(402, h)) / h
-    expect(LAYOUT.cta).toBeLessThan(topOfLens)
+    expect(LAYOUT.hint).toBeGreaterThan(topOfLens)
+  })
+
+  it("keeps the headline clear of the lens, so it stays legible at rest", () => {
+    const h = 874
+    const topOfLens = (1.19 * h - 0.95 * unit(402, h)) / h
+    expect(LAYOUT.headline).toBeLessThan(topOfLens)
   })
 })
 

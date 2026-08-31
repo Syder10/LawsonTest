@@ -36,7 +36,7 @@ function HeroChip({ children, className }: { children: ReactNode; className?: st
   )
 }
 
-// Supervisor home: streak, badges, weekly team leaderboard, monthly MVP.
+// Supervisor home: streak, badges, monthly team leaderboard, monthly MVP.
 // Orchestrator only — widgets live under ./supervisor/*.
 export function SupervisorDashboard({ userId }: { userId: string }) {
   const now = new Date()
@@ -44,6 +44,8 @@ export function SupervisorDashboard({ userId }: { userId: string }) {
 
   const [stats, setStats] = useState<GStats | null>(null)
   const [lb, setLb] = useState<LEntry[]>([])
+  // Captioned with the period the API actually computed, not a hardcoded word.
+  const [lbPeriod, setLbPeriod] = useState<string | null>(null)
   const [mvp, setMvp] = useState<MVPData | null>(null)
   const [showMvp, setShowMvp] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -58,7 +60,11 @@ export function SupervisorDashboard({ userId }: { userId: string }) {
         fetch("/api/records/gaps"),
       ])
       if (sr.ok) setStats(await sr.json())
-      if (lr.ok) setLb((await lr.json()).leaderboard || [])
+      if (lr.ok) {
+        const d = await lr.json()
+        setLb(d.leaderboard || [])
+        setLbPeriod(d.period?.label ?? null)
+      }
       if (gr.ok) setGapCount((await gr.json()).count ?? 0)
       if (mr.ok) {
         const d = await mr.json()
@@ -219,26 +225,6 @@ export function SupervisorDashboard({ userId }: { userId: string }) {
                   {stats!.badges.map((b) => <BadgeCard key={b.badge_type} type={b.badge_type} earnedAt={b.earned_at} />)}
                 </div>
               )}
-              {/* Locked badges name themselves. They were previously 32px icon
-                  tiles at opacity-20 whose meaning lived only in a `title`
-                  attribute — unreachable on the phone this is used on. */}
-              {!loading && stats && earned < badgeTotal && (
-                <div className="mt-3 border-t border-hairline pt-3">
-                  <p className="mb-2 text-xs font-bold uppercase tracking-widest text-ink-muted">Still locked</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {Object.entries(BADGE_META)
-                      .filter(([t]) => !stats.badges.some((b) => b.badge_type === t))
-                      .map(([t, m]) => {
-                        const Icon = m.icon
-                        return (
-                          <Chip key={t} icon={<Icon className="w-3 h-3 shrink-0" aria-hidden="true" />} className="font-medium">
-                            {m.label}
-                          </Chip>
-                        )
-                      })}
-                  </div>
-                </div>
-              )}
             </div>
           </Card>
 
@@ -246,7 +232,7 @@ export function SupervisorDashboard({ userId }: { userId: string }) {
           <Card>
             <CardHeader
               title="Leaderboard"
-              hint="On-time this week"
+              hint={lbPeriod ? `On-time · ${lbPeriod}` : "On-time this month"}
               actions={myRank > 0 ? <Chip tone="brand">Rank #{myRank}</Chip> : undefined}
             />
             <div className="p-3">
@@ -259,7 +245,7 @@ export function SupervisorDashboard({ userId }: { userId: string }) {
                 <EmptyState
                   compact
                   icon={<Trophy className="w-5 h-5" aria-hidden="true" />}
-                  title="No data yet this week"
+                  title="No data yet this month"
                   description="Submit inside your on-time window to appear here."
                 />
               )}
@@ -276,7 +262,9 @@ export function SupervisorDashboard({ userId }: { userId: string }) {
               )}
             </div>
             <div className="px-5 pb-4">
-              <p className="text-center text-xs text-ink-muted">Resets every Monday · Mon–Sat · 3-shift rotation</p>
+              <p className="text-center text-xs text-ink-muted">
+                Resets on the 1st · Mon–Sat · 3-shift rotation
+              </p>
             </div>
           </Card>
         </div>

@@ -20,11 +20,16 @@ import { toRgb01, type Palette } from "./tokens"
  */
 export const unit = (w: number, h: number) => Math.min(w, h * 0.46)
 
-/** Shared vertical rhythm. The DOM CTA reads `cta` so it lands where the canvas expects it. */
+/**
+ * Shared vertical rhythm, as fractions of the viewport height.
+ *
+ * There is no CTA slot: the splash has no visible button — a swipe up is the way
+ * in — so the hint deliberately sits INSIDE the resting lens and is refracted by it,
+ * which is the whole point of painting it on the canvas rather than in the DOM.
+ */
 export const LAYOUT = {
   logo: 0.34,
   headline: 0.52,
-  cta: 0.645,
   hint: 0.912,
 } as const
 

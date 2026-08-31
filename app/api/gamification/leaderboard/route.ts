@@ -3,19 +3,17 @@ import { requireUser } from "@/lib/auth/guards"
 import { createAdminSupabase } from "@/lib/supabase/admin"
 import { compulsoryRecordTypes, departmentsWithCompulsory } from "@/lib/domain/record-types"
 import { completeShiftKeys, fetchTypeRows, isRosteredOnTime } from "@/lib/domain/gamification"
+import { monthWindow } from "@/lib/domain/period"
 import { isSaturdayOff } from "@/lib/shift-config"
 
-// Weekly team on-time leaderboard. Computed here from the shared domain logic
-// (the old fragile leaderboard_weekly SQL view is gone). Cross-supervisor read
-// → admin client.
-function weekBounds(now: Date) {
-  const start = new Date(now)
-  start.setUTCDate(now.getUTCDate() - ((now.getUTCDay() + 6) % 7)) // Monday
-  start.setUTCHours(0, 0, 0, 0)
-  const end = new Date(start)
-  end.setUTCDate(start.getUTCDate() + 5) // Saturday
-  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) }
-}
+// MONTHLY team on-time leaderboard, computed here from the shared domain logic (the
+// old fragile leaderboard_weekly SQL view is long gone). Cross-supervisor read →
+// admin client.
+//
+// Was weekly. A week is a small sample on a 3-week shift rotation: a team's score
+// depended on which shift it happened to be rostered on, and Monday wiped the board
+// before a pattern could show. The month is the same period the MVP is judged over,
+// so the two screens now agree.
 
 function isWeekendOff(dateStr: string, department: string, group: number): boolean {
   const d = new Date(dateStr + "T12:00:00Z")
@@ -30,7 +28,8 @@ export async function GET() {
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
 
   const admin = createAdminSupabase()
-  const { start, end } = weekBounds(new Date())
+  const period = monthWindow(new Date())
+  const { start, end } = period
 
   // Distinct compulsory record types across all departments.
   const compulsoryDefs = [
@@ -42,7 +41,7 @@ export async function GET() {
   ]
 
   // For each compulsory type, the set of team|date|shift keys with a valid
-  // on-time submission this week. Also track each team's latest submission.
+  // on-time submission this month. Also track each team's latest submission.
   const setsByLabel = new Map<string, Set<string>>()
   const teamMeta = new Map<string, { dept: string; group: number; lastSub: string }>()
 
@@ -89,5 +88,7 @@ export async function GET() {
     .sort((a, b) => b.on_time_count - a.on_time_count)
     .slice(0, 20)
 
-  return NextResponse.json({ leaderboard })
+  // The label ships with the data so the screen can never caption the board with a
+  // period it wasn't computed over.
+  return NextResponse.json({ leaderboard, period: { label: period.label, start, end } })
 }

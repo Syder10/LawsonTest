@@ -3,45 +3,29 @@ import { requireUser } from "@/lib/auth/guards"
 import { createAdminSupabase } from "@/lib/supabase/admin"
 import { compulsoryRecordTypes, departmentsWithCompulsory } from "@/lib/domain/record-types"
 import { completeShiftKeys, fetchTypeRows, isRosteredOnTime } from "@/lib/domain/gamification"
+import { mvpWindow } from "@/lib/domain/period"
 import { isSaturdayOff } from "@/lib/shift-config"
 
 const SYSTEM_START = "2026-04-01"
 
-// The MVP banner shows on the last day of a month and the first 5 of the next;
-// the popup (and badge award) only on the last day.
-function mvpWindow(now: Date) {
-  const day = now.getUTCDate()
-  const year = now.getUTCFullYear()
-  const mi = now.getUTCMonth()
-  const lastDay = new Date(Date.UTC(year, mi + 1, 0)).getUTCDate()
-  const isLastDay = day === lastDay
-  const isFirst5 = day >= 1 && day <= 5
-
-  let y = year
-  let m = mi
-  if (isFirst5) {
-    m = mi - 1
-    if (m < 0) { m = 11; y-- }
-  }
-  return {
-    showPopup: isLastDay,
-    showBanner: isLastDay || isFirst5,
-    monthStart: new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10),
-    monthEnd: new Date(Date.UTC(y, m + 1, 0)).toISOString().slice(0, 10),
-    label: new Date(Date.UTC(y, m, 15)).toLocaleString("default", { month: "long", year: "numeric", timeZone: "UTC" }),
-    badge: `mvp_${y}_${m + 1}`,
-  }
-}
+// Monthly MVP: the supervisor with the most complete on-time shifts in the month
+// that has just FINISHED, shown for the first days of the new one.
+//
+// The timing rule (and why the old one was wrong) lives in lib/domain/period.ts,
+// where it is unit-tested. In short: the previous version judged the current month
+// on its own last day, so the winner was decided before that day's Afternoon and
+// Night shifts had submitted — and the badge was written at that moment by whoever
+// opened the app first.
 
 export async function GET() {
   const auth = await requireUser()
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
 
   const win = mvpWindow(new Date())
-  if (!win.showBanner) return NextResponse.json({ mvp: null })
+  if (!win.show) return NextResponse.json({ mvp: null })
 
   const admin = createAdminSupabase()
-  const gte = win.monthStart > SYSTEM_START ? win.monthStart : SYSTEM_START
+  const gte = win.start > SYSTEM_START ? win.start : SYSTEM_START
 
   const compulsoryDefs = [
     ...new Map(
@@ -50,7 +34,7 @@ export async function GET() {
         .map((def) => [def.label, def]),
     ).values(),
   ]
-  const perType = await Promise.all(compulsoryDefs.map((def) => fetchTypeRows(admin, def, gte, win.monthEnd)))
+  const perType = await Promise.all(compulsoryDefs.map((def) => fetchTypeRows(admin, def, gte, win.end)))
 
   const setsByLabel = new Map<string, Set<string>>()
   const userDept = new Map<string, string>()
@@ -79,9 +63,16 @@ export async function GET() {
   }
   if (perUser.size === 0) return NextResponse.json({ mvp: null })
 
+  // Deterministic tie-break. `count > best` alone let Map insertion order decide,
+  // which is row order from the database — so a tie could name a different winner on
+  // each request, and the badge would go to whoever's request happened to run first.
   let mvpId = ""
   let mvpCount = 0
-  for (const [uid, count] of perUser) if (count > mvpCount) { mvpCount = count; mvpId = uid }
+  for (const [uid, count] of [...perUser.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))) {
+    mvpId = uid
+    mvpCount = count
+    break
+  }
 
   const { data: profile } = await admin
     .from("profiles")
@@ -89,12 +80,13 @@ export async function GET() {
     .eq("id", mvpId)
     .single()
 
-  if (win.showPopup) {
-    await admin.from("supervisor_badges").upsert(
-      { user_id: mvpId, badge_type: win.badge },
-      { onConflict: "user_id,badge_type" },
-    )
-  }
+  // The month is closed, so its on-time totals can no longer change (a late row is
+  // backdated and never counts as on-time). Awarding here is therefore idempotent
+  // rather than a race, and the upsert makes repeat visits harmless.
+  await admin.from("supervisor_badges").upsert(
+    { user_id: mvpId, badge_type: win.badge },
+    { onConflict: "user_id,badge_type" },
+  )
 
   return NextResponse.json({
     mvp: {
@@ -105,7 +97,9 @@ export async function GET() {
       onTimeCount: mvpCount,
       month: win.label,
       isMe: mvpId === auth.ctx.user.id,
-      showPopup: win.showPopup,
+      // The popup is shown once per device per month; the client keys its
+      // localStorage flag on `month`, so a fixed label is what makes that work.
+      showPopup: true,
     },
   })
 }

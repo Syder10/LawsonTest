@@ -5,7 +5,7 @@ import { ArrowRight } from "lucide-react"
 import { BubbleField } from "@/lib/glass/bubbles"
 import { buildMotifAtlas } from "@/lib/glass/motifs"
 import { GlassRenderer, type LensState } from "@/lib/glass/renderer"
-import { LAYOUT, ScenePainter, logoCenter, unit, type SceneState } from "@/lib/glass/scene"
+import { ScenePainter, logoCenter, unit, type SceneState } from "@/lib/glass/scene"
 import { Spring, clamp, ease, mix } from "@/lib/glass/spring"
 import { paletteKey, readPalette, toRgb01 } from "@/lib/glass/tokens"
 import { isSwipeUpCommit, trackVelocity } from "@/lib/domain/swipe"
@@ -379,29 +379,21 @@ export function GlassSplash({ onStart, onFail }: { onStart: () => void; onFail: 
           somewhere: this is the page's actual h1, and the canvas is decorative. */}
       <h1 className="sr-only">Lawson Limited Company — Production Management</h1>
 
-      {/* pointer-events-none is LOAD-BEARING: this column covers the whole viewport
-          and sits above the canvas, so with default hit-testing it swallowed every
-          pointerdown and the swipe gesture could never start. Only the button opts
-          back in.
+      {/* Swipe is the way in — there is no visible button any more.
 
-          The CTA is still in normal flow, pushed down to the fraction of the
-          viewport the scene reserves for it (LAYOUT.cta), so it lands above the
-          resting lens and — unlike an absolutely-centred stack — can never be
-          clipped out of reach on a short viewport. */}
-      <div
-        className="pointer-events-none relative flex min-h-dvh w-full flex-col items-center px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
-        style={{ paddingTop: `calc(${LAYOUT.cta} * 100dvh)` }}
+          This one stays for KEYBOARD and screen-reader users, who cannot swipe: it
+          is invisible until focused, then appears as a normal button. Without it the
+          splash would be a dead end for anyone not using a pointer, which is not a
+          trade the design gets to make. */}
+      <button
+        type="button"
+        onClick={commit}
+        disabled={committed}
+        className="glass-button-hero sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:left-1/2 focus-visible:top-8 focus-visible:z-10 focus-visible:-translate-x-1/2 focus-visible:inline-flex focus-visible:items-center focus-visible:gap-2"
       >
-        <button
-          type="button"
-          onClick={commit}
-          disabled={committed}
-          className="glass-button-hero pointer-events-auto inline-flex items-center gap-2 disabled:opacity-70"
-        >
-          {committed ? "Opening…" : "Get started"}
-          {!committed && <ArrowRight className="w-4 h-4" aria-hidden="true" />}
-        </button>
-      </div>
+        {committed ? "Opening…" : "Enter Lawson Production Management"}
+        {!committed && <ArrowRight className="w-4 h-4" aria-hidden="true" />}
+      </button>
     </div>
   )
 }

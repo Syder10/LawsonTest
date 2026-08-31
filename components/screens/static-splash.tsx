@@ -2,7 +2,7 @@
 
 import { useRef } from "react"
 import Image from "next/image"
-import { ArrowRight } from "lucide-react"
+import { ArrowRight, ArrowUp } from "lucide-react"
 import { isSwipeUpCommit, trackVelocity } from "@/lib/domain/swipe"
 
 // ============================================================================
@@ -77,13 +77,25 @@ export function StaticSplash({ onStart }: { onStart: () => void }) {
           <p className="text-lg sm:text-xl font-medium text-ink-secondary">Production Management</p>
         </div>
 
-        <button onClick={onStart} className="glass-button-hero animate-fade-in-up delay-400 inline-flex items-center gap-2">
-          Get started
+        {/* Swipe is the way in on both splashes; there is no visible button. The
+            hint says so out loud, because an undiscoverable gesture is not a
+            feature — and it uses the same words the glass scene paints. */}
+        <p className="text-sm font-medium text-ink-muted animate-fade-in-up delay-400 flex items-center gap-1.5">
+          <ArrowUp className="w-4 h-4 motion-safe:animate-float" aria-hidden="true" />
+          Swipe up to enter
+        </p>
+
+        {/* Keyboard and screen-reader users cannot swipe, so this stays: invisible
+            until focused, then an ordinary button. Otherwise the splash would be a
+            dead end for anyone not using a pointer. */}
+        <button
+          type="button"
+          onClick={onStart}
+          className="glass-button-hero sr-only focus-visible:not-sr-only focus-visible:inline-flex focus-visible:items-center focus-visible:gap-2"
+        >
+          Enter Lawson Production Management
           <ArrowRight className="w-4 h-4" aria-hidden="true" />
         </button>
-
-        {/* Says the gesture out loud: an undiscoverable swipe is not a feature. */}
-        <p className="text-xs font-medium text-ink-muted animate-fade-in-up delay-400">or swipe up to enter</p>
       </main>
     </div>
   )
