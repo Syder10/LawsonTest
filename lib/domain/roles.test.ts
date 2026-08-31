@@ -20,14 +20,32 @@ describe("navFor", () => {
     for (const r of ROLES) expect(navFor(r).length).toBeLessThanOrEqual(5)
   })
 
-  it("gives EVERY role a route to history and profile", () => {
-    // The bug this fixes: only supervisors had links anywhere, so managers,
-    // admins and procurement could not reach history or their own profile —
-    // not even to change their password.
+  it("gives EVERY role a route to its own profile", () => {
+    // The bug this fixes: only supervisors had links anywhere, so managers, admins
+    // and procurement could not reach their own profile — not even to change their
+    // password.
     for (const r of ROLES) {
-      const keys = navFor(r).map((i) => i.key)
-      expect(keys, `${r} cannot reach history`).toContain("history")
-      expect(keys, `${r} cannot reach profile`).toContain("profile")
+      expect(navFor(r).map((i) => i.key), `${r} cannot reach profile`).toContain("profile")
+    }
+  })
+
+  it("only offers History to the roles that file something", () => {
+    // Supervisors file production records; procurement's history IS its receipts
+    // log. Managers and admins file nothing, so History is not their work — they
+    // read the analytics dashboard instead.
+    expect(navFor("supervisor").map((i) => i.key)).toContain("history")
+    expect(navFor("procurement").map((i) => i.key)).toContain("history")
+    expect(navFor("manager").map((i) => i.key)).not.toContain("history")
+    expect(navFor("admin").map((i) => i.key)).not.toContain("history")
+  })
+
+  it("only offers Submit to supervisors", () => {
+    // Procurement receives raw materials (its own form), and managers and admins
+    // submit no records at all — a Submit tab for them led to a form that would
+    // reject them.
+    expect(navFor("supervisor").map((i) => i.key)).toContain("submit")
+    for (const r of ROLES) {
+      if (r !== "supervisor") expect(navFor(r).map((i) => i.key), r).not.toContain("submit")
     }
   })
 
@@ -62,7 +80,9 @@ describe("navFor", () => {
 })
 
 describe("isActiveNav", () => {
-  const nav = navFor("manager")
+  // Supervisor: the longest list, and the one with a nested route (/dashboard/forms
+  // /[recordType]) to test the parent-stays-active rule against.
+  const nav = navFor("supervisor")
 
   it("marks the exact route active", () => {
     expect(isActiveNav("/dashboard/history", "/dashboard/history", nav)).toBe(true)
@@ -79,9 +99,25 @@ describe("isActiveNav", () => {
   })
 
   it("prefers the longest match when routes nest", () => {
+    const procurement = navFor("procurement")
     const path = "/dashboard/procurement/stock"
-    expect(isActiveNav("/dashboard/procurement/stock", path, nav)).toBe(true)
-    expect(isActiveNav("/dashboard", path, nav)).toBe(false)
+    expect(isActiveNav("/dashboard/procurement/stock", path, procurement)).toBe(true)
+    expect(isActiveNav("/dashboard", path, procurement)).toBe(false)
+  })
+
+  it("marks nothing active on a route the role has no tab for", () => {
+    // A manager can still open /dashboard/history by URL. Home must NOT light up as
+    // a consolation prize: it would say "you are on the home screen" when you aren't.
+    const manager = navFor("manager")
+    expect(manager.some((i) => isActiveNav(i.href, "/dashboard/history", manager))).toBe(false)
+  })
+
+  it("lights Home only on Home itself", () => {
+    for (const role of ["supervisor", "manager", "admin", "procurement"]) {
+      const items = navFor(role)
+      expect(isActiveNav("/dashboard", "/dashboard", items), role).toBe(true)
+      expect(isActiveNav("/dashboard", "/dashboard/profile", items), role).toBe(false)
+    }
   })
 
   it("marks nothing active on an unrelated route", () => {

@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils"
 //
 // This replaces a hub-and-spoke model with no persistent nav at all: the only way
 // between sections was a dashboard card out and a back-arrow in, and three of the
-// four roles had no link to History or Profile whatsoever.
+// four roles had no link to their own Profile whatsoever.
 // ============================================================================
 
 const ICON: Record<NavKey, typeof Home> = {

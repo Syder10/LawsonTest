@@ -8,6 +8,7 @@ import { GlassRenderer, type LensState } from "@/lib/glass/renderer"
 import { LAYOUT, ScenePainter, logoCenter, unit, type SceneState } from "@/lib/glass/scene"
 import { Spring, clamp, ease, mix } from "@/lib/glass/spring"
 import { paletteKey, readPalette, toRgb01 } from "@/lib/glass/tokens"
+import { isSwipeUpCommit, trackVelocity } from "@/lib/domain/swipe"
 
 // ============================================================================
 // Glass splash.
@@ -44,11 +45,16 @@ export function GlassSplash({ onStart, onFail }: { onStart: () => void; onFail: 
     plumeStart: -1,
     copy: 0,
     bloom: 0,
+    reduced: false,
+    // The gesture is tracked from the RAW pointer, not from the springs: with
+    // reduced motion the springs are never driven, so a spring-derived velocity
+    // would be zero and a flick would never register.
     dragging: false,
     pointerId: -1,
-    reduced: false,
-    radius: 0,
-    grabY: 0,
+    startY: 0,
+    lastY: 0,
+    lastT: 0,
+    vy: 0,
   })
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -217,16 +223,14 @@ export function GlassSplash({ onStart, onFail }: { onStart: () => void; onFail: 
 
       const g = clamp(state.grab.value, 0, 1.15)
       const radius = mix(restRadius(), liftRadius(), ease(g))
-      state.radius = radius
 
       const next: SceneState = {
         w, h, fontFamily, palette, logo,
         copy: state.copy,
         bloom: state.bloom,
-        gesture: !state.reduced,
       }
       const key = [
-        w, h, dpr, paletteId, logo ? "1" : "0", state.reduced ? "r" : "-",
+        w, h, dpr, paletteId, logo ? "1" : "0",
         next.copy.toFixed(3), next.bloom.toFixed(3),
       ].join("|")
       if (key !== sceneKey) {
@@ -270,47 +274,73 @@ export function GlassSplash({ onStart, onFail }: { onStart: () => void; onFail: 
       return { x: e.clientX - rect.left, y: e.clientY - rect.top }
     }
 
+    /**
+     * A swipe anywhere on the screen enters. The reference intro required you to
+     * grab the puck itself — but the puck rests below the fold, so the natural
+     * upward swipe (which starts mid-screen) fell through and did nothing. Now the
+     * glass gathers under wherever you touch and follows the finger.
+     */
     const onDown = (e: PointerEvent) => {
-      if (state.dragging || state.reduced || state.committed) return
+      if (state.dragging || state.committed) return
       const p = localPoint(e)
-
-      // You grab the glass, you don't summon it. A press that misses the puck falls
-      // through, so nothing above the canvas becomes untappable.
-      const dx = p.x - state.px.value
-      const dy = p.y - state.py.value
-      if (Math.hypot(dx, dy) > state.radius * 1.04) return
 
       state.dragging = true
       state.pointerId = e.pointerId
-      state.grabY = p.y
+      state.startY = p.y
+      state.lastY = p.y
+      state.lastT = performance.now()
+      state.vy = 0
       canvas.setPointerCapture(e.pointerId)
-      state.px.target = p.x
-      state.py.target = p.y
-      state.grab.target = 1
+
+      // Reduced motion: the gesture still counts, but the lens stays where it is.
+      if (!state.reduced) {
+        state.px.target = p.x
+        state.py.target = p.y
+        state.grab.target = 1
+      }
     }
 
     const onMove = (e: PointerEvent) => {
       if (!state.dragging || e.pointerId !== state.pointerId) return
       const p = localPoint(e)
-      state.px.target = p.x
-      state.py.target = p.y
+      const now = performance.now()
+      const dt = Math.max(1, now - state.lastT) / 1000
+      state.vy = trackVelocity(state.vy, p.y - state.lastY, dt)
+      state.lastY = p.y
+      state.lastT = now
+
+      if (!state.reduced) {
+        state.px.target = p.x
+        state.py.target = p.y
+      }
+    }
+
+    const endGesture = (e: PointerEvent) => {
+      state.dragging = false
+      state.pointerId = -1
+      if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId)
     }
 
     const onUp = (e: PointerEvent) => {
       if (!state.dragging || e.pointerId !== state.pointerId) return
-      state.dragging = false
-      state.pointerId = -1
-      if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId)
+      const travelled = state.startY - state.lastY
+      endGesture(e)
+      // Travel or flick — the shared rule, so the static fallback commits on exactly
+      // the same gesture. A tap satisfies neither: that is what the button is for.
+      if (isSwipeUpCommit(travelled, state.vy, h)) commit()
+    }
 
-      // Committed if the gesture travelled far enough up, or was flung.
-      const travelled = state.grabY - state.py.target
-      if (travelled > h * 0.22 || state.py.velocity < -700) commit()
+    // A cancel is the browser taking the gesture over (a system edge swipe, a
+    // context menu). That is not a commit.
+    const onCancel = (e: PointerEvent) => {
+      if (!state.dragging || e.pointerId !== state.pointerId) return
+      endGesture(e)
     }
 
     canvas.addEventListener("pointerdown", onDown)
     canvas.addEventListener("pointermove", onMove)
     canvas.addEventListener("pointerup", onUp)
-    canvas.addEventListener("pointercancel", onUp)
+    canvas.addEventListener("pointercancel", onCancel)
 
     // The headline is painted with the app font; until it loads the scene is drawn
     // in the fallback stack, so invalidate once the real one is ready.
@@ -323,7 +353,7 @@ export function GlassSplash({ onStart, onFail }: { onStart: () => void; onFail: 
       canvas.removeEventListener("pointerdown", onDown)
       canvas.removeEventListener("pointermove", onMove)
       canvas.removeEventListener("pointerup", onUp)
-      canvas.removeEventListener("pointercancel", onUp)
+      canvas.removeEventListener("pointercancel", onCancel)
       canvas.removeEventListener("webglcontextlost", onContextLost)
       reducedQuery.removeEventListener("change", onReduced)
       themeObserver.disconnect()
@@ -340,7 +370,7 @@ export function GlassSplash({ onStart, onFail }: { onStart: () => void; onFail: 
       <canvas
         ref={canvasRef}
         role="img"
-        aria-label="Lawson Limited Company. A pane of glass resting over the company mark; drag it upward to enter."
+        aria-label="Lawson Limited Company. A pane of glass over the company mark; swipe up to enter."
         className={`absolute inset-0 h-full w-full touch-none transition-opacity duration-500 ${ready ? "opacity-100" : "opacity-0"}`}
         style={{ cursor: committed ? "default" : "grab" }}
       />
@@ -349,19 +379,24 @@ export function GlassSplash({ onStart, onFail }: { onStart: () => void; onFail: 
           somewhere: this is the page's actual h1, and the canvas is decorative. */}
       <h1 className="sr-only">Lawson Limited Company — Production Management</h1>
 
-      {/* The CTA is in normal flow, pushed down to the fraction of the viewport the
-          scene reserves for it (LAYOUT.cta) — so it lands above the resting lens
-          and, unlike an absolutely-centred stack, can never be clipped out of reach
-          on a short viewport. */}
+      {/* pointer-events-none is LOAD-BEARING: this column covers the whole viewport
+          and sits above the canvas, so with default hit-testing it swallowed every
+          pointerdown and the swipe gesture could never start. Only the button opts
+          back in.
+
+          The CTA is still in normal flow, pushed down to the fraction of the
+          viewport the scene reserves for it (LAYOUT.cta), so it lands above the
+          resting lens and — unlike an absolutely-centred stack — can never be
+          clipped out of reach on a short viewport. */}
       <div
-        className="relative flex min-h-dvh w-full flex-col items-center px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+        className="pointer-events-none relative flex min-h-dvh w-full flex-col items-center px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
         style={{ paddingTop: `calc(${LAYOUT.cta} * 100dvh)` }}
       >
         <button
           type="button"
           onClick={commit}
           disabled={committed}
-          className="glass-button-hero inline-flex items-center gap-2 disabled:opacity-70"
+          className="glass-button-hero pointer-events-auto inline-flex items-center gap-2 disabled:opacity-70"
         >
           {committed ? "Opening…" : "Get started"}
           {!committed && <ArrowRight className="w-4 h-4" aria-hidden="true" />}

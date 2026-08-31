@@ -12,11 +12,12 @@ export function ProcurementDashboard() {
 
   return (
     <div className="space-y-4 animate-fade-in-up max-w-lg mx-auto">
-      {/* The dark hero is the app's most distinctive surface. It is deliberately
-          the same gradient on both themes — it reads as a deep brand panel rather
-          than as "light mode", so it does not need a dark variant. */}
+      {/* The dark hero is the app's most distinctive surface. It is deliberately the
+          same in both themes — it reads as a deep brand panel rather than as "light
+          mode" — which is exactly what the --hero-* tokens encode, so it shares
+          `.hero-panel` with the supervisor home instead of spelling out its own hex. */}
       <div className="rounded-3xl overflow-hidden shadow-lg">
-        <div className="bg-gradient-to-br from-[#0b1512] via-[#04231a] to-[#065f46] px-5 py-8 sm:px-6 text-center">
+        <div className="hero-panel px-5 py-8 sm:px-6 text-center">
           <span className="w-14 h-14 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center mx-auto mb-4">
             <Package className="w-7 h-7 text-white" aria-hidden="true" />
           </span>

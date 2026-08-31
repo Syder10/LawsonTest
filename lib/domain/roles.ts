@@ -70,12 +70,11 @@ export function roleSatisfiesMode(role: string, mode: LoginMode): boolean {
 // Routes as pure data (icons are mapped in the nav component, which is where JSX
 // belongs). This exists because navigation was previously ROLE-ABSENT, not just
 // role-unaware: only the supervisor dashboard linked anywhere, so managers,
-// admins and procurement had NO path to /dashboard/history or /dashboard/profile
-// at all — not even to change their own password. Both were URL-typing-only,
-// even though history/page.tsx explicitly builds an all-departments manager view.
+// admins and procurement had NO path to /dashboard/profile at all — not even to
+// change their own password.
 //
 // Each list is capped at FIVE so it fits a thumb-reachable bottom tab bar without
-// a "More" overflow. That cap is a real constraint, so each role gets the four or
+// a "More" overflow. That cap is a real constraint, so each role gets the three to
 // five things it actually does rather than every route it may access.
 
 export type NavKey = "home" | "submit" | "receive" | "history" | "stock" | "users" | "profile"
@@ -97,13 +96,23 @@ const ITEM: Record<NavKey, NavItem> = {
   profile: { key: "profile", href: "/dashboard/profile", label: "Profile" },
 }
 
+/**
+ * Nav is scoped to what a role actually DOES, not to everything it may read.
+ *
+ * Only supervisors submit production records, so only they get Submit. Procurement
+ * gets Receive (raw materials in, PPE issued out) and History, because their history
+ * IS their receipts log — but not Submit, since they file no production records.
+ * Managers and admins file nothing at all: they read the analytics dashboard, so
+ * neither Submit nor History belongs on their bar. Managers still see record-level
+ * detail through the dashboard's day drawer and the export, and /dashboard/history
+ * remains reachable by URL for anyone whose role permits it — it is simply not a
+ * tab, because it was never part of their job.
+ */
 const NAV_BY_ROLE: Record<UserRole, NavKey[]> = {
   supervisor: ["home", "submit", "history", "profile"],
-  manager: ["home", "submit", "history", "stock", "profile"],
+  manager: ["home", "stock", "profile"],
   procurement: ["home", "receive", "stock", "history", "profile"],
-  // Admins get Users over Submit: they manage accounts rather than sit on a
-  // shift roster, and the cap is five.
-  admin: ["home", "users", "history", "stock", "profile"],
+  admin: ["home", "users", "stock", "profile"],
 }
 
 export function navFor(role: string): NavItem[] {
@@ -116,11 +125,18 @@ export function navFor(role: string): NavItem[] {
  *
  * Longest-prefix, not `startsWith` alone: "/dashboard" prefixes every route, so a
  * naive check would light up Home on every page.
+ *
+ * Home is EXACT-MATCH ONLY, which is the same problem seen from the other side.
+ * Once a role's tabs no longer cover every route it can open — a manager can still
+ * reach /dashboard/history by URL, it is just not their tab — prefix matching would
+ * fall back to Home and claim the user is on the home screen. "Home is lit" should
+ * mean "you are on Home"; on an off-tab route nothing is lit.
  */
 export function isActiveNav(href: string, pathname: string, all: NavItem[]): boolean {
+  const root = ITEM.home.href
   const matches = all
     .map((i) => i.href)
-    .filter((h) => pathname === h || pathname.startsWith(`${h}/`))
+    .filter((h) => pathname === h || (h !== root && pathname.startsWith(`${h}/`)))
   if (matches.length === 0) return false
   const best = matches.reduce((a, b) => (b.length > a.length ? b : a))
   return href === best

@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ArrowRight, History, ShieldCheck, Users, Warehouse } from "lucide-react"
+import { ArrowRight, ShieldCheck, Users, Warehouse } from "lucide-react"
 import { Card, Chip, PageHeader, SectionTitle } from "@/components/primitives"
 
 // Admin landing. Was zinc-only — the ONLY screen in the app on a second neutral
@@ -7,6 +7,9 @@ import { Card, Chip, PageHeader, SectionTitle } from "@/components/primitives"
 //
 // With real navigation in place this no longer has to be the only route out, but
 // it stays a hub: cards state what each area is for, which a tab label cannot.
+//
+// No "Submission history" card: an admin files no records, so the submissions log
+// is not their work. Records are the supervisors' and the manager dashboard's.
 const AREAS = [
   {
     href: "/dashboard/admin/users",
@@ -19,12 +22,6 @@ const AREAS = [
     Icon: Warehouse,
     title: "Stock levels",
     body: "Every tracked material with its remaining balance and days of cover.",
-  },
-  {
-    href: "/dashboard/history",
-    Icon: History,
-    title: "Submission history",
-    body: "Every record submitted across all five departments.",
   },
 ]
 

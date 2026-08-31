@@ -1,7 +1,9 @@
 "use client"
 
+import { useRef } from "react"
 import Image from "next/image"
 import { ArrowRight } from "lucide-react"
+import { isSwipeUpCommit, trackVelocity } from "@/lib/domain/swipe"
 
 // ============================================================================
 // Static splash — the fallback, and the first thing rendered on every visit.
@@ -20,8 +22,39 @@ import { ArrowRight } from "lucide-react"
 // ============================================================================
 
 export function StaticSplash({ onStart }: { onStart: () => void }) {
+  // Swipe up works here too. This screen has no lens to drag, but "swipe up to
+  // enter" must mean the same thing whichever splash a device gets — otherwise the
+  // gesture silently depends on whether the phone could run a shader.
+  const gesture = useRef({ active: false, id: -1, startY: 0, lastY: 0, lastT: 0, vy: 0 })
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    gesture.current = { active: true, id: e.pointerId, startY: e.clientY, lastY: e.clientY, lastT: performance.now(), vy: 0 }
+  }
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const g = gesture.current
+    if (!g.active || e.pointerId !== g.id) return
+    const now = performance.now()
+    g.vy = trackVelocity(g.vy, e.clientY - g.lastY, Math.max(1, now - g.lastT) / 1000)
+    g.lastY = e.clientY
+    g.lastT = now
+  }
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    const g = gesture.current
+    if (!g.active || e.pointerId !== g.id) return
+    g.active = false
+    if (isSwipeUpCommit(g.startY - g.lastY, g.vy, window.innerHeight)) onStart()
+  }
+
   return (
-    <div className="relative min-h-dvh flex flex-col items-center justify-center px-6 py-12 bg-mesh">
+    <div
+      className="relative min-h-dvh flex flex-col items-center justify-center px-6 py-12 bg-mesh touch-pan-y"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={() => { gesture.current.active = false }}
+    >
       {/* The orbs are the only decorative motion, and they sit behind everything
           with pointer-events: none so they can never intercept the CTA. */}
       <div className="gradient-orb gradient-orb-1 animate-float" aria-hidden="true" />
@@ -48,6 +81,9 @@ export function StaticSplash({ onStart }: { onStart: () => void }) {
           Get started
           <ArrowRight className="w-4 h-4" aria-hidden="true" />
         </button>
+
+        {/* Says the gesture out loud: an undiscoverable swipe is not a feature. */}
+        <p className="text-xs font-medium text-ink-muted animate-fade-in-up delay-400">or swipe up to enter</p>
       </main>
     </div>
   )

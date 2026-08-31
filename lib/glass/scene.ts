@@ -58,8 +58,6 @@ export type SceneState = {
   copy: number
   /** 0..1 brand bloom behind the mark, brightening as the plume launches. */
   bloom: number
-  /** False when the drag gesture is unavailable (reduced motion), so the hint changes. */
-  gesture: boolean
 }
 
 /**
@@ -231,13 +229,9 @@ export class ScenePainter {
     ctx.textAlign = "center"
     ctx.textBaseline = "middle"
     this.setTracking(ctx, u * 0.0006)
-    // The hint must not promise a gesture that isn't offered: with reduced motion
-    // the lens is held still and the button is the only way through.
-    ctx.fillText(
-      s.gesture ? "Drag the glass up to enter" : "Press Get started to continue",
-      w / 2,
-      h * LAYOUT.hint,
-    )
+    // One instruction, true in every mode: the swipe works with reduced motion too
+    // (it is an input, not an animation — only the lens is held still).
+    ctx.fillText("Swipe up to enter", w / 2, h * LAYOUT.hint)
     this.setTracking(ctx, 0)
     ctx.restore()
   }
