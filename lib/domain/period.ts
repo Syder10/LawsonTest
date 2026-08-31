@@ -17,6 +17,18 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ] as const
 
+/**
+ * The earliest date the system holds records for — a floor for history scans, so a
+ * "missing submissions" sweep doesn't walk back through years that never existed.
+ *
+ * This is the one DEPLOYMENT fact in this file rather than a domain rule, and it was
+ * previously copy-pasted into three separate routes (gaps, stats, mvp), which is
+ * exactly how three files end up disagreeing about when the system went live. Change
+ * it here if the real go-live date differs; a floor that is too early only costs a
+ * wider query, while one that is too late hides real gaps.
+ */
+export const SYSTEM_START = "2026-04-01"
+
 export interface MonthWindow {
   /** First day, YYYY-MM-DD. */
   start: string
@@ -43,16 +55,45 @@ function windowFor(year: number, monthIndex: number): MonthWindow {
   }
 }
 
-/** The month `now` falls in — the leaderboard's live window. */
+/** The month `now` falls in, as a plain calendar month. */
 export function monthWindow(now: Date): MonthWindow {
   return windowFor(now.getUTCFullYear(), now.getUTCMonth())
 }
 
-/** The last COMPLETED month. Rolls the year back correctly in January. */
+/** The last COMPLETED calendar month. Rolls the year back correctly in January. */
 export function previousMonthWindow(now: Date): MonthWindow {
   const y = now.getUTCFullYear()
   const m = now.getUTCMonth()
   return m === 0 ? windowFor(y - 1, 11) : windowFor(y, m - 1)
+}
+
+/**
+ * THE MONTH DOES NOT CLOSE AT MIDNIGHT.
+ *
+ * A Night shift is DATED BY THE DAY IT STARTED, so the shift that begins 21:00 on the
+ * 31st is dated the 31st — and its on-time window is 04:00–05:30 the NEXT morning
+ * (ON_TIME_WINDOWS.Night, applied a day later by onTimeWindowCloseFor). At 00:00 on
+ * the 1st that supervisor has not merely failed to submit; they are not yet ALLOWED
+ * to. Closing the month at midnight would judge it with its final rostered shift
+ * still outstanding, and drop that shift's record into a month nobody is looking at.
+ *
+ * So the gamification month rolls over at 07:00 UTC on the 1st — 90 minutes after the
+ * last Night window closes. Ghana is UTC+0, so that is 07:00 local.
+ */
+export const PERIOD_ROLLOVER_HOUR = 7
+
+/** True during the hours of the 1st when last month is still open for submissions. */
+export function isBeforeRollover(now: Date): boolean {
+  return now.getUTCDate() === 1 && now.getUTCHours() < PERIOD_ROLLOVER_HOUR
+}
+
+/**
+ * The month gamification currently counts as live — what the leaderboard shows.
+ * Before the rollover on the 1st that is still LAST month, so a Night supervisor
+ * submitting at 05:00 sees their record land on the board they were competing on.
+ */
+export function activeMonthWindow(now: Date): MonthWindow {
+  return isBeforeRollover(now) ? previousMonthWindow(now) : monthWindow(now)
 }
 
 /** How many days into the new month the previous month's MVP is celebrated. */
@@ -66,8 +107,8 @@ export interface MvpWindow extends MonthWindow {
 }
 
 /**
- * The MVP window: ALWAYS the month that has just finished, shown for the first
- * `MVP_BANNER_DAYS` days of the new one.
+ * The MVP window: ALWAYS the month that has just finished, revealed at the rollover
+ * on the 1st and shown for the first `MVP_BANNER_DAYS` days of the new month.
  *
  * The previous rule decided the MVP on the LAST DAY of the month it was judging —
  * before that day's Afternoon and Night shifts had submitted — and wrote the badge
@@ -76,12 +117,16 @@ export interface MvpWindow extends MonthWindow {
  * person than the badge holder. Judging only a closed month removes the race: a row
  * submitted after its own shift window is backdated, so it never counts as on-time,
  * which means a finished month's on-time totals can no longer change.
+ *
+ * That is also why the reveal waits for PERIOD_ROLLOVER_HOUR rather than midnight —
+ * see the note there. Revealing at 00:00 would announce a winner while the month's
+ * last Night shift still had five hours to file.
  */
 export function mvpWindow(now: Date): MvpWindow {
   const w = previousMonthWindow(now)
   return {
     ...w,
-    show: now.getUTCDate() <= MVP_BANNER_DAYS,
+    show: now.getUTCDate() <= MVP_BANNER_DAYS && !isBeforeRollover(now),
     badge: `mvp_${w.year}_${w.month}`,
   }
 }

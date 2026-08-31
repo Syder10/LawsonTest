@@ -263,7 +263,7 @@ export function SupervisorDashboard({ userId }: { userId: string }) {
             </div>
             <div className="px-5 pb-4">
               <p className="text-center text-xs text-ink-muted">
-                Resets on the 1st · Mon–Sat · 3-shift rotation
+                Resets on the 1st at 7:00 am, once the night shift has filed · Mon–Sat
               </p>
             </div>
           </Card>

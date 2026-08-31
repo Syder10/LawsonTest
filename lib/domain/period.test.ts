@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest"
 import {
   MVP_BANNER_DAYS,
+  PERIOD_ROLLOVER_HOUR,
+  SYSTEM_START,
+  activeMonthWindow,
+  isBeforeRollover,
   monthWindow,
   mvpWindow,
   previousMonthWindow,
 } from "@/lib/domain/period"
+import { onTimeWindowCloseFor } from "@/lib/shift-config"
 
 const at = (iso: string) => new Date(iso)
 
@@ -49,6 +54,70 @@ describe("previousMonthWindow", () => {
   })
 })
 
+describe("SYSTEM_START", () => {
+  it("is a valid calendar date", () => {
+    expect(SYSTEM_START).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect(Number.isNaN(Date.parse(`${SYSTEM_START}T00:00:00Z`))).toBe(false)
+  })
+
+  it("is not in the future", () => {
+    // A floor after today would make every history scan return nothing — the streak,
+    // the gap prompt and the MVP would all quietly read as "no data".
+    expect(SYSTEM_START <= new Date().toISOString().slice(0, 10)).toBe(true)
+  })
+})
+
+describe("the rollover hour", () => {
+  // The reason this exists: a Night shift is dated by the day it STARTED, so the one
+  // beginning 21:00 on 31 August is dated 31 August and its on-time window is
+  // 04:00–05:30 on 1 September. At midnight that supervisor is not late — they are
+  // not yet allowed to submit.
+  it("waits until after the last Night window of the month has closed", () => {
+    const close = onTimeWindowCloseFor("2026-08-31", "Night")
+    expect(close).toBe("2026-09-01T05:30:00.000Z")
+    const rollover = new Date(Date.UTC(2026, 8, 1, PERIOD_ROLLOVER_HOUR, 0, 0))
+    expect(rollover.getTime()).toBeGreaterThan(new Date(close).getTime())
+  })
+
+  it("treats the small hours of the 1st as still last month", () => {
+    expect(isBeforeRollover(new Date("2026-09-01T00:01:00Z"))).toBe(true)
+    expect(isBeforeRollover(new Date("2026-09-01T05:00:00Z"))).toBe(true)
+    expect(isBeforeRollover(new Date("2026-09-01T06:59:00Z"))).toBe(true)
+    expect(isBeforeRollover(new Date("2026-09-01T07:00:00Z"))).toBe(false)
+    // Only ever the 1st — the 2nd is unambiguously the new month.
+    expect(isBeforeRollover(new Date("2026-09-02T02:00:00Z"))).toBe(false)
+  })
+
+  it("keeps the leaderboard on last month until the rollover", () => {
+    // So a Night supervisor filing at 05:00 sees their record land on the board they
+    // were competing on, instead of an empty new one.
+    expect(activeMonthWindow(new Date("2026-09-01T05:00:00Z")).label).toBe("August 2026")
+    expect(activeMonthWindow(new Date("2026-09-01T07:00:00Z")).label).toBe("September 2026")
+    expect(activeMonthWindow(new Date("2026-08-31T23:00:00Z")).label).toBe("August 2026")
+  })
+
+  it("holds the MVP back until the rollover, then reveals it", () => {
+    expect(mvpWindow(new Date("2026-09-01T00:05:00Z")).show).toBe(false)
+    expect(mvpWindow(new Date("2026-09-01T05:00:00Z")).show).toBe(false)
+    const revealed = mvpWindow(new Date("2026-09-01T07:00:00Z"))
+    expect(revealed.show).toBe(true)
+    expect(revealed.label).toBe("August 2026")
+    expect(revealed.badge).toBe("mvp_2026_8")
+  })
+
+  it("never leaves a gap: the board and the MVP hand over at the same instant", () => {
+    // One minute before the rollover the board says August and no MVP is claimed; one
+    // minute after, the board is September and August has a winner. There is no
+    // moment where the board has moved on but the month is undecided.
+    const before = new Date("2026-09-01T06:59:00Z")
+    const after = new Date("2026-09-01T07:01:00Z")
+    expect(activeMonthWindow(before).label).toBe("August 2026")
+    expect(mvpWindow(before).show).toBe(false)
+    expect(activeMonthWindow(after).label).toBe("September 2026")
+    expect(mvpWindow(after).show).toBe(true)
+  })
+})
+
 describe("mvpWindow", () => {
   it("celebrates the month that has FINISHED, not the one in progress", () => {
     // The bug this replaces: on the last day of the month the old rule judged that
@@ -60,7 +129,7 @@ describe("mvpWindow", () => {
   })
 
   it("shows for the first days of the new month and then stops", () => {
-    expect(mvpWindow(at("2026-08-01T00:30:00Z")).show).toBe(true)
+    expect(mvpWindow(at("2026-08-01T08:30:00Z")).show).toBe(true)
     expect(mvpWindow(at(`2026-08-0${MVP_BANNER_DAYS}T23:00:00Z`)).show).toBe(true)
     expect(mvpWindow(at("2026-08-08T09:00:00Z")).show).toBe(false)
     expect(mvpWindow(at("2026-08-20T09:00:00Z")).show).toBe(false)

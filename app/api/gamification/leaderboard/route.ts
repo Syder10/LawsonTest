@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/auth/guards"
 import { createAdminSupabase } from "@/lib/supabase/admin"
 import { compulsoryRecordTypes, departmentsWithCompulsory } from "@/lib/domain/record-types"
 import { completeShiftKeys, fetchTypeRows, isRosteredOnTime } from "@/lib/domain/gamification"
-import { monthWindow } from "@/lib/domain/period"
+import { activeMonthWindow } from "@/lib/domain/period"
 import { isSaturdayOff } from "@/lib/shift-config"
 
 // MONTHLY team on-time leaderboard, computed here from the shared domain logic (the
@@ -28,7 +28,10 @@ export async function GET() {
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
 
   const admin = createAdminSupabase()
-  const period = monthWindow(new Date())
+  // activeMonthWindow, not the calendar month: for the first hours of the 1st the
+  // board still shows last month, because the Night shift dated the 31st can submit
+  // until 05:30 that morning and belongs on the board it was competing on.
+  const period = activeMonthWindow(new Date())
   const { start, end } = period
 
   // Distinct compulsory record types across all departments.

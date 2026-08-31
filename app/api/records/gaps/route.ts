@@ -3,8 +3,7 @@ import { requireUser } from "@/lib/auth/guards"
 import { createAdminSupabase } from "@/lib/supabase/admin"
 import { compulsoryRecordTypes } from "@/lib/domain/record-types"
 import { fetchTypeRows, computeGaps, type EnvelopeRow } from "@/lib/domain/gamification"
-
-const SYSTEM_START = "2026-04-01"
+import { SYSTEM_START } from "@/lib/domain/period"
 
 // Unresolved rostered working days that still need a submission, for the
 // "unsubmitted days" prompt. Bounded to on/after the later of SYSTEM_START and

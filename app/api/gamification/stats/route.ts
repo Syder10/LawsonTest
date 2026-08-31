@@ -4,6 +4,7 @@ import { createAdminSupabase } from "@/lib/supabase/admin"
 import { compulsoryRecordTypes } from "@/lib/domain/record-types"
 import { fetchTypeRows, isValidOnTime, computeStreak, type EnvelopeRow } from "@/lib/domain/gamification"
 import type { Shift } from "@/lib/db/types"
+import { SYSTEM_START } from "@/lib/domain/period"
 import {
   buildOnTimeWindowInfo,
   currentGhanaShift,
@@ -13,7 +14,6 @@ import {
   isBackdated,
 } from "@/lib/shift-config"
 
-const SYSTEM_START = "2026-04-01"
 const SUBMISSION_MILESTONES = [50, 100, 200, 300, 400, 500, 750, 1000, 1500, 2000]
 const STREAK_MILESTONES = [5, 10, 20, 30, 50, 100]
 

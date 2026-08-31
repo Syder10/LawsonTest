@@ -3,10 +3,8 @@ import { requireUser } from "@/lib/auth/guards"
 import { createAdminSupabase } from "@/lib/supabase/admin"
 import { compulsoryRecordTypes, departmentsWithCompulsory } from "@/lib/domain/record-types"
 import { completeShiftKeys, fetchTypeRows, isRosteredOnTime } from "@/lib/domain/gamification"
-import { mvpWindow } from "@/lib/domain/period"
+import { SYSTEM_START, mvpWindow } from "@/lib/domain/period"
 import { isSaturdayOff } from "@/lib/shift-config"
-
-const SYSTEM_START = "2026-04-01"
 
 // Monthly MVP: the supervisor with the most complete on-time shifts in the month
 // that has just FINISHED, shown for the first days of the new one.
