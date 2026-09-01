@@ -495,18 +495,35 @@
   }
 }
 
+/* Decorative background orbs.
+ *
+ * NO `filter: blur()` — and that is a performance fix, not a style change. These are
+ * radial gradients that already fade to transparent, so an 80px blur on top was
+ * almost invisible; what it DID do was make two ~500px filtered layers that the
+ * browser had to re-rasterise whenever anything above them repainted. Typing in the
+ * sign-in form repaints the input on every keystroke, so every keystroke paid for
+ * re-blurring half the screen — which is exactly what "the login field feels slow"
+ * is. On the splash they also animate, so the blur was being redone per frame.
+ *
+ * The softness now comes from a three-stop ramp instead, which costs nothing, and
+ * `contain: paint` keeps each orb's painting to its own box. */
 .gradient-orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.3;
+  opacity: 0.34;
   pointer-events: none;
+  contain: paint;
 }
 
 .gradient-orb-1 {
   width: min(500px, 80vw);
   height: min(500px, 80vw);
-  background: radial-gradient(circle, color-mix(in oklab, var(--brand) 40%, transparent) 0%, transparent 70%);
+  background: radial-gradient(
+    circle,
+    color-mix(in oklab, var(--brand) 34%, transparent) 0%,
+    color-mix(in oklab, var(--brand) 14%, transparent) 45%,
+    transparent 78%
+  );
   top: -10%;
   right: -5%;
 }
@@ -514,7 +531,12 @@
 .gradient-orb-2 {
   width: min(400px, 70vw);
   height: min(400px, 70vw);
-  background: radial-gradient(circle, color-mix(in oklab, var(--brand) 25%, transparent) 0%, transparent 70%);
+  background: radial-gradient(
+    circle,
+    color-mix(in oklab, var(--brand) 22%, transparent) 0%,
+    color-mix(in oklab, var(--brand) 9%, transparent) 45%,
+    transparent 78%
+  );
   bottom: -5%;
   left: -10%;
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { FORM_FIELDS, type FormFieldDef } from "@/lib/domain/form-config"
 import { getRecordType } from "@/lib/domain/record-types"
 import { Button } from "@/components/ui/button"
@@ -141,22 +141,57 @@ export default function RecordEntryForm({
     }
   }, [draftKey])
 
+  // Draft autosave, DEBOUNCED. This used to run on every state change, which meant a
+  // JSON.stringify of the whole form plus a synchronous localStorage write on every
+  // single keystroke — and localStorage writes block the main thread, so on a
+  // factory-floor phone with a 20-tank extraction draft that is felt as typing lag.
+  // Waiting for a pause in typing keeps the feature and stops charging for it per
+  // character.
+  //
+  // The debounce is only safe because of the flush below: without it, leaving the page
+  // within half a second of the last keystroke would lose that keystroke, and a draft
+  // that quietly drops the most recent edit is worse than no draft at all.
+  const pendingDraft = useRef<string | null>(null)
+
+  const flushDraft = useCallback(() => {
+    const payload = pendingDraft.current
+    if (payload === null) return
+    pendingDraft.current = null
+    try {
+      localStorage.setItem(draftKey, payload)
+      setHasDraft(true)
+    } catch {
+      /* storage full or blocked — not worth interrupting data entry */
+    }
+  }, [draftKey])
+
   useEffect(() => {
     const empty =
       Object.keys(formDataByProduct).length === 0 &&
       Object.keys(tankData).length === 0 &&
       Object.keys(herbsData).length === 0
     if (empty) return
-    try {
-      localStorage.setItem(
-        draftKey,
-        JSON.stringify({ formDataByProduct, productionTypes, tankData, numberOfTanks, herbsData, selectedHerbs }),
-      )
-      setHasDraft(true)
-    } catch {
-      /* storage full or blocked — not worth interrupting data entry */
+
+    pendingDraft.current = JSON.stringify({
+      formDataByProduct, productionTypes, tankData, numberOfTanks, herbsData, selectedHerbs,
+    })
+    const id = setTimeout(flushDraft, 500)
+    return () => clearTimeout(id)
+  }, [formDataByProduct, productionTypes, tankData, numberOfTanks, herbsData, selectedHerbs, flushDraft])
+
+  // Backstop for the debounce: write immediately when the page is hidden or torn
+  // down. `visibilitychange` is the one that actually fires on mobile — a phone
+  // switching apps or locking often never sends `beforeunload` at all.
+  useEffect(() => {
+    const onHide = () => { if (document.visibilityState === "hidden") flushDraft() }
+    document.addEventListener("visibilitychange", onHide)
+    window.addEventListener("pagehide", flushDraft)
+    return () => {
+      document.removeEventListener("visibilitychange", onHide)
+      window.removeEventListener("pagehide", flushDraft)
+      flushDraft()
     }
-  }, [formDataByProduct, productionTypes, tankData, numberOfTanks, herbsData, selectedHerbs, draftKey])
+  }, [flushDraft])
 
   const discardDraft = () => {
     try { localStorage.removeItem(draftKey) } catch { /* ignore */ }

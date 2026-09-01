@@ -73,7 +73,11 @@ export function BottomTabs({ role }: { role: string }) {
   return (
     <nav
       aria-label="Main"
-      className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-hairline bg-surface-card/95 backdrop-blur-sm pb-[env(safe-area-inset-bottom)]"
+      // No backdrop-blur: behind a 95%-opaque background a 4px blur is invisible, so
+      // it was a backdrop-filter on a viewport-wide bar present on EVERY dashboard
+      // page — re-sampled whenever the content behind it repaints — bought for an
+      // effect nobody can see. Opaque enough is cheaper and looks the same.
+      className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t border-hairline bg-surface-card/95 pb-[env(safe-area-inset-bottom)]"
     >
       <ul className="flex items-stretch">
         {items.map((item) => {
