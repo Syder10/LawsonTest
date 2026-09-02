@@ -93,17 +93,19 @@ export function materialKey(material: string, product?: Product | null): string 
 }
 
 const M = {
-  alcohol: { key: materialKey("alcohol"), material: "alcohol", label: "Alcohol", unit: "litres" },
+  // Alcohol's ledger is counted in 250 L DRUMS — that is what the form asks for and
+  // what a stock count records. Litres are derived for display (see LEDGER_UNITS).
+  alcohol: { key: materialKey("alcohol"), material: "alcohol", label: "Alcohol", unit: "drums" },
   preform: { key: materialKey("preform"), material: "preform", label: "Preforms", unit: "bags" },
-  caps: { key: materialKey("caps"), material: "caps", label: "Caps", unit: "pcs" },
-  labelsBitters: { key: materialKey("labels", "Bitters"), material: "labels", product: "Bitters" as Product, label: "Labels — Bitters", unit: "pcs" },
-  labelsGinger: { key: materialKey("labels", "Ginger"), material: "labels", product: "Ginger" as Product, label: "Labels — Ginger", unit: "pcs" },
-  caramelBitters: { key: materialKey("caramel", "Bitters"), material: "caramel", product: "Bitters" as Product, label: "Caramel — Bitters", unit: "units" },
-  caramelGinger: { key: materialKey("caramel", "Ginger"), material: "caramel", product: "Ginger" as Product, label: "Caramel — Ginger", unit: "units" },
+  caps: { key: materialKey("caps"), material: "caps", label: "Caps", unit: "boxes" },
+  labelsBitters: { key: materialKey("labels", "Bitters"), material: "labels", product: "Bitters" as Product, label: "Labels — Bitters", unit: "rolls" },
+  labelsGinger: { key: materialKey("labels", "Ginger"), material: "labels", product: "Ginger" as Product, label: "Labels — Ginger", unit: "rolls" },
+  caramelBitters: { key: materialKey("caramel", "Bitters"), material: "caramel", product: "Bitters" as Product, label: "Caramel — Bitters", unit: "gallons" },
+  caramelGinger: { key: materialKey("caramel", "Ginger"), material: "caramel", product: "Ginger" as Product, label: "Caramel — Ginger", unit: "gallons" },
   taxStamp: { key: materialKey("tax_stamp"), material: "tax_stamp", label: "Tax Stamps", unit: "pcs" },
   cartonBitters: { key: materialKey("carton", "Bitters"), material: "carton", product: "Bitters" as Product, label: "Cartons — Bitters", unit: "pcs" },
   cartonGinger: { key: materialKey("carton", "Ginger"), material: "carton", product: "Ginger" as Product, label: "Cartons — Ginger", unit: "pcs" },
-  herb: { key: materialKey("herb"), material: "herb", label: "Herbs", unit: "units", perVariant: true as const },
+  herb: { key: materialKey("herb"), material: "herb", label: "Herbs", unit: "sacks", perVariant: true as const },
 } satisfies Record<string, DeptMaterial>
 
 // ============================================================================
@@ -139,8 +141,8 @@ export const DEPT_METRICS: Record<Department, DeptMetricsDef> = {
     productSplit: false,
     trendKpi: "blend_output",
     kpis: [
-      { key: "alcohol_used", label: "Alcohol used", table: "stock_records", compute: { kind: "sum", column: "quantity_used" }, unit: "litres", goodDirection: "down" },
-      { key: "alcohol_received", label: "Alcohol received", table: "stock_records", compute: { kind: "sum", column: "quantity_received" }, unit: "litres" },
+      { key: "alcohol_used", label: "Alcohol used", table: "stock_records", compute: { kind: "sum", column: "quantity_used" }, unit: "drums", goodDirection: "down" },
+      { key: "alcohol_received", label: "Alcohol received", table: "stock_records", compute: { kind: "sum", column: "quantity_received" }, unit: "drums" },
       { key: "transferred_litres", label: "Alcohol transferred", table: "alcohol_blending_daily_records", compute: { kind: "sum", column: "alcohol_transferred_litres" }, unit: "litres", hint: "Drums × 250, computed by the database." },
       { key: "blend_output", label: "Finished blend", table: "alcohol_blending_daily_records", compute: { kind: "sum", column: "finished_products_transferred_litres" }, unit: "litres", goodDirection: "up", hint: "Tanks × 900, computed by the database." },
       { key: "ginger_output", label: "Ginger output", table: "ginger_production_records", compute: { kind: "sum", column: "finished_product_litres" }, unit: "litres", goodDirection: "up" },

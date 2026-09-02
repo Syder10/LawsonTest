@@ -92,13 +92,14 @@ export async function GET(request: Request) {
       ).data ?? 0,
     )
 
-  // Windowed movement totals for a ledger material. Preform movements live in
-  // blowing_daily_records, not stock_records — see stock_materials in 0002.
-  const movement = async (m: DeptMaterial): Promise<{ used: number; received: number }> => {
+  // Windowed movement totals for a ledger material, plus the dates that actually
+  // recorded consumption — the burn rate is measured over the span those dates cover,
+  // not over every Mon–Sat in the filter window (see usageSpanOperatingDays).
+  const movement = async (m: DeptMaterial): Promise<{ used: number; received: number; usedOn: string[] }> => {
     if (m.material === "preform") {
       let q = supabase
         .from("blowing_daily_records")
-        .select("quantity_received_bags, preforms_used_bags")
+        .select("date, quantity_received_bags, preforms_used_bags")
         .gte("date", from)
         .lte("date", to)
       if (shift) q = q.eq("shift", shift)
@@ -106,6 +107,7 @@ export async function GET(request: Request) {
       return {
         used: rows.reduce((s, r) => s + num(r.preforms_used_bags), 0),
         received: rows.reduce((s, r) => s + num(r.quantity_received_bags), 0),
+        usedOn: rows.filter((r) => num(r.preforms_used_bags) > 0).map((r) => String(r.date)),
       }
     }
 
@@ -115,7 +117,7 @@ export async function GET(request: Request) {
     if (m.material === "tax_stamp" || m.material === "carton") {
       let q = supabase
         .from("packaging_daily_records")
-        .select("product, quantity_cartons_produced")
+        .select("date, product, quantity_cartons_produced")
         .gte("date", from)
         .lte("date", to)
       if (shift) q = q.eq("shift", shift)
@@ -130,12 +132,13 @@ export async function GET(request: Request) {
       return {
         used: rows.reduce((s, r) => s + num(r.quantity_cartons_produced) * rate(r.product), 0),
         received: 0, // receipts are logged in raw_materials_received, not here
+        usedOn: rows.filter((r) => num(r.quantity_cartons_produced) > 0).map((r) => String(r.date)),
       }
     }
 
     let q = supabase
       .from("stock_records")
-      .select("quantity_received, quantity_used")
+      .select("date, quantity_received, quantity_used")
       .eq("material", m.material)
       .gte("date", from)
       .lte("date", to)
@@ -148,6 +151,7 @@ export async function GET(request: Request) {
     return {
       used: rows.reduce((s, r) => s + num(r.quantity_used), 0),
       received: rows.reduce((s, r) => s + num(r.quantity_received), 0),
+      usedOn: rows.filter((r) => num(r.quantity_used) > 0).map((r) => String(r.date)),
     }
   }
 
@@ -159,7 +163,8 @@ export async function GET(request: Request) {
       unit: m.unit,
       remaining: rem,
       usedInWindow: mv.used,
-      operatingDaysInWindow: opDays,
+      usageDates: mv.usedOn,
+      windowEnd: to,
       fromISO: today,
     })
   }

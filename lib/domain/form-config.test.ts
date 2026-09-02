@@ -309,14 +309,12 @@ describe("FORM_FIELDS preview wiring", () => {
   })
 
   it("ignores keys outside previewFrom", () => {
+    // Inputs are read from previewFrom rather than written out, so a label change
+    // (adding the entry unit, say) can't turn this into a test of nothing.
     const f = FORM_FIELDS["Caps Stock"].find((f) => f.column === "remaining_stock")!
+    const [carried, received, used] = f.previewFrom!
     expect(
-      f.preview!({
-        "Current Stock (Carried Forward)": 500,
-        "Quantity Received": 120,
-        "Quantity Used": 80,
-        "Some Other Field": 9999,
-      }),
+      f.preview!({ [carried]: 500, [received]: 120, [used]: 80, "Some Other Field": 9999 }),
     ).toBe(540)
   })
 })
@@ -326,42 +324,44 @@ describe("stock-ledger preview: opening + received - used", () => {
     FORM_FIELDS[form].find((f) => f.column === "remaining_stock")!
 
   it("computes the remaining stock level for the alcohol ledger", () => {
+    // Alcohol's labels carry their unit — the floor counts 250 L DRUMS, and a bare
+    // "Quantity Used" was what let a drum count be captioned "litres" downstream.
     expect(
       remainingField("Daily Usage of Alcohol And Stock Level").preview!({
-        "Current Stock (Carried Forward)": 500,
-        "Quantity Received": 120,
-        "Quantity Used": 80,
+        "Current Stock (Carried Forward) (DRUMS)": 500,
+        "Quantity Received (DRUMS)": 120,
+        "Quantity Used (DRUMS)": 80,
       }),
     ).toBe(540)
   })
 
   it("treats a missing received amount as 0", () => {
-    expect(
-      remainingField("Caps Stock").preview!({
-        "Current Stock (Carried Forward)": 500,
-        "Quantity Used": 80,
-      }),
-    ).toBe(420)
+    const f = remainingField("Caps Stock")
+    const [carried, , used] = f.previewFrom!
+    expect(f.preview!({ [carried]: 500, [used]: 80 })).toBe(420)
   })
 
   it("can go negative when more was used than was available (over-issue is visible, not clamped)", () => {
-    expect(
-      remainingField("Caramel Stock").preview!({
-        "Current Stock (Carried Forward)": 100,
-        "Quantity Received": 0,
-        "Quantity Used": 250,
-      }),
-    ).toBe(-150)
+    const f = remainingField("Caramel Stock")
+    const [carried, received, used] = f.previewFrom!
+    expect(f.preview!({ [carried]: 100, [received]: 0, [used]: 250 })).toBe(-150)
   })
 
-  it("wires the same three inputs into previewFrom for all four stock-ledger forms", () => {
+  it("wires each ledger form's own three inputs into previewFrom", () => {
+    // The three inputs must be that form's OWN labels, or the live preview silently
+    // reads undefined and shows 0 — which is what a unit suffix on one form and not
+    // another would cause if previewFrom were hardcoded.
     for (const form of [
       "Daily Usage of Alcohol And Stock Level",
       "Caps Stock",
       "Labels Stock",
       "Caramel Stock",
     ]) {
-      expect(remainingField(form).previewFrom, `previewFrom of ${form}`).toEqual([
+      const labels = FORM_FIELDS[form].map((f) => f.label)
+      const inputs = remainingField(form).previewFrom!
+      expect(inputs.length, `previewFrom of ${form}`).toBe(3)
+      for (const i of inputs) expect(labels, `${form} previewFrom "${i}"`).toContain(i)
+      expect(inputs.map((l) => l.replace(/ \([A-Z]+\)$/, "")), `previewFrom of ${form}`).toEqual([
         "Current Stock (Carried Forward)",
         "Quantity Received",
         "Quantity Used",
@@ -369,21 +369,46 @@ describe("stock-ledger preview: opening + received - used", () => {
     }
   })
 
-  it("defines the four stock-ledger forms with an identical field shape", () => {
+  it("defines the four stock-ledger forms with an identical COLUMN shape", () => {
+    // Labels may carry a unit (alcohol says DRUMS); the columns, order and flags must
+    // not drift, because that is what would corrupt or drop data.
     const shape = (form: string) =>
       FORM_FIELDS[form].map((f) => ({
-        label: f.label,
         column: f.column,
         type: f.type,
         required: !!f.required,
         generated: !!f.generated,
         carried: !!f.carried,
-        previewFrom: f.previewFrom ?? null,
+        hasPreview: !!f.previewFrom,
       }))
     const reference = shape("Daily Usage of Alcohol And Stock Level")
     expect(shape("Caps Stock")).toEqual(reference)
     expect(shape("Labels Stock")).toEqual(reference)
     expect(shape("Caramel Stock")).toEqual(reference)
+  })
+
+  // Every ledger material is counted in a CONTAINER, and each form says which. A bare
+  // "Quantity Used" is what let a drum count be stored and captioned as litres.
+  it("names the entry unit in the label of every stock-ledger form", () => {
+    const expected: Record<string, string> = {
+      "Daily Usage of Alcohol And Stock Level": "DRUMS",
+      "Caps Stock": "BOXES",
+      "Labels Stock": "ROLLS",
+      "Caramel Stock": "GALLONS",
+    }
+    for (const [form, unit] of Object.entries(expected)) {
+      const labels = FORM_FIELDS[form].map((f) => f.label)
+      expect(labels, form).toContain(`Quantity Used (${unit})`)
+      expect(labels, form).toContain(`Quantity Received (${unit})`)
+    }
+  })
+
+  it("names the entry unit on the herbs form too", () => {
+    // Herbs use a bespoke per-variant UI with its own labels, so it does not inherit
+    // the shared helper and has to be checked separately.
+    const labels = FORM_FIELDS["Herbs Stock"].map((f) => f.label)
+    expect(labels).toContain("Qty Used (SACKS)")
+    expect(labels).toContain("Qty Received (SACKS)")
   })
 })
 
@@ -504,28 +529,28 @@ describe("Concentrate form preview", () => {
 describe("Herbs Stock form previews", () => {
   const field = (column: string) => FORM_FIELDS["Herbs Stock"].find((f) => f.column === column)!
 
+  // Labels are read from previewFrom rather than written out: herbs are counted in
+  // SACKS and the labels say so, and a test that hardcodes them silently passes with
+  // every input undefined the next time a unit is confirmed.
+  const inputs = (column: string) => field(column).previewFrom!
+
   it("computes total quantity as available + received", () => {
-    expect(field("total_quantity").preview!({ "Available Stock": 30, "Qty Received": 12 })).toBe(42)
+    const [available, received] = inputs("total_quantity")
+    expect(field("total_quantity").preview!({ [available]: 30, [received]: 12 })).toBe(42)
   })
 
   it("computes remaining quantity as available + received - used", () => {
-    expect(
-      field("remaining_stock").preview!({
-        "Available Stock": 30,
-        "Qty Received": 12,
-        "Qty Used": 20,
-      }),
-    ).toBe(22)
+    const [available, received, used] = inputs("remaining_stock")
+    expect(field("remaining_stock").preview!({ [available]: 30, [received]: 12, [used]: 20 })).toBe(22)
   })
 
   it("keeps total quantity independent of the used amount", () => {
-    expect(field("total_quantity").previewFrom).toEqual(["Available Stock", "Qty Received"])
+    const [available, received] = inputs("total_quantity")
+    const [, , used] = inputs("remaining_stock")
+    expect(inputs("total_quantity").length).toBe(2)
+    expect(inputs("total_quantity")).not.toContain(used)
     expect(
-      field("total_quantity").preview!({
-        "Available Stock": 30,
-        "Qty Received": 12,
-        "Qty Used": 20,
-      }),
+      field("total_quantity").preview!({ [available]: 30, [received]: 12, [used]: 20 }),
     ).toBe(42)
   })
 })

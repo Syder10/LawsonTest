@@ -51,13 +51,19 @@ create table public.stock_materials (
   display_order smallint not null default 0
 );
 
+-- `unit` is the unit the LEDGER COUNTS IN — what a supervisor types and what the
+-- balance functions return. Every one of these is a CONTAINER, not a piece, which is
+-- how each of them came to be mislabelled: the entry form asked for a bare "Quantity
+-- Used" and each dashboard repeated whatever this column said. Units below are
+-- user-confirmed (2026-08-31); the piece/litre equivalents live in
+-- lib/domain/materials.LEDGER_UNITS and are derived for display only, where known.
 insert into public.stock_materials (code, name, unit, tracks_product, is_herb, display_order) values
-  ('alcohol',   'Alcohol',   'litres', false, false, 1),
-  ('caps',      'Caps',      'pcs',    false, false, 2),
-  ('labels',    'Labels',    'pcs',    true,  false, 3),
-  ('caramel',   'Caramel',   'units',  true,  false, 4),
-  ('herb',      'Herb',      'units',  false, true,  5),
-  ('preform',   'Preform',   'bags',   false, false, 6),
+  ('alcohol',   'Alcohol',   'drums',   false, false, 1),  -- 250 L each
+  ('caps',      'Caps',      'boxes',   false, false, 2),  -- 4,000 pcs each
+  ('labels',    'Labels',    'rolls',   true,  false, 3),  -- pcs per roll not stated
+  ('caramel',   'Caramel',   'gallons', true,  false, 4),  -- the 20 L drum, not a US gallon
+  ('herb',      'Herb',      'sacks',   false, true,  5),
+  ('preform',   'Preform',   'bags',    false, false, 6),
   ('tax_stamp', 'Tax Stamp', 'pcs',    false, false, 7),
   ('carton',    'Carton',    'pcs',    true,  false, 8);
 

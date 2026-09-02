@@ -26,6 +26,34 @@ export function operatingDaysBetween(fromISO: string, toISO: string): number {
   return count
 }
 
+/**
+ * How many operating days a usage sample actually COVERS: first day usage was
+ * recorded → the end of the window (never past today).
+ *
+ * This is the denominator for the burn rate, and it is deliberately NOT "every
+ * operating day in the filter window". Dividing by the whole window treats days with
+ * no records as days of zero consumption, which they usually aren't — they are days
+ * nobody has entered yet. On a 30-day window that is ~26 operating days, so a single
+ * recorded day of usage produced a burn rate 26× too low and a days-left figure 26×
+ * too high: 600 units against one 25-unit day read as 624 days of cover instead of 24.
+ *
+ * Measuring from the first recorded usage instead keeps genuine intermittency (a
+ * material used twice a week over a month still spans ~26 days) while refusing to
+ * treat an empty run-up as consumption data.
+ */
+export function usageSpanOperatingDays(usageDates: string[], windowEndISO: string, todayISO: string): number {
+  if (usageDates.length === 0) return 0
+  const first = usageDates.reduce((a, b) => (b < a ? b : a))
+  const last = windowEndISO < todayISO ? windowEndISO : todayISO
+  if (last < first) return operatingDaysBetween(first, first)
+  return operatingDaysBetween(first, last)
+}
+
+/** Distinct dates in a list of usage dates — the sample size behind a projection. */
+export function distinctDays(usageDates: string[]): number {
+  return new Set(usageDates).size
+}
+
 export interface RunOut {
   /** Consumption per operating day (0 if no usage measured). */
   avgPerOperatingDay: number
@@ -37,20 +65,25 @@ export interface RunOut {
 
 /**
  * Project when a material runs out.
- *   avgPerOperatingDay = usedInWindow / operating days in that window
+ *   avgPerOperatingDay = usedInWindow / burnDays
  *   run-out date       = walk forward from `fromISO` over operating days,
  *                        skipping Sundays, until the balance hits zero.
- * Returns nulls when there is no usage, or when it lasts beyond `horizon`
- * operating days (i.e. "plenty — don't bother projecting a date").
+ *
+ * `burnDays` must be the operating days the usage sample COVERS — see
+ * usageSpanOperatingDays. Passing every operating day in the filter window instead
+ * silently understates the burn rate whenever records are sparse.
+ *
+ * Returns nulls when there is no usage, or when it lasts beyond `horizon` operating
+ * days (i.e. "plenty — don't bother projecting a date").
  */
 export function projectRunOut(
   remaining: number,
   usedInWindow: number,
-  operatingDaysInWindow: number,
+  burnDays: number,
   fromISO: string,
   horizon = 180,
 ): RunOut {
-  const avg = operatingDaysInWindow > 0 ? usedInWindow / operatingDaysInWindow : 0
+  const avg = burnDays > 0 ? usedInWindow / burnDays : 0
   if (avg <= 0) return { avgPerOperatingDay: 0, operatingDaysLeft: null, runOutDate: null }
 
   const operatingDaysLeft = Math.round((remaining / avg) * 10) / 10

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { RefreshCw, Loader2, AlertCircle, AlertTriangle, PackageCheck, Send, ClipboardCheck } from "lucide-react"
 import { fmt, fmt1, shortDay } from "@/components/features/dashboard/manager/viz"
-import { byUrgency } from "@/lib/domain/stock-status"
+import { MIN_SAMPLE_DAYS, burnLooksImplausible, byUrgency } from "@/lib/domain/stock-status"
 import type { ProcurementMaterialStatus } from "@/lib/domain/stock-status"
 import {
   Card,
@@ -122,8 +122,18 @@ export default function ProcurementStockPage() {
     {
       key: "remaining", header: "Remaining", align: "right", numeric: true,
       cell: (m) => (
-        <span className="font-semibold text-ink-primary">
-          {fmt(m.remaining)} <span className="text-ink-muted text-xs font-medium">{m.unit}</span>
+        <span className="inline-flex flex-col items-end leading-tight">
+          <span className="font-semibold text-ink-primary">
+            {fmt(m.remaining)} <span className="text-ink-muted text-xs font-medium">{m.unit}</span>
+          </span>
+          {/* Containers are the unit procurement buys and counts in; the second line is
+              the same quantity in pieces or litres. Both, so neither can be mistaken
+              for the other. */}
+          {m.unitEach && m.remaining > 0 && (
+            <span className="text-xs font-medium text-ink-muted">
+              {fmt(m.remaining * m.unitEach.qty)} {m.unitEach.unit}
+            </span>
+          )}
         </span>
       ),
     },
@@ -132,15 +142,39 @@ export default function ProcurementStockPage() {
       cell: (m) => (m.receivedInWindow > 0 ? <span className="text-good-ink font-semibold">+{fmt(m.receivedInWindow)}</span> : "—"),
     },
     { key: "used", header: "Used / issued", align: "right", numeric: true, cell: (m) => fmt(m.usedInWindow) },
-    { key: "avg", header: "Avg/op-day", align: "right", numeric: true, hideOnMobile: true, cell: (m) => (m.avgPerDay > 0 ? fmt1(m.avgPerDay) : "—") },
+    {
+      key: "avg", header: "Avg/op-day", align: "right", numeric: true, hideOnMobile: true,
+      cell: (m) => {
+        if (m.avgPerDay <= 0) return "—"
+        return (
+          <span className="inline-flex flex-col items-end leading-tight">
+            <span className={burnLooksImplausible(m) ? "text-warning-ink font-semibold" : undefined}>
+              {fmt1(m.avgPerDay)}
+            </span>
+            {m.expectedPerDay !== null && burnLooksImplausible(m) && (
+              <span className="text-xs font-medium text-ink-muted">expect ~{fmt(m.expectedPerDay)}</span>
+            )}
+          </span>
+        )
+      },
+    },
     {
       key: "days", header: "Days left", align: "right", numeric: true,
       cell: (m) =>
         m.operatingDaysLeft === null ? (
           <span className="text-ink-muted font-medium">no usage</span>
         ) : (
-          <span className={`font-bold ${m.level === "red" ? "text-critical-ink" : m.level === "yellow" ? "text-warning-ink" : "text-ink-primary"}`}>
-            {fmt1(m.operatingDaysLeft)}d
+          <span className="inline-flex flex-col items-end leading-tight">
+            <span className={`font-bold ${m.level === "red" ? "text-critical-ink" : m.level === "yellow" ? "text-warning-ink" : "text-ink-primary"}`}>
+              {fmt1(m.operatingDaysLeft)}d
+            </span>
+            {/* How much data is behind the number — a projection from one recorded
+                day should not look like a projection from a month of them. */}
+            {m.sampleDays > 0 && m.sampleDays < MIN_SAMPLE_DAYS && (
+              <span className="text-xs font-medium text-ink-muted">
+                {m.sampleDays} day{m.sampleDays === 1 ? "" : "s"} of data
+              </span>
+            )}
           </span>
         ),
     },

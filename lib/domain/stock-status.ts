@@ -1,4 +1,5 @@
-import { projectRunOut } from "@/lib/domain/operating-days"
+import { distinctDays, projectRunOut, usageSpanOperatingDays } from "@/lib/domain/operating-days"
+import { expectedDailyBurn, ledgerUnitFor } from "@/lib/domain/materials"
 
 // ============================================================================
 // The ONE contract for a material's stock status.
@@ -50,7 +51,14 @@ export interface MaterialStatus {
   /** Stable identifier, e.g. "alcohol", "labels_bitters". */
   key: string
   label: string
+  /** The unit the ledger counts in — what a supervisor entered (e.g. "drums"). */
   unit: string
+  /**
+   * Derived secondary quantity per unit, where the conversion is confirmed: 250 litres
+   * per drum, 4,000 pcs per box of caps. Absent for a container whose contents nobody
+   * has stated (label rolls, herb sacks) — an unstated factor is left unstated.
+   */
+  unitEach?: { qty: number; unit: string }
   remaining: number
   usedInWindow: number
   /** Consumption per OPERATING day (Mon–Sat), not per calendar day. */
@@ -59,6 +67,16 @@ export interface MaterialStatus {
   operatingDaysLeft: number | null
   /** Projected calendar date stock hits zero; null if none or beyond the horizon. */
   runOutDate: string | null
+  /** Operating days the burn rate was measured over (the sample's span). */
+  burnDays: number
+  /**
+   * Distinct days that actually recorded usage. A projection from one or two days is
+   * arithmetic, not a trend — the UI says so rather than presenting it as equal to a
+   * month of data.
+   */
+  sampleDays: number
+  /** Known normal consumption per day in `unit`, for a sanity check. Null if none. */
+  expectedPerDay: number | null
   level: Level
 }
 
@@ -72,12 +90,18 @@ export interface ProcurementMaterialStatus extends MaterialStatus {
 
 const round2 = (n: number) => Math.round(n * 100) / 100
 
+/** Fewer recorded days than this and a projection is flagged as provisional. */
+export const MIN_SAMPLE_DAYS = 3
+
 /**
  * Build a material status row, including the operating-day run-out projection.
  *
+ * `usageDates` is every date on which consumption was recorded in the window (repeats
+ * are fine — one entry per row is expected). The burn rate is measured over the span
+ * those dates cover, NOT over the whole filter window: see usageSpanOperatingDays for
+ * why, and for the 624-days-of-alcohol case that made it obvious.
+ *
  * `fromISO` is the date the projection walks forward from (normally today).
- * Callers must pass operating days, not calendar days — use
- * operatingDaysBetween() from lib/domain/operating-days.
  */
 export function buildMaterialStatus(input: {
   key: string
@@ -85,21 +109,46 @@ export function buildMaterialStatus(input: {
   unit: string
   remaining: number
   usedInWindow: number
-  operatingDaysInWindow: number
+  usageDates: string[]
+  /** The report window's end date. */
+  windowEnd: string
   fromISO: string
 }): MaterialStatus {
-  const ro = projectRunOut(input.remaining, input.usedInWindow, input.operatingDaysInWindow, input.fromISO)
+  const burnDays = usageSpanOperatingDays(input.usageDates, input.windowEnd, input.fromISO)
+  const ro = projectRunOut(input.remaining, input.usedInWindow, burnDays, input.fromISO)
+  // The entry unit and its litres equivalent come from the ledger-unit registry, so
+  // one material cannot be captioned "litres" on one screen and "drums" on another.
+  const ledger = ledgerUnitFor(input.key)
   return {
     key: input.key,
     label: input.label,
-    unit: input.unit,
+    unit: ledger?.unit ?? input.unit,
+    ...(ledger?.each ? { unitEach: ledger.each } : {}),
     remaining: round2(input.remaining),
     usedInWindow: round2(input.usedInWindow),
     avgPerDay: ro.avgPerOperatingDay,
     operatingDaysLeft: ro.operatingDaysLeft,
     runOutDate: ro.runOutDate,
+    burnDays,
+    sampleDays: distinctDays(input.usageDates),
+    expectedPerDay: expectedDailyBurn(input.key),
     level: levelFromDays(ro.operatingDaysLeft),
   }
+}
+
+/**
+ * Does the measured burn rate look like a data-entry problem rather than a fact?
+ *
+ * Only answerable where a normal rate is known (see EXPECTED_DAILY_BURN). The band is
+ * deliberately wide — a quarter to four times expected — because production genuinely
+ * swings, and a check that cries wolf gets ignored. What it catches is the order-of-
+ * magnitude kind of mistake: litres typed where drums were meant, or a shift's usage
+ * entered as a month's.
+ */
+export function burnLooksImplausible(row: Pick<MaterialStatus, "avgPerDay" | "expectedPerDay">): boolean {
+  if (!row.expectedPerDay || row.avgPerDay <= 0) return false
+  const ratio = row.avgPerDay / row.expectedPerDay
+  return ratio < 0.25 || ratio > 4
 }
 
 /** The thresholds block both report routes return to the client. */

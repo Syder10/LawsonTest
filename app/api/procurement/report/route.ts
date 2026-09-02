@@ -51,10 +51,16 @@ export async function GET(request: Request) {
   const opDays = operatingDaysBetween(from, to)
 
   // Build a material row with an operating-day run-out projection.
+  //
+  // `usedOn` is every date that recorded consumption. The burn rate is measured over
+  // the span those dates cover rather than over the whole filter window — dividing by
+  // every Mon–Sat in the window counts days nobody has entered yet as days of zero
+  // usage, which inflated days-left by the number of empty days (600 units against a
+  // single 25-unit day read as 624 days of cover).
   const build = (o: {
     key: string; label: string; unit: string
     group: "procurement" | "production"
-    remaining: number; used: number; received: number
+    remaining: number; used: number; received: number; usedOn: string[]
   }): ProcurementMaterialStatus => ({
     ...buildMaterialStatus({
       key: o.key,
@@ -62,7 +68,8 @@ export async function GET(request: Request) {
       unit: o.unit,
       remaining: o.remaining,
       usedInWindow: o.used,
-      operatingDaysInWindow: opDays,
+      usageDates: o.usedOn,
+      windowEnd: to,
       fromISO: today,
     }),
     group: o.group,
@@ -102,21 +109,27 @@ export async function GET(request: Request) {
   const bitters = pkg.filter((p: any) => p.product === "Bitters")
   const ginger = pkg.filter((p: any) => p.product === "Ginger")
   const sumProduced = (rows: any[]) => rows.reduce((s, r) => s + (r.quantity_cartons_produced || 0), 0)
+  // Dates that actually recorded consumption, for the burn-rate span.
+  const producedOn = (rows: any[]) =>
+    rows.filter((r) => (r.quantity_cartons_produced || 0) > 0).map((r) => r.date as string)
   const receivedPcs = (mt: string) =>
     receipts.filter((r: any) => r.material_type === mt).reduce((s: number, r: any) =>
       s + (mt === "tax_stamp" ? r.stamp_total_pcs || 0 : mt.startsWith("carton") ? r.carton_total_pcs || 0 : r.ppe_pcs_in || 0), 0)
   const givenOutPcs = (mt: string) =>
     receipts.filter((r: any) => r.material_type === mt).reduce((s: number, r: any) => s + (r.ppe_given_pcs || 0), 0)
+  const givenOutOn = (mt: string) =>
+    receipts.filter((r: any) => r.material_type === mt && (r.ppe_given_pcs || 0) > 0).map((r: any) => r.date as string)
   const stampsUsed = sumProduced(bitters) * STAMPS_PER_CARTON.Bitters + sumProduced(ginger) * STAMPS_PER_CARTON.Ginger
+  const packagingOn = producedOn(pkg)
 
   const procurement = [
-    build({ key: "tax_stamp", label: "Tax Stamps", unit: "pcs", group: "procurement", remaining: stampRem, used: stampsUsed, received: receivedPcs("tax_stamp") }),
-    build({ key: "carton_bitters", label: "Cartons — Bitters", unit: "pcs", group: "procurement", remaining: cartonBitRem, used: sumProduced(bitters), received: receivedPcs("carton_bitters") }),
-    build({ key: "carton_ginger", label: "Cartons — Ginger", unit: "pcs", group: "procurement", remaining: cartonGinRem, used: sumProduced(ginger), received: receivedPcs("carton_ginger") }),
-    build({ key: "seal_tape", label: "Seal Tape", unit: "pcs", group: "procurement", remaining: consRem("seal_tape"), used: givenOutPcs("seal_tape"), received: receivedPcs("seal_tape") }),
-    build({ key: "hair_net", label: "Hair Nets", unit: "packs", group: "procurement", remaining: consRem("hair_net"), used: givenOutPcs("hair_net"), received: receivedPcs("hair_net") }),
-    build({ key: "nose_mask", label: "Nose Masks", unit: "packs", group: "procurement", remaining: consRem("nose_mask"), used: givenOutPcs("nose_mask"), received: receivedPcs("nose_mask") }),
-    build({ key: "gloves", label: "Gloves", unit: "packs", group: "procurement", remaining: consRem("gloves"), used: givenOutPcs("gloves"), received: receivedPcs("gloves") }),
+    build({ key: "tax_stamp", label: "Tax Stamps", unit: "pcs", group: "procurement", remaining: stampRem, used: stampsUsed, received: receivedPcs("tax_stamp"), usedOn: packagingOn }),
+    build({ key: "carton_bitters", label: "Cartons — Bitters", unit: "pcs", group: "procurement", remaining: cartonBitRem, used: sumProduced(bitters), received: receivedPcs("carton_bitters"), usedOn: producedOn(bitters) }),
+    build({ key: "carton_ginger", label: "Cartons — Ginger", unit: "pcs", group: "procurement", remaining: cartonGinRem, used: sumProduced(ginger), received: receivedPcs("carton_ginger"), usedOn: producedOn(ginger) }),
+    build({ key: "seal_tape", label: "Seal Tape", unit: "pcs", group: "procurement", remaining: consRem("seal_tape"), used: givenOutPcs("seal_tape"), received: receivedPcs("seal_tape"), usedOn: givenOutOn("seal_tape") }),
+    build({ key: "hair_net", label: "Hair Nets", unit: "packs", group: "procurement", remaining: consRem("hair_net"), used: givenOutPcs("hair_net"), received: receivedPcs("hair_net"), usedOn: givenOutOn("hair_net") }),
+    build({ key: "nose_mask", label: "Nose Masks", unit: "packs", group: "procurement", remaining: consRem("nose_mask"), used: givenOutPcs("nose_mask"), received: receivedPcs("nose_mask"), usedOn: givenOutOn("nose_mask") }),
+    build({ key: "gloves", label: "Gloves", unit: "packs", group: "procurement", remaining: consRem("gloves"), used: givenOutPcs("gloves"), received: receivedPcs("gloves"), usedOn: givenOutOn("gloves") }),
   ]
 
   // ── PRODUCTION group (procurement replenishes; usage from stock ledgers) ────
@@ -125,21 +138,23 @@ export async function GET(request: Request) {
     return {
       received: rows.reduce((s: number, r: any) => s + (r.quantity_received || 0), 0),
       used: rows.reduce((s: number, r: any) => s + (r.quantity_used || 0), 0),
+      usedOn: rows.filter((r: any) => (r.quantity_used || 0) > 0).map((r: any) => r.date as string),
     }
   }
   const pre = {
     received: blowing.reduce((s: number, r: any) => s + (r.quantity_received_bags || 0), 0),
     used: blowing.reduce((s: number, r: any) => s + (r.preforms_used_bags || 0), 0),
+    usedOn: blowing.filter((r: any) => (r.preforms_used_bags || 0) > 0).map((r: any) => r.date as string),
   }
 
   const production = [
-    build({ key: "alcohol", label: "Alcohol", unit: "litres", group: "production", remaining: alcRem, ...stockAgg("alcohol") }),
+    build({ key: "alcohol", label: "Alcohol", unit: "drums", group: "production", remaining: alcRem, ...stockAgg("alcohol") }),
     build({ key: "preforms", label: "Preforms", unit: "bags", group: "production", remaining: preRem, ...pre }),
-    build({ key: "caps", label: "Caps", unit: "pcs", group: "production", remaining: capsRem, ...stockAgg("caps") }),
-    build({ key: "labels_bitters", label: "Labels — Bitters", unit: "pcs", group: "production", remaining: labBitRem, ...stockAgg("labels", "Bitters") }),
-    build({ key: "labels_ginger", label: "Labels — Ginger", unit: "pcs", group: "production", remaining: labGinRem, ...stockAgg("labels", "Ginger") }),
-    build({ key: "caramel_bitters", label: "Caramel — Bitters", unit: "units", group: "production", remaining: carBitRem, ...stockAgg("caramel", "Bitters") }),
-    build({ key: "caramel_ginger", label: "Caramel — Ginger", unit: "units", group: "production", remaining: carGinRem, ...stockAgg("caramel", "Ginger") }),
+    build({ key: "caps", label: "Caps", unit: "boxes", group: "production", remaining: capsRem, ...stockAgg("caps") }),
+    build({ key: "labels_bitters", label: "Labels — Bitters", unit: "rolls", group: "production", remaining: labBitRem, ...stockAgg("labels", "Bitters") }),
+    build({ key: "labels_ginger", label: "Labels — Ginger", unit: "rolls", group: "production", remaining: labGinRem, ...stockAgg("labels", "Ginger") }),
+    build({ key: "caramel_bitters", label: "Caramel — Bitters", unit: "gallons", group: "production", remaining: carBitRem, ...stockAgg("caramel", "Bitters") }),
+    build({ key: "caramel_ginger", label: "Caramel — Ginger", unit: "gallons", group: "production", remaining: carGinRem, ...stockAgg("caramel", "Ginger") }),
   ]
 
   const live = liveRes.data ?? []

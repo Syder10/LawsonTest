@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest"
-import { isOperatingDay, operatingDaysBetween, projectRunOut } from "@/lib/domain/operating-days"
+import {
+  distinctDays,
+  isOperatingDay,
+  operatingDaysBetween,
+  projectRunOut,
+  usageSpanOperatingDays,
+} from "@/lib/domain/operating-days"
 
 // Reference calendar used throughout (all UTC — the app treats Ghana as UTC):
 //   2026-08-20 Thu   2026-08-22 Sat   2026-08-23 Sun   2026-08-24 Mon
@@ -241,5 +247,71 @@ describe("projectRunOut - horizon", () => {
 
   it("projects a date inside a generous custom horizon", () => {
     expect(projectRunOut(1000, 1, 1, MON, 2000).runOutDate).not.toBeNull()
+  })
+})
+
+// ════════════════════════════════════════════════════════════════════════════
+// usageSpanOperatingDays — the denominator of the burn rate.
+//
+// This is what a real report got wrong: 600 litres of alcohol with a single
+// recorded day of 25 used showed "624d left", because the rate was divided by all
+// 26 operating days in the filter window instead of the one day the data covers.
+// ════════════════════════════════════════════════════════════════════════════
+describe("usageSpanOperatingDays", () => {
+  const TODAY = "2026-08-20" // Thursday
+
+  it("is one day when usage was recorded on a single day", () => {
+    expect(usageSpanOperatingDays(["2026-08-20"], TODAY, TODAY)).toBe(1)
+  })
+
+  it("ignores an empty run-up before the first recorded usage", () => {
+    // A 30-day window whose only record is today must not be averaged over 26 days.
+    expect(usageSpanOperatingDays(["2026-08-20"], TODAY, TODAY)).toBe(1)
+    expect(operatingDaysBetween("2026-07-22", TODAY)).toBeGreaterThan(20)
+  })
+
+  it("spans from the first recorded day to the end of the window", () => {
+    // Fri 14th → Thu 20th, skipping Sunday the 16th.
+    expect(usageSpanOperatingDays(["2026-08-14", "2026-08-20"], TODAY, TODAY)).toBe(6)
+  })
+
+  it("takes the earliest date whatever order the rows arrive in", () => {
+    const shuffled = ["2026-08-20", "2026-08-14", "2026-08-18"]
+    expect(usageSpanOperatingDays(shuffled, TODAY, TODAY)).toBe(6)
+  })
+
+  it("never runs past today, even for a window that ends in the future", () => {
+    expect(usageSpanOperatingDays(["2026-08-14"], "2026-12-31", TODAY)).toBe(6)
+  })
+
+  it("uses the window end when the window closed before today", () => {
+    // A historical report: the span stops at the window, not at the present day.
+    expect(usageSpanOperatingDays(["2026-08-14"], "2026-08-18", TODAY)).toBe(4)
+  })
+
+  it("is zero with no usage at all, which suppresses the projection entirely", () => {
+    expect(usageSpanOperatingDays([], TODAY, TODAY)).toBe(0)
+    expect(projectRunOut(600, 0, 0, TODAY).operatingDaysLeft).toBeNull()
+  })
+
+  it("stays at one day when the only usage post-dates the window end", () => {
+    // Defensive: a backfilled row outside the window should not produce a negative
+    // or zero span, which would divide by zero.
+    expect(usageSpanOperatingDays(["2026-08-25"], "2026-08-20", TODAY)).toBe(1)
+  })
+
+  it("counts Sundays out of the span", () => {
+    // Sat 15th → Mon 17th is two operating days, not three.
+    expect(usageSpanOperatingDays(["2026-08-15"], "2026-08-17", "2026-08-17")).toBe(2)
+  })
+})
+
+describe("distinctDays", () => {
+  it("counts unique dates, not rows", () => {
+    expect(distinctDays(["2026-08-20", "2026-08-20", "2026-08-19"])).toBe(2)
+  })
+
+  it("is zero for no usage", () => {
+    expect(distinctDays([])).toBe(0)
   })
 })

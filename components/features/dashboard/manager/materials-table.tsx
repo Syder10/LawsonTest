@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { ClipboardCheck } from "lucide-react"
 import { fmt, fmt1, shortDay } from "./viz"
 import type { MaterialStatus } from "./types"
-import { byUrgency } from "@/lib/domain/stock-status"
+import { MIN_SAMPLE_DAYS, burnLooksImplausible, byUrgency } from "@/lib/domain/stock-status"
 import { Card, CardHeader, DataTable, StatusBadge, type Column } from "@/components/primitives"
 import { ReconcileModal, ledgerTargetForKey, type ReconcileTarget } from "@/components/features/stock/reconcile-modal"
 
@@ -51,25 +51,64 @@ export function MaterialsTable({
     {
       key: "remaining", header: "Remaining", align: "right", numeric: true,
       cell: (m) => (
-        <span className="font-semibold text-ink-primary">
-          {fmt(m.remaining)} <span className="text-ink-muted text-xs font-medium">{m.unit}</span>
+        <span className="inline-flex flex-col items-end leading-tight">
+          <span className="font-semibold text-ink-primary">
+            {fmt(m.remaining)} <span className="text-ink-muted text-xs font-medium">{m.unit}</span>
+          </span>
+          {/* The container is what the floor counts and what procurement buys, so it
+              is the figure. The second line is the same quantity in the unit the
+              recipes use — shown together, because one tank of ethanol described as
+              both 600 and 150,000 is exactly how a unit mix-up goes unnoticed. */}
+          {m.unitEach && m.remaining > 0 && (
+            <span className="text-xs font-medium text-ink-muted">
+              {fmt(m.remaining * m.unitEach.qty)} {m.unitEach.unit}
+            </span>
+          )}
         </span>
       ),
     },
     { key: "used", header: "Used", align: "right", numeric: true, cell: (m) => fmt(m.usedInWindow) },
-    { key: "avg", header: "Avg/op-day", align: "right", numeric: true, hideOnMobile: true, cell: (m) => (m.avgPerDay > 0 ? fmt1(m.avgPerDay) : "—") },
+    {
+      key: "avg", header: "Avg/op-day", align: "right", numeric: true, hideOnMobile: true,
+      cell: (m) => {
+        if (m.avgPerDay <= 0) return "—"
+        return (
+          <span className="inline-flex flex-col items-end leading-tight">
+            <span className={burnLooksImplausible(m) ? "text-warning-ink font-semibold" : undefined}>
+              {fmt1(m.avgPerDay)}
+            </span>
+            {/* A known normal rate, shown beside the measured one. This is what turns
+                "0.96 drums a day" from a number on a dashboard into an obvious
+                data-entry question. */}
+            {m.expectedPerDay !== null && burnLooksImplausible(m) && (
+              <span className="text-xs font-medium text-ink-muted">expect ~{fmt(m.expectedPerDay)}</span>
+            )}
+          </span>
+        )
+      },
+    },
     {
       key: "days", header: "Days left", align: "right", numeric: true,
       cell: (m) =>
         m.operatingDaysLeft === null ? (
           <span className="text-ink-muted font-medium">no usage</span>
         ) : (
-          <span
-            className={`font-bold ${
-              m.level === "red" ? "text-critical-ink" : m.level === "yellow" ? "text-warning-ink" : "text-ink-primary"
-            }`}
-          >
-            {fmt1(m.operatingDaysLeft)}d
+          <span className="inline-flex flex-col items-end leading-tight">
+            <span
+              className={`font-bold ${
+                m.level === "red" ? "text-critical-ink" : m.level === "yellow" ? "text-warning-ink" : "text-ink-primary"
+              }`}
+            >
+              {fmt1(m.operatingDaysLeft)}d
+            </span>
+            {/* Says what the projection rests on. One day of records is arithmetic,
+                not a burn rate, and presenting it like a month of data is how a
+                figure nobody should trust ends up driving an order. */}
+            {m.sampleDays > 0 && m.sampleDays < MIN_SAMPLE_DAYS && (
+              <span className="text-xs font-medium text-ink-muted">
+                {m.sampleDays} day{m.sampleDays === 1 ? "" : "s"} of data
+              </span>
+            )}
           </span>
         ),
     },

@@ -188,12 +188,14 @@ describe("buildRecordRow - stock records", () => {
   })
 
   it("maps the full stock-ledger form to its movement columns", () => {
+    // Alcohol's labels carry their unit (DRUMS) — the ledger stores the drums a
+    // supervisor counted, and the litres they represent are derived for display.
     const row = built(
       buildRecordRow("Daily Usage of Alcohol And Stock Level", env({ department: "Alcohol and Blending" }), {
-        "Current Stock (Carried Forward)": "500",
-        "Quantity Received": "120",
-        "Quantity Used": "80",
-        "Remaining Stock Level": "540",
+        "Current Stock (Carried Forward) (DRUMS)": "500",
+        "Quantity Received (DRUMS)": "120",
+        "Quantity Used (DRUMS)": "80",
+        "Remaining Stock Level (DRUMS)": "540",
         Destination: "Blending Tank 3",
         Remarks: "steady",
       }),
@@ -212,9 +214,9 @@ describe("buildRecordRow - generated and carried fields are never written", () =
   it("drops the carried-forward opening balance (server-derived, sentinel column)", () => {
     const row = built(
       buildRecordRow("Caps Stock", env({ department: "Filling Line" }), {
-        "Current Stock (Carried Forward)": "500",
-        "Quantity Received": "10",
-        "Quantity Used": "5",
+        "Current Stock (Carried Forward) (BOXES)": "500",
+        "Quantity Received (BOXES)": "10",
+        "Quantity Used (BOXES)": "5",
       }),
     ).row
     expect("__carried" in row).toBe(false)
@@ -564,15 +566,17 @@ describe("missingRequiredFields", () => {
   })
 
   it("never requires the carried-forward balance on a stock form", () => {
+    // Caps are counted in BOXES and the labels say so; the carried-forward opening is
+    // server-derived either way, so it is never "missing".
     const missing = missingRequiredFields("Caps Stock", {})
-    expect(missing).toEqual(["Quantity Received", "Quantity Used", "Destination"])
-    expect(missing).not.toContain("Current Stock (Carried Forward)")
+    expect(missing).toEqual(["Quantity Received (BOXES)", "Quantity Used (BOXES)", "Destination"])
+    expect(missing.some((m) => m.startsWith("Current Stock"))).toBe(false)
   })
 
   it("requires the herb checker on the Herbs Stock form", () => {
     expect(missingRequiredFields("Herbs Stock", {})).toEqual([
-      "Qty Received",
-      "Qty Used",
+      "Qty Received (SACKS)",
+      "Qty Used (SACKS)",
       "Checked By",
     ])
   })
@@ -580,8 +584,8 @@ describe("missingRequiredFields", () => {
   it("ignores unmapped extra keys in the submission", () => {
     expect(
       missingRequiredFields("Caps Stock", {
-        "Quantity Received": "1",
-        "Quantity Used": "1",
+        "Quantity Received (BOXES)": "1",
+        "Quantity Used (BOXES)": "1",
         Destination: "Line 1",
         "Some Extra Thing": "ignored",
       }),

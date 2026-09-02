@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { FORM_FIELDS, type FormFieldDef } from "@/lib/domain/form-config"
 import { getRecordType } from "@/lib/domain/record-types"
+import { ledgerUnitFor } from "@/lib/domain/materials"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -83,6 +84,9 @@ export default function RecordEntryForm({
   const supportsMultiProduct = availableProducts.length > 0
   const carriedLabel = fields.find((f) => f.carried)?.label
   const isHerbs = def?.storage.kind === "stock" && def.storage.material === "herb"
+  // The unit the ledger counts this material in, when it is a vessel rather than a
+  // piece (alcohol: 250 L drums). Drives the live litres caption on number fields.
+  const ledgerUnit = def?.storage.kind === "stock" ? ledgerUnitFor(def.storage.material) : undefined
   const isExtraction = recordType === "Extraction Monitoring Records"
   const isConcentrate = recordType === "Daily Records Alcohol For Concentrate"
 
@@ -456,6 +460,21 @@ export default function RecordEntryForm({
   }
 
   // ── Field renderer ──────────────────────────────────────────────────────────
+  /**
+   * Live secondary-quantity caption for a material the ledger counts in containers —
+   * "≈ 150,000 litres" under a drum count, "≈ 8,000 pcs" under a box count.
+   *
+   * Only appears where the conversion is confirmed (see LEDGER_UNITS): label rolls and
+   * herb sacks show nothing, because nobody has stated what one holds and a guessed
+   * factor is worse than no factor.
+   */
+  const unitHint = (field: FormFieldDef, value: string): string | undefined => {
+    if (!ledgerUnit?.each || field.type !== "number") return undefined
+    const n = Number(value)
+    if (!value || !Number.isFinite(n) || n === 0) return undefined
+    return `≈ ${(n * ledgerUnit.each.qty).toLocaleString()} ${ledgerUnit.each.unit}`
+  }
+
   const renderControl = (
     field: FormFieldDef,
     scope: string,
@@ -507,7 +526,10 @@ export default function RecordEntryForm({
             ? "Carried forward — set by management"
             : field.generated
               ? "Calculated automatically"
-              : undefined
+              : // For a material counted in containers, what the figure represents in
+                // pieces or litres, live. Shown beside the count so the two can't be
+                // mistaken for each other at the point of entry.
+                unitHint(field, value)
         }
       >
         {(a11y) => {

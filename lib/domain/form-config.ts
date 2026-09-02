@@ -45,19 +45,30 @@ const remaining = (open: string, recv: string, used: string) => (v: Record<strin
 // Reusable stock-ledger fields (alcohol / caps / labels / caramel).
 // The carried-forward balance is server-derived + read-only; supervisors enter
 // only received + used. Remaining is a live preview of the DB-derived balance.
-function stockLedgerFields(opts: { carriedLabel?: string } = {}): FormFieldDef[] {
-  const carriedLabel = opts.carriedLabel ?? "Current Stock (Carried Forward)"
+//
+// `unitSuffix` is not decoration. These labels used to read bare "Quantity Used", so a
+// supervisor counting 250 L drums typed drums while every dashboard captioned the same
+// number "litres" — nothing in the app said which was meant. Alcohol is counted in
+// DRUMS (user-confirmed); the litres each drum represents is shown by the entry form
+// as a live caption, NOT as a field here, because this file maps fields to real DB
+// columns and a litres mirror has none.
+function stockLedgerFields(opts: { carriedLabel?: string; unitSuffix?: string } = {}): FormFieldDef[] {
+  const u = opts.unitSuffix ? ` (${opts.unitSuffix})` : ""
+  const carriedLabel = opts.carriedLabel ?? `Current Stock (Carried Forward)${u}`
+  const received = `Quantity Received${u}`
+  const used = `Quantity Used${u}`
+
   return [
     { label: carriedLabel, column: "__carried", type: "number", carried: true },
-    { label: "Quantity Received", column: "quantity_received", type: "number", required: true },
-    { label: "Quantity Used", column: "quantity_used", type: "number", required: true },
+    { label: received, column: "quantity_received", type: "number", required: true },
+    { label: used, column: "quantity_used", type: "number", required: true },
     {
-      label: "Remaining Stock Level",
+      label: `Remaining Stock Level${u}`,
       column: "remaining_stock",
       type: "number",
       generated: true,
-      previewFrom: [carriedLabel, "Quantity Received", "Quantity Used"],
-      preview: remaining(carriedLabel, "Quantity Received", "Quantity Used"),
+      previewFrom: [carriedLabel, received, used],
+      preview: remaining(carriedLabel, received, used),
     },
     { label: "Destination", column: "destination", type: "text", required: true },
     { label: "Remarks", column: "remarks", type: "text" },
@@ -91,7 +102,7 @@ export const FORM_FIELDS: Record<string, FormFieldDef[]> = {
     { label: "Remarks (To be filled)", column: "remarks", type: "textarea" },
   ],
 
-  "Daily Usage of Alcohol And Stock Level": stockLedgerFields(),
+  "Daily Usage of Alcohol And Stock Level": stockLedgerFields({ unitSuffix: "DRUMS" }),
 
   "Daily Records for Alcohol and Blending": [
     { label: "Number of Alcohol Transferred (DRUMS)", column: "alcohol_transferred_drums", type: "number", required: true },
@@ -188,31 +199,32 @@ export const FORM_FIELDS: Record<string, FormFieldDef[]> = {
   ],
 
   // Herbs is rendered by a bespoke multi-herb UI; these are the per-herb fields.
+  // Counted in SACKS (user-confirmed). No weight per sack is known, so none is shown.
   "Herbs Stock": [
-    { label: "Available Stock", column: "__carried", type: "number", carried: true },
-    { label: "Qty Received", column: "quantity_received", type: "number", required: true },
+    { label: "Available Stock (SACKS)", column: "__carried", type: "number", carried: true },
+    { label: "Qty Received (SACKS)", column: "quantity_received", type: "number", required: true },
     {
-      label: "Total Qty",
+      label: "Total Qty (SACKS)",
       column: "total_quantity",
       type: "number",
       generated: true,
-      previewFrom: ["Available Stock", "Qty Received"],
-      preview: sum(["Available Stock", "Qty Received"]),
+      previewFrom: ["Available Stock (SACKS)", "Qty Received (SACKS)"],
+      preview: sum(["Available Stock (SACKS)", "Qty Received (SACKS)"]),
     },
-    { label: "Qty Used", column: "quantity_used", type: "number", required: true },
+    { label: "Qty Used (SACKS)", column: "quantity_used", type: "number", required: true },
     {
-      label: "Remaining Qty",
+      label: "Remaining Qty (SACKS)",
       column: "remaining_stock",
       type: "number",
       generated: true,
-      previewFrom: ["Available Stock", "Qty Received", "Qty Used"],
-      preview: remaining("Available Stock", "Qty Received", "Qty Used"),
+      previewFrom: ["Available Stock (SACKS)", "Qty Received (SACKS)", "Qty Used (SACKS)"],
+      preview: remaining("Available Stock (SACKS)", "Qty Received (SACKS)", "Qty Used (SACKS)"),
     },
     { label: "Checked By", column: "checked_by", type: "text", required: true },
     { label: "Remarks", column: "remarks", type: "text" },
   ],
 
-  "Caramel Stock": stockLedgerFields(),
-  "Caps Stock": stockLedgerFields(),
-  "Labels Stock": stockLedgerFields(),
+  "Caramel Stock": stockLedgerFields({ unitSuffix: "GALLONS" }),
+  "Caps Stock": stockLedgerFields({ unitSuffix: "BOXES" }),
+  "Labels Stock": stockLedgerFields({ unitSuffix: "ROLLS" }),
 }
