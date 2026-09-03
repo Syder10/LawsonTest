@@ -33,7 +33,11 @@ function IngredientTable({ product, cartons }: { product: Product; cartons: numb
   const lines = estimateUsage(product, cartons)
 
   return (
-    <table className="w-full text-sm">
+    // Ingredient names ("Ginger/Tiger Nut juice") plus two numeric columns are wider
+    // than a 360px phone, and a table that overflows its card drags the whole PAGE
+    // sideways. Scroll it here instead.
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[22rem] text-sm">
       <thead>
         <tr className="bg-surface-sunken">
           <th scope="col" className="text-left px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-ink-muted">Ingredient</th>
@@ -66,8 +70,9 @@ function IngredientTable({ product, cartons }: { product: Product; cartons: numb
             </td>
           </tr>
         ))}
-      </tbody>
-    </table>
+        </tbody>
+      </table>
+    </div>
   )
 }
 

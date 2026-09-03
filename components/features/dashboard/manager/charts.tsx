@@ -86,7 +86,9 @@ function SeriesTable({
   label: string
 }) {
   return (
-    <div className="max-h-[260px] overflow-y-auto">
+    // Both axes: four columns of figures do not fit a 360px phone, and clipping them
+    // would hide data the chart toggle exists to expose.
+    <div className="max-h-[260px] overflow-auto">
       <table className="w-full text-sm">
         <thead className="sticky top-0 bg-surface-sunken">
           <tr>

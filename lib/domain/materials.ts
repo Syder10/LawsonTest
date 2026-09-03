@@ -70,6 +70,8 @@ export const DRUM_LITRES = VESSEL.drum.litres // 250
 export const CARAMEL_GALLON_LITRES = VESSEL.gallon.litres // 20
 /** User-confirmed 2026-08-31. */
 export const CAPS_PCS_PER_BOX = 4000
+export const LABEL_PCS_PER_ROLL = 4000
+export const PREFORM_PCS_PER_BAG = 1008
 
 export interface LedgerUnit {
   /** Unit a supervisor enters and the ledger stores. */
@@ -89,24 +91,35 @@ export interface LedgerUnit {
  * be wrong: the form asked for a bare "Quantity Used" and the dashboards captioned
  * the result with whatever the seed row happened to say.
  *
- * Units are user-confirmed (2026-08-31). Where no `each` is given, the count per
- * container was not known — the unit is still correct and the figure still honest,
- * there is simply no second line to show.
+ * Units and the counts per container are user-confirmed (2026-08-31). Where no `each`
+ * is given the count was not stated — the unit is still correct and the figure still
+ * honest, there is simply no second line to show. Herb sacks have no stated weight and
+ * the user asked for none to be displayed.
  */
 export const LEDGER_UNITS: Record<string, LedgerUnit> = {
   alcohol: { unit: "drums", each: { qty: DRUM_LITRES, unit: "litres" } },
   caps: { unit: "boxes", each: { qty: CAPS_PCS_PER_BOX, unit: "pcs" } },
-  labels: { unit: "rolls" },
+  labels: { unit: "rolls", each: { qty: LABEL_PCS_PER_ROLL, unit: "pcs" } },
   caramel: { unit: "gallons", each: { qty: CARAMEL_GALLON_LITRES, unit: "litres" } },
   herb: { unit: "sacks" },
+  preform: { unit: "bags", each: { qty: PREFORM_PCS_PER_BAG, unit: "pcs" } },
 }
 
+/**
+ * Row keys that don't match their material code. The dashboards and the ledger
+ * disagree on the plural for preforms, so an exact-match lookup silently dropped the
+ * unit on the procurement row — the same class of drift as the old
+ * `cartons_bitters` / `carton_bitters` split.
+ */
+const KEY_ALIASES: Record<string, string> = { preforms: "preform" }
+
 export const ledgerUnitFor = (key: string): LedgerUnit | undefined => {
-  if (Object.hasOwn(LEDGER_UNITS, key)) return LEDGER_UNITS[key]
+  const k = Object.hasOwn(KEY_ALIASES, key) ? KEY_ALIASES[key] : key
+  if (Object.hasOwn(LEDGER_UNITS, k)) return LEDGER_UNITS[k]
   // Dashboard rows are keyed per product or per variant — "labels_bitters",
   // "caramel_ginger", "herb_alligator_pepper" — so fall back to the material prefix
   // rather than silently losing the unit on exactly the rows that show it.
-  const base = Object.keys(LEDGER_UNITS).find((m) => key === m || key.startsWith(`${m}_`))
+  const base = Object.keys(LEDGER_UNITS).find((m) => k === m || k.startsWith(`${m}_`))
   return base ? LEDGER_UNITS[base] : undefined
 }
 

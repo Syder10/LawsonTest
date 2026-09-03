@@ -45,7 +45,9 @@ function Derived({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-hairline bg-surface-sunken px-3 py-3 text-center">
       <p className="text-xs font-bold uppercase tracking-wide text-ink-muted">{label}</p>
-      <p className="mt-1 text-xl font-bold tnum text-ink-primary">{value}</p>
+      {/* text-base until sm: three of these sit side by side on a 360px phone and the
+          pieces figure can run to seven digits, which overflowed the tile at text-xl. */}
+      <p className="mt-1 text-base sm:text-xl font-bold tnum text-ink-primary break-words">{value}</p>
     </div>
   )
 }

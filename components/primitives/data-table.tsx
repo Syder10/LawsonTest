@@ -96,12 +96,21 @@ export function DataTable<T>({
       <ul className="sm:hidden divide-y divide-hairline">
         {rows.map((row) => (
           <li key={rowKey(row)} className="px-4 py-3">
-            <div className="font-bold text-ink-primary">{primary.cell(row)}</div>
+            <div className="font-bold text-ink-primary break-words">{primary.cell(row)}</div>
             <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5">
               {rest.map((c) => (
                 <div key={c.key} className="min-w-0">
-                  <dt className="text-xs font-semibold uppercase tracking-wide text-ink-muted truncate">{c.header}</dt>
-                  <dd className={cn("text-sm text-ink-secondary truncate", c.numeric && "tnum")}>{c.cell(row)}</dd>
+                  {/* NOT truncated. `truncate` implies white-space: nowrap, which on a
+                      360px phone clipped both the header and — worse — any cell that
+                      stacks two lines (a figure plus its unit, or "1 day of data"):
+                      the lines collapsed onto one and ran out of the card. Wrapping
+                      makes the card taller, which is free; clipped data is not. */}
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-ink-muted break-words">
+                    {c.header}
+                  </dt>
+                  <dd className={cn("text-sm text-ink-secondary break-words", c.numeric && "tnum")}>
+                    {c.cell(row)}
+                  </dd>
                 </div>
               ))}
             </dl>

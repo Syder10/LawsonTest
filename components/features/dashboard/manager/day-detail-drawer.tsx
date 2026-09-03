@@ -76,7 +76,7 @@ export function DayDetailDrawer({
             data?.groups.map((g) => (
               <Card key={g.recordType}>
                 <div className="bg-surface-sunken px-4 py-2.5 border-b border-hairline flex items-center justify-between gap-3">
-                  <span className="font-bold text-ink-primary text-sm truncate">{g.recordType}</span>
+                  <span className="font-bold text-ink-primary text-sm break-words">{g.recordType}</span>
                   <Chip tone="neutral">
                     {g.rows.length} · {g.department}
                   </Chip>
@@ -105,8 +105,8 @@ export function DayDetailDrawer({
                         <dl className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                           {details.map(([k, v]) => (
                             <div key={k} className="bg-surface-sunken rounded-lg px-2.5 py-1.5 min-w-0">
-                              <dt className="text-xs uppercase tracking-wider text-ink-muted font-bold truncate">{label(k)}</dt>
-                              <dd className="text-sm font-bold text-ink-primary tnum">{String(v)}</dd>
+                              <dt className="text-xs uppercase tracking-wider text-ink-muted font-bold break-words">{label(k)}</dt>
+                              <dd className="text-sm font-bold text-ink-primary tnum break-words">{String(v)}</dd>
                             </div>
                           ))}
                         </dl>

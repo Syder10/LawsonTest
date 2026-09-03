@@ -265,12 +265,25 @@ describe("ledger units", () => {
         remaining: 10, usedInWindow: 2,
         usageDates: [FROM], windowEnd: FROM, fromISO: FROM,
       })
-    // Caps: 4,000 pcs a box, confirmed.
+    // All user-confirmed counts per container.
     expect(at("caps").unitEach).toEqual({ qty: 4000, unit: "pcs" })
-    // Label rolls and herb sacks: nobody has stated what one holds, so nothing is
-    // shown. An invented factor would be worse than a bare count.
-    expect(at("labels").unitEach).toBeUndefined()
+    expect(at("labels").unitEach).toEqual({ qty: 4000, unit: "pcs" })
+    expect(at("preform").unitEach).toEqual({ qty: 1008, unit: "pcs" })
+    // Herb sacks have no stated weight, and the user asked for none to be shown. An
+    // invented factor would be worse than a bare count.
     expect(at("herb").unitEach).toBeUndefined()
+  })
+
+  it("resolves the plural preforms key the procurement dashboard uses", () => {
+    // The two dashboards disagree on the plural, which is exactly how a unit gets
+    // dropped on one screen and not the other.
+    const row = buildMaterialStatus({
+      key: "preforms", label: "Preforms", unit: "bags",
+      remaining: 10, usedInWindow: 2,
+      usageDates: [FROM], windowEnd: FROM, fromISO: FROM,
+    })
+    expect(row.unit).toBe("bags")
+    expect(row.unitEach).toEqual({ qty: 1008, unit: "pcs" })
   })
 
   it("leaves a material outside the ledger registry untouched", () => {

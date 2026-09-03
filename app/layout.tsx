@@ -18,6 +18,18 @@ export const metadata: Metadata = {
   title: "Lawson Limited Company — Production Management System",
   description:
     "Production management and daily records tracking for Lawson Limited Company. Track and manage production data with precision and efficiency.",
+  // iOS ignores most of the web app manifest, so the home-screen behaviour has to be
+  // stated again here: without `capable` it opens in Safari with the address bar, which
+  // is the difference between an app and a bookmark. Icons come from the app/icon.png
+  // and app/apple-icon.png file conventions; the manifest itself from app/manifest.ts.
+  appleWebApp: {
+    capable: true,
+    title: "Lawson",
+    // The app's surfaces are light, so a dark status bar overlay would be unreadable.
+    statusBarStyle: "default",
+  },
+  applicationName: "Lawson",
+  formatDetection: { telephone: false },
 }
 
 // Supervisors work on phones on the factory floor: lock the initial scale to the

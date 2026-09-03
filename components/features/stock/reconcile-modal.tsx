@@ -143,11 +143,11 @@ export function ReconcileModal({
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="rounded-xl border border-hairline bg-surface-sunken p-3">
                 <p className="text-xs font-bold uppercase tracking-wide text-ink-muted">Counted</p>
-                <p className="text-lg font-bold tnum text-ink-primary">{result.counted}</p>
+                <p className="text-base sm:text-lg font-bold tnum text-ink-primary break-words">{result.counted}</p>
               </div>
               <div className="rounded-xl border border-hairline bg-surface-sunken p-3">
                 <p className="text-xs font-bold uppercase tracking-wide text-ink-muted">System</p>
-                <p className="text-lg font-bold tnum text-ink-primary">{result.computed}</p>
+                <p className="text-base sm:text-lg font-bold tnum text-ink-primary break-words">{result.computed}</p>
               </div>
               <div
                 className={`rounded-xl border p-3 ${
@@ -155,7 +155,7 @@ export function ReconcileModal({
                 }`}
               >
                 <p className="text-xs font-bold uppercase tracking-wide text-ink-muted">Variance</p>
-                <p className={`text-lg font-bold tnum ${result.variance === 0 ? "text-good-ink" : "text-warning-ink"}`}>
+                <p className={`text-base sm:text-lg font-bold tnum break-words ${result.variance === 0 ? "text-good-ink" : "text-warning-ink"}`}>
                   {result.variance > 0 ? "+" : ""}{result.variance}
                 </p>
               </div>

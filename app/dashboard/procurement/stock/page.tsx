@@ -122,7 +122,7 @@ export default function ProcurementStockPage() {
     {
       key: "remaining", header: "Remaining", align: "right", numeric: true,
       cell: (m) => (
-        <span className="inline-flex flex-col items-end leading-tight">
+        <span className="inline-flex flex-col items-start sm:items-end leading-tight">
           <span className="font-semibold text-ink-primary">
             {fmt(m.remaining)} <span className="text-ink-muted text-xs font-medium">{m.unit}</span>
           </span>
@@ -147,7 +147,7 @@ export default function ProcurementStockPage() {
       cell: (m) => {
         if (m.avgPerDay <= 0) return "—"
         return (
-          <span className="inline-flex flex-col items-end leading-tight">
+          <span className="inline-flex flex-col items-start sm:items-end leading-tight">
             <span className={burnLooksImplausible(m) ? "text-warning-ink font-semibold" : undefined}>
               {fmt1(m.avgPerDay)}
             </span>
@@ -164,7 +164,7 @@ export default function ProcurementStockPage() {
         m.operatingDaysLeft === null ? (
           <span className="text-ink-muted font-medium">no usage</span>
         ) : (
-          <span className="inline-flex flex-col items-end leading-tight">
+          <span className="inline-flex flex-col items-start sm:items-end leading-tight">
             <span className={`font-bold ${m.level === "red" ? "text-critical-ink" : m.level === "yellow" ? "text-warning-ink" : "text-ink-primary"}`}>
               {fmt1(m.operatingDaysLeft)}d
             </span>

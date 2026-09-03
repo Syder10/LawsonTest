@@ -151,7 +151,7 @@ export default async function HistoryPage({
           <div className="bg-brand-subtle px-4 sm:px-6 py-3 border-b border-brand/15 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
               <Calendar className="w-4 h-4 text-brand shrink-0" aria-hidden="true" />
-              <span className="font-bold text-brand-subtle-ink text-sm truncate">{label}</span>
+              <span className="font-bold text-brand-subtle-ink text-sm break-words">{label}</span>
             </div>
             <Chip tone="brand">
               {records.length} record{records.length !== 1 ? "s" : ""}
@@ -182,10 +182,10 @@ export default async function HistoryPage({
                     <dl className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 p-3 sm:p-4 bg-surface-sunken rounded-xl border border-hairline">
                       {details.map(([key, value]) => (
                         <div key={key} className="space-y-0.5 min-w-0">
-                          <dt className="text-xs uppercase tracking-wider text-ink-muted font-bold truncate">
+                          <dt className="text-xs uppercase tracking-wider text-ink-muted font-bold break-words">
                             {formatLabel(key)}
                           </dt>
-                          <dd className="text-sm font-semibold text-ink-primary tnum">{String(value)}</dd>
+                          <dd className="text-sm font-semibold text-ink-primary tnum break-words">{String(value)}</dd>
                         </div>
                       ))}
                     </dl>
