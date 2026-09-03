@@ -62,7 +62,10 @@ export function CardHeader({
 }) {
   return (
     <div className={cn("px-4 py-3 border-b border-hairline flex items-center justify-between gap-3", className)}>
-      <h3 className="text-sm font-bold text-ink-primary truncate">{title}</h3>
+      {/* Wraps rather than truncates. Card titles are short but not tiny ("Cartons
+          produced over time"), and once an action sits beside them there is well under
+          200px left on a phone — truncating clipped the title on every chart card. */}
+      <h3 className="min-w-0 text-sm font-bold text-ink-primary break-words">{title}</h3>
       <div className="flex items-center gap-3 shrink-0">
         {hint && <span className="text-xs font-medium text-ink-muted hidden sm:inline">{hint}</span>}
         {actions}

@@ -24,6 +24,7 @@ const row = (over: Partial<MaterialStatus> = {}): MaterialStatus => ({
   burnDays: 10,
   sampleDays: 10,
   expectedPerDay: null,
+  basis: "measured",
   level: "none",
   ...over,
 })
@@ -97,6 +98,7 @@ describe("buildMaterialStatus — the contract", () => {
         "operatingDaysLeft",
         "remaining",
         "runOutDate",
+        "basis",
         "sampleDays",
         "unit",
         "unitEach",
@@ -147,12 +149,12 @@ describe("buildMaterialStatus — the contract", () => {
 
   // ── The 624-days bug ──────────────────────────────────────────────────────
   it("does not stretch one day of usage across an empty 30-day window", () => {
-    // The report: 600 units of alcohol, one recorded day of 25 used, and a "days
-    // left" of 624. Dividing by every Mon–Sat in the window (26 of them) turned
-    // 25/day into 0.96/day. Measuring over the day the data actually covers gives
-    // the honest 24 days.
+    // The original report: 600 drums of alcohol, one recorded day of 25 used, and a
+    // "days left" of 624 — because the rate was divided by every Mon–Sat in the window
+    // (26 of them), turning 25/day into 0.96/day. The denominator is now the day the
+    // data actually covers, so the MEASURED rate is 25/day.
     const oneDay = buildMaterialStatus({
-      key: "alcohol", label: "Alcohol", unit: "litres",
+      key: "caps", label: "Caps", unit: "pcs", // no expected rate → measured is used
       remaining: 600, usedInWindow: 25,
       usageDates: ["2026-08-20"], windowEnd: "2026-08-20", fromISO: "2026-08-20",
     })
@@ -160,6 +162,66 @@ describe("buildMaterialStatus — the contract", () => {
     expect(oneDay.avgPerDay).toBe(25)
     expect(oneDay.operatingDaysLeft).toBe(24)
     expect(oneDay.sampleDays).toBe(1)
+    expect(oneDay.basis).toBe("measured")
+  })
+
+  it("projects from the KNOWN rate when the records are too thin to trust", () => {
+    // Same figures, but alcohol has a confirmed normal of 200 drums/day. One test row
+    // measuring 25 is not a burn rate, and 24 days of cover would be eight times out —
+    // 600 drums at 200/day is three days. The measured rate is still reported, because
+    // that is what makes the bad entry visible.
+    const oneDay = buildMaterialStatus({
+      key: "alcohol", label: "Alcohol", unit: "drums",
+      remaining: 600, usedInWindow: 25,
+      usageDates: ["2026-08-20"], windowEnd: "2026-08-20", fromISO: "2026-08-20",
+    })
+    expect(oneDay.avgPerDay).toBe(25)
+    expect(oneDay.expectedPerDay).toBe(200)
+    expect(oneDay.basis).toBe("expected")
+    expect(oneDay.operatingDaysLeft).toBe(3)
+    expect(oneDay.level).toBe("red")
+  })
+
+  it("projects from the known rate when nothing was recorded at all", () => {
+    // "No usage" is not the same as "no consumption". A plant that runs 200 drums a day
+    // and has 3,000 in the yard has 15 days of cover whether or not anyone filed a form.
+    const idle = buildMaterialStatus({
+      key: "alcohol", label: "Alcohol", unit: "drums",
+      remaining: 3000, usedInWindow: 0,
+      usageDates: [], windowEnd: "2026-08-20", fromISO: "2026-08-20",
+    })
+    expect(idle.avgPerDay).toBe(0)
+    expect(idle.basis).toBe("expected")
+    expect(idle.operatingDaysLeft).toBe(15)
+  })
+
+  it("prefers a real measurement once there is enough of it", () => {
+    // Six recorded days at 150/day is a trend, not noise — inside the plausible band,
+    // so it wins over the expectation.
+    const measured = buildMaterialStatus({
+      key: "alcohol", label: "Alcohol", unit: "drums",
+      remaining: 600, usedInWindow: 900,
+      usageDates: ["2026-08-14", "2026-08-15", "2026-08-17", "2026-08-18", "2026-08-19", "2026-08-20"],
+      windowEnd: "2026-08-20", fromISO: "2026-08-20",
+    })
+    expect(measured.burnDays).toBe(6)
+    expect(measured.avgPerDay).toBe(150)
+    expect(measured.basis).toBe("measured")
+    expect(measured.operatingDaysLeft).toBe(4)
+  })
+
+  it("falls back to the known rate when a full sample is still absurd", () => {
+    // Six days that average 8 drums against an expected 200: more likely litres typed
+    // as drums, or a shift's figure entered as a day's, than an 8-drum day.
+    const odd = buildMaterialStatus({
+      key: "alcohol", label: "Alcohol", unit: "drums",
+      remaining: 600, usedInWindow: 48,
+      usageDates: ["2026-08-14", "2026-08-15", "2026-08-17", "2026-08-18", "2026-08-19", "2026-08-20"],
+      windowEnd: "2026-08-20", fromISO: "2026-08-20",
+    })
+    expect(odd.avgPerDay).toBe(8)
+    expect(odd.basis).toBe("expected")
+    expect(odd.operatingDaysLeft).toBe(3)
   })
 
   it("still measures a genuinely intermittent material over its whole span", () => {

@@ -37,7 +37,9 @@ export function ActionBtn({
       >
         <Icon className={cn("w-4 h-4", primary ? "text-brand-ink" : "text-brand")} aria-hidden="true" />
       </span>
-      <span className="text-sm font-bold">{label}</span>
+      {/* min-w-0 so a long label ("Stock levels & days of cover") wraps inside the row
+          instead of pushing the chevron past the edge of the card. */}
+      <span className="min-w-0 text-sm font-bold">{label}</span>
       <ChevronRight
         className={cn("w-4 h-4 ml-auto shrink-0 transition-transform group-hover:translate-x-0.5", primary ? "text-brand-ink/70" : "text-ink-muted")}
         aria-hidden="true"

@@ -73,10 +73,17 @@ export function StatTile({
       <span className={cn("absolute left-0 top-3 bottom-3 w-0.5 rounded-full", ACCENT[accent])} aria-hidden="true" />
       <div className="p-4 pl-5">
         <div className="flex items-start justify-between gap-2">
-          <Eyebrow className="truncate">{label}</Eyebrow>
+          {/* NOT truncated. These tiles sit two-across on a 360px phone, which leaves
+              ~140px of label — and an uppercase, wide-tracked label like "ALCOHOL
+              TRANSFERRED" needs more than that, so truncating clipped it mid-word on
+              the screen the app is mostly used on. Tracking tightens on mobile and the
+              label wraps instead. */}
+          <Eyebrow className="tracking-wide sm:tracking-widest break-words">{label}</Eyebrow>
           {icon && <span className="text-ink-muted shrink-0">{icon}</span>}
         </div>
-        <p className="mt-1.5 text-2xl font-bold text-ink-primary leading-none">
+        {/* text-xl until sm for the same reason: a five-digit figure plus its unit does
+            not fit a half-width tile at text-2xl. */}
+        <p className="mt-1.5 text-xl sm:text-2xl font-bold text-ink-primary leading-none break-words">
           {shown}
           {unit && <span className="ml-1 text-sm font-semibold text-ink-muted">{unit}</span>}
         </p>

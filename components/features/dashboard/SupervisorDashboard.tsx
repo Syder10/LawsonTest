@@ -105,7 +105,7 @@ export function SupervisorDashboard({ userId }: { userId: string }) {
           <div className="flex items-start justify-between gap-4 px-5 py-6 sm:px-6">
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold uppercase tracking-widest text-white/60">{greeting}</p>
-              <h2 className="mt-0.5 truncate text-xl sm:text-2xl font-bold tracking-tight text-white">
+              <h2 className="mt-0.5 break-words text-xl sm:text-2xl font-bold tracking-tight text-white">
                 {loading
                   ? <span className="inline-block h-7 w-36 rounded-lg bg-white/10 animate-pulse" />
                   : stats?.fullName || "Supervisor"}
@@ -295,7 +295,7 @@ export function SupervisorDashboard({ userId }: { userId: string }) {
               <span className={cn("block text-xs font-bold uppercase tracking-widest", mvp.isMe ? "text-brand-ink/75" : "text-warning-ink")}>
                 {mvp.isMe ? "You are the" : `MVP of ${mvp.month}`}
               </span>
-              <span className={cn("mt-0.5 block truncate text-sm font-bold", mvp.isMe ? "text-brand-ink" : "text-ink-primary")}>
+              <span className={cn("mt-0.5 block break-words text-sm font-bold", mvp.isMe ? "text-brand-ink" : "text-ink-primary")}>
                 {mvp.isMe ? `MVP of ${mvp.month}` : mvp.fullName}
               </span>
               <span className={cn("block text-xs font-medium", mvp.isMe ? "text-brand-ink/70" : "text-ink-muted")}>

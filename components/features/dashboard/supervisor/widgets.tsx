@@ -151,7 +151,7 @@ export function LRow({ e, rank, isMe }: { e: LEntry; rank: number; isMe: boolean
         )}
         <span className="sr-only">Rank {rank}</span>
       </div>
-      <p className={`text-sm font-semibold flex-1 truncate ${isMe ? "text-brand-subtle-ink" : "text-ink-secondary"}`}>
+      <p className={`min-w-0 flex-1 text-sm font-semibold ${isMe ? "text-brand-subtle-ink" : "text-ink-secondary"}`}>
         {e.team_label}
         {isMe && <Chip tone="brand" className="ml-1.5">You</Chip>}
       </p>
@@ -207,7 +207,7 @@ export function MVPModal({ mvp, onClose }: { mvp: MVPData; onClose: () => void }
 
         <div className="px-6 py-6 text-center space-y-4">
           <div>
-            <p className="text-2xl font-bold text-ink-primary tracking-tight">{mvp.fullName}</p>
+            <p className="text-xl sm:text-2xl font-bold text-ink-primary tracking-tight break-words">{mvp.fullName}</p>
             {mvp.department && (
               <p className="text-sm font-medium text-ink-secondary mt-1">
                 {mvp.department}

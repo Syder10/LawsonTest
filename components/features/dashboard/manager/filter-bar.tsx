@@ -96,14 +96,17 @@ export function FilterBar({ filters, onChange }: { filters: Filters; onChange: (
         ))}
       </div>
 
-      <div className="flex items-center gap-1.5">
+      {/* Native date inputs have a wide intrinsic minimum, and two of them plus the
+          arrow is more than a 320px phone has. min-w-0 + flex-1 lets them shrink, and
+          the group wraps rather than pushing the card sideways. */}
+      <div className="flex min-w-0 flex-1 items-center gap-1.5">
         <input
           type="date"
           value={filters.from}
           max={filters.to}
           onChange={(e) => set({ from: e.target.value })}
           aria-label="From date"
-          className="h-9 px-2 text-xs font-semibold rounded-lg border border-hairline bg-surface-card text-ink-secondary focus:border-brand focus:outline-none"
+          className="h-9 min-w-0 flex-1 px-2 text-xs font-semibold rounded-lg border border-hairline bg-surface-card text-ink-secondary focus:border-brand focus:outline-none"
         />
         <span className="text-ink-muted text-xs" aria-hidden="true">→</span>
         <input
@@ -113,7 +116,7 @@ export function FilterBar({ filters, onChange }: { filters: Filters; onChange: (
           max={iso(new Date())}
           onChange={(e) => set({ to: e.target.value })}
           aria-label="To date"
-          className="h-9 px-2 text-xs font-semibold rounded-lg border border-hairline bg-surface-card text-ink-secondary focus:border-brand focus:outline-none"
+          className="h-9 min-w-0 flex-1 px-2 text-xs font-semibold rounded-lg border border-hairline bg-surface-card text-ink-secondary focus:border-brand focus:outline-none"
         />
       </div>
 

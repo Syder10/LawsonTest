@@ -156,7 +156,8 @@ export function ManagerDashboard() {
               <StatTile
                 label="Alcohol used"
                 value={overview.totals.alcohol_used}
-                unit="L"
+                unit="drums"
+                sub="250 L each"
                 icon={<Droplet className="w-5 h-5" />}
               />
               <StatTile

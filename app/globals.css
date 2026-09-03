@@ -325,6 +325,12 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Mobile is the primary target: supervisors work on 360px phones all shift. A long
+       unbroken token — an email, a herb variant, a generated column label — otherwise
+       forces the whole page to scroll sideways, and a horizontally scrolling app feels
+       broken in a way no individual component can fix. This is the safety net; the
+       layouts still wrap on purpose rather than relying on it. */
+    overflow-wrap: break-word;
   }
   /* Columns of figures must align; large standalone numbers must NOT use
      tabular-nums (equal-width digits make a value like 121 look loose at display

@@ -77,6 +77,12 @@ export interface MaterialStatus {
   sampleDays: number
   /** Known normal consumption per day in `unit`, for a sanity check. Null if none. */
   expectedPerDay: number | null
+  /**
+   * Which rate the days-left projection actually used. "expected" means the records
+   * were too thin or too far off a known normal to project from — the figure is honest
+   * about that rather than dressing up two rows of test data as a trend.
+   */
+  basis: "measured" | "expected"
   level: Level
 }
 
@@ -101,6 +107,15 @@ export const MIN_SAMPLE_DAYS = 3
  * those dates cover, NOT over the whole filter window: see usageSpanOperatingDays for
  * why, and for the 624-days-of-alcohol case that made it obvious.
  *
+ * WHICH RATE THE PROJECTION USES. A measured rate is only worth trusting when there is
+ * enough of it and it isn't absurd. Alcohol runs ~200 drums a day; a couple of test
+ * rows measuring 25 produce a confident-looking figure that is eight times out. So when
+ * the sample is thin (< MIN_SAMPLE_DAYS), or the measured rate contradicts a known
+ * normal by more than 4×, or nothing was recorded at all, the projection falls back to
+ * the expected rate and says so via `basis`. Where no expectation exists there is
+ * nothing to fall back to, and a thin sample is reported as measured with its
+ * `sampleDays` on show.
+ *
  * `fromISO` is the date the projection walks forward from (normally today).
  */
 export function buildMaterialStatus(input: {
@@ -115,9 +130,21 @@ export function buildMaterialStatus(input: {
   fromISO: string
 }): MaterialStatus {
   const burnDays = usageSpanOperatingDays(input.usageDates, input.windowEnd, input.fromISO)
-  const ro = projectRunOut(input.remaining, input.usedInWindow, burnDays, input.fromISO)
-  // The entry unit and its litres equivalent come from the ledger-unit registry, so
-  // one material cannot be captioned "litres" on one screen and "drums" on another.
+  const measured = projectRunOut(input.remaining, input.usedInWindow, burnDays, input.fromISO)
+  const sampleDays = distinctDays(input.usageDates)
+  const expectedPerDay = expectedDailyBurn(input.key)
+
+  const thin = sampleDays < MIN_SAMPLE_DAYS
+  const implausible = burnLooksImplausible({ avgPerDay: measured.avgPerOperatingDay, expectedPerDay })
+  const useExpected = expectedPerDay !== null && (thin || implausible)
+
+  // Projecting from an explicit rate: one "day" of exactly that much consumption.
+  const projection = useExpected
+    ? projectRunOut(input.remaining, expectedPerDay, 1, input.fromISO)
+    : measured
+
+  // The entry unit and its piece/litre equivalent come from the ledger-unit registry,
+  // so one material cannot be captioned "litres" on one screen and "drums" on another.
   const ledger = ledgerUnitFor(input.key)
   return {
     key: input.key,
@@ -126,13 +153,16 @@ export function buildMaterialStatus(input: {
     ...(ledger?.each ? { unitEach: ledger.each } : {}),
     remaining: round2(input.remaining),
     usedInWindow: round2(input.usedInWindow),
-    avgPerDay: ro.avgPerOperatingDay,
-    operatingDaysLeft: ro.operatingDaysLeft,
-    runOutDate: ro.runOutDate,
+    // Always the MEASURED rate: it is what the records say, and the point of showing it
+    // beside the expectation is to make a bad entry visible.
+    avgPerDay: measured.avgPerOperatingDay,
+    operatingDaysLeft: projection.operatingDaysLeft,
+    runOutDate: projection.runOutDate,
     burnDays,
-    sampleDays: distinctDays(input.usageDates),
-    expectedPerDay: expectedDailyBurn(input.key),
-    level: levelFromDays(ro.operatingDaysLeft),
+    sampleDays,
+    expectedPerDay,
+    basis: useExpected ? "expected" : "measured",
+    level: levelFromDays(projection.operatingDaysLeft),
   }
 }
 

@@ -170,11 +170,18 @@ export default function ProcurementStockPage() {
             </span>
             {/* How much data is behind the number — a projection from one recorded
                 day should not look like a projection from a month of them. */}
-            {m.sampleDays > 0 && m.sampleDays < MIN_SAMPLE_DAYS && (
+            {/* Where the figure came from. A projection from the known normal rate is
+                not the same claim as one measured from a month of records, and saying
+                which is the difference between a number you can act on and a guess. */}
+            {m.basis === "expected" ? (
+              <span className="text-xs font-medium text-ink-muted">
+                at ~{fmt(m.expectedPerDay ?? 0)}/day expected
+              </span>
+            ) : m.sampleDays > 0 && m.sampleDays < MIN_SAMPLE_DAYS ? (
               <span className="text-xs font-medium text-ink-muted">
                 {m.sampleDays} day{m.sampleDays === 1 ? "" : "s"} of data
               </span>
-            )}
+            ) : null}
           </span>
         ),
     },
