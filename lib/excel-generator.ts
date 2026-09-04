@@ -103,16 +103,3 @@ export async function generateExcelWorkbook(recordsByType: Record<string, Record
 
   return workbook
 }
-
-export async function downloadExcel(workbook: ExcelJS.Workbook, filename = "production_records.xlsx") {
-  const buffer = await workbook.xlsx.writeBuffer()
-  const blob = new Blob([buffer], {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  })
-  const url = window.URL.createObjectURL(blob)
-  const link = document.createElement("a")
-  link.href = url
-  link.download = filename
-  link.click()
-  window.URL.revokeObjectURL(url)
-}

@@ -49,7 +49,6 @@ export const STATUS = {
 } as const
 
 // Chart chrome: recessive hairlines, one step off the surface, never dashed.
-export const SURFACE = "var(--chart-surface)"
 export const GRID = "var(--chart-grid)"
 export const AXIS = "var(--chart-axis)"
 

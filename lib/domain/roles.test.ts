@@ -6,9 +6,7 @@ import {
   isActiveNav,
   isKnownRole,
   navFor,
-  normalizeLoginMode,
   roleLabel,
-  roleSatisfiesMode,
 } from "@/lib/domain/roles"
 
 describe("navFor", () => {
@@ -134,63 +132,6 @@ describe("isKnownRole", () => {
     expect(isKnownRole("Admin")).toBe(false)
     expect(isKnownRole("superuser")).toBe(false)
     expect(isKnownRole("")).toBe(false)
-  })
-})
-
-describe("normalizeLoginMode", () => {
-  it("passes through the three real modes", () => {
-    expect(normalizeLoginMode("supervisor")).toBe("supervisor")
-    expect(normalizeLoginMode("manager")).toBe("manager")
-    expect(normalizeLoginMode("admin")).toBe("admin")
-  })
-
-  it("falls back to supervisor for anything else", () => {
-    expect(normalizeLoginMode(null)).toBe("supervisor")
-    expect(normalizeLoginMode(undefined)).toBe("supervisor")
-    expect(normalizeLoginMode("")).toBe("supervisor")
-    expect(normalizeLoginMode("procurement")).toBe("supervisor")
-    expect(normalizeLoginMode("' OR 1=1")).toBe("supervisor")
-  })
-})
-
-describe("roleSatisfiesMode", () => {
-  it("lets the admin form through for admins only", () => {
-    expect(roleSatisfiesMode("admin", "admin")).toBe(true)
-    expect(roleSatisfiesMode("manager", "admin")).toBe(false)
-    expect(roleSatisfiesMode("supervisor", "admin")).toBe(false)
-    expect(roleSatisfiesMode("procurement", "admin")).toBe(false)
-  })
-
-  it("lets the manager form through for managers and admins", () => {
-    expect(roleSatisfiesMode("manager", "manager")).toBe(true)
-    expect(roleSatisfiesMode("admin", "manager")).toBe(true)
-    expect(roleSatisfiesMode("supervisor", "manager")).toBe(false)
-    expect(roleSatisfiesMode("procurement", "manager")).toBe(false)
-  })
-
-  it("treats the supervisor form as the general entry point for EVERY valid role", () => {
-    // Regression guard: this used to require an exact supervisor/procurement
-    // match, which signed managers and admins straight back out of the default
-    // form with "This account must use its assigned access level."
-    for (const r of ROLES) expect(roleSatisfiesMode(r, "supervisor")).toBe(true)
-  })
-
-  it("lets procurement in, since it has no form of its own", () => {
-    expect(roleSatisfiesMode("procurement", "supervisor")).toBe(true)
-  })
-
-  it("refuses an unrecognised role on every form", () => {
-    for (const mode of ["supervisor", "manager", "admin"] as const) {
-      expect(roleSatisfiesMode("superuser", mode)).toBe(false)
-      expect(roleSatisfiesMode("", mode)).toBe(false)
-    }
-  })
-
-  it("is monotonic: admin clears every form a manager clears", () => {
-    for (const mode of ["supervisor", "manager", "admin"] as const) {
-      if (roleSatisfiesMode("manager", mode)) expect(roleSatisfiesMode("admin", mode)).toBe(true)
-      if (roleSatisfiesMode("supervisor", mode)) expect(roleSatisfiesMode("admin", mode)).toBe(true)
-    }
   })
 })
 

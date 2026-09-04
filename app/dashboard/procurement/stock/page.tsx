@@ -302,12 +302,12 @@ export default function ProcurementStockPage() {
         </div>
         <input
           type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} aria-label="From date"
-          className="h-9 px-2 text-xs font-semibold rounded-lg border border-hairline bg-surface-card text-ink-secondary focus:border-brand focus:outline-none"
+          className="h-9 min-w-0 flex-1 px-2 text-xs font-semibold rounded-lg border border-hairline bg-surface-card text-ink-secondary focus:border-brand focus:outline-none"
         />
         <span className="text-ink-muted text-xs" aria-hidden="true">→</span>
         <input
           type="date" value={to} min={from} max={iso(new Date())} onChange={(e) => setTo(e.target.value)} aria-label="To date"
-          className="h-9 px-2 text-xs font-semibold rounded-lg border border-hairline bg-surface-card text-ink-secondary focus:border-brand focus:outline-none"
+          className="h-9 min-w-0 flex-1 px-2 text-xs font-semibold rounded-lg border border-hairline bg-surface-card text-ink-secondary focus:border-brand focus:outline-none"
         />
       </div>
 

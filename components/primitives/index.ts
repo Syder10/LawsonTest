@@ -15,4 +15,4 @@ export { Choice, Field, NumberInput, Select, TextArea, TextInput } from "./field
 export { PageHeader } from "./page-header"
 export { StatTile, compact } from "./stat-tile"
 export { StatusBadge } from "./status-badge"
-export { Eyebrow, PageTitle, SectionTitle, Subtle } from "./text"
+export { Eyebrow, SectionTitle } from "./text"

@@ -32,7 +32,12 @@ export function PageHeader({
   className?: string
 }) {
   return (
-    <div className={cn("flex items-start justify-between gap-4", className)}>
+    // STACKS ON MOBILE. Side by side, the actions are `shrink-0` while the title block
+    // is `min-w-0`, so a header with three buttons (the stock page has "New count",
+    // "Log receipt" and "Refresh" — ~330px together) squeezed the title to a few pixels
+    // and "Stock levels" wrapped one letter per line. Below `sm` the title gets the full
+    // width and the buttons wrap underneath it.
+    <div className={cn("flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4", className)}>
       <div className="flex items-start gap-3 min-w-0">
         {backHref && (
           <Link
@@ -48,7 +53,7 @@ export function PageHeader({
           {description && <Subtle className="mt-1">{description}</Subtle>}
         </div>
       </div>
-      {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2 sm:shrink-0">{actions}</div>}
     </div>
   )
 }

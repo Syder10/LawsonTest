@@ -1,7 +1,7 @@
 # Database — Lawson Production Management
 
 The database is defined as **ordered, idempotent-friendly migrations** in
-`supabase/migrations/`. This replaces the old single `scripts/schema.sql`, which
+`supabase/migrations/`. This replaces the old single-file schema, which
 could not rebuild the database (it had no triggers, functions, or views even
 though the app depended on them).
 

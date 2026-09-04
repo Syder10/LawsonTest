@@ -310,12 +310,25 @@ describe("BubbleField", () => {
   })
 
   it("fades a bubble in rather than popping it on", () => {
+    // Emit ONE batch, then stop: slot 0 of the packed buffer is not a stable identity,
+    // because the field re-sorts by radius every frame and a newly spawned bubble can
+    // take that slot with the same fade-in alpha. Comparing the maximum alpha across a
+    // fixed set of bubbles is the assertion that was actually meant — the earlier
+    // version failed roughly one run in ten, depending on the spawn RNG.
     const f = field()
     f.update(1 / 60, 0, true)
-    const first = f.pack(1, 874)[4]
-    for (let i = 0; i < 6; i++) f.update(1 / 60, 0.1, true)
+    const alphaMax = () => {
+      const packed = f.pack(1, 874)
+      let max = 0
+      for (let i = 0; i < f.count; i++) max = Math.max(max, packed[i * 7 + 4])
+      return max
+    }
+
+    const first = alphaMax()
+    expect(first).toBeGreaterThan(0)
     expect(first).toBeLessThan(0.5)
-    expect(f.pack(1, 874)[4]).toBeGreaterThan(first)
+    for (let i = 0; i < 6; i++) f.update(1 / 60, 0.1, false)
+    expect(alphaMax()).toBeGreaterThan(first)
   })
 
   it("scales bubble size with the geometry unit", () => {

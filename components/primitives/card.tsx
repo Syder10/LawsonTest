@@ -61,11 +61,13 @@ export function CardHeader({
   className?: string
 }) {
   return (
-    <div className={cn("px-4 py-3 border-b border-hairline flex items-center justify-between gap-3", className)}>
-      {/* Wraps rather than truncates. Card titles are short but not tiny ("Cartons
-          produced over time"), and once an action sits beside them there is well under
-          200px left on a phone — truncating clipped the title on every chart card. */}
-      <h3 className="min-w-0 text-sm font-bold text-ink-primary break-words">{title}</h3>
+    // WRAPS rather than squeezes. Some card actions are wide — the BOM panel's is a
+    // "Plan for [ cartons ]" input — and side by side with `shrink-0` actions the title
+    // was compressed until it broke a letter per line on a phone. With flex-wrap the
+    // actions drop to their own line only when they genuinely don't fit, so a card with
+    // a small chip action still reads as one row.
+    <div className={cn("px-4 py-3 border-b border-hairline flex flex-wrap items-center justify-between gap-x-3 gap-y-2", className)}>
+      <h3 className="text-sm font-bold text-ink-primary break-words">{title}</h3>
       <div className="flex items-center gap-3 shrink-0">
         {hint && <span className="text-xs font-medium text-ink-muted hidden sm:inline">{hint}</span>}
         {actions}

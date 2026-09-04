@@ -420,10 +420,8 @@
 
 /* Stagger for entrance sequences. NOTE: these set animation-delay and therefore
    shadow Tailwind's own transition-delay `delay-*` utilities on any element that
-   uses both. Kept for the splash screen; prefer inline style for new work. */
-.delay-100 {
-  animation-delay: 100ms;
-}
+   uses both. Only the steps the splash actually uses are defined; prefer an inline
+   style for new work. */
 .delay-200 {
   animation-delay: 200ms;
 }
@@ -432,9 +430,6 @@
 }
 .delay-400 {
   animation-delay: 400ms;
-}
-.delay-500 {
-  animation-delay: 500ms;
 }
 
 /* Hover effects only where a real pointer exists — touch devices synthesise
