@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { requireStaff } from "@/lib/auth/guards"
+import { bomFor } from "@/lib/domain/bom"
 import { operatingDaysBetween } from "@/lib/domain/operating-days"
+import { settingsFromRow } from "@/lib/domain/settings"
 import { buildMaterialStatus, THRESHOLD_PAYLOAD, type MaterialStatus } from "@/lib/domain/stock-status"
 import type { DepartmentReport, KpiValue, OverviewReport } from "@/lib/domain/analytics-contract"
 import {
@@ -155,6 +157,15 @@ export async function GET(request: Request) {
     }
   }
 
+  // The admin-editable forecast, read once for the whole report. A missing row (0006
+  // not applied) degrades to the confirmed defaults rather than zeroing every rate.
+  const [settingsRes, recipesRes] = await Promise.all([
+    supabase.from("app_settings").select("*").maybeSingle(),
+    supabase.from("product_recipes").select("product, ingredient, label, litres_per_carton, display_order"),
+  ])
+  const settings = settingsFromRow(settingsRes.data, recipesRes.data)
+  const configuredBom = bomFor(settings)
+
   const materialStatus = async (m: DeptMaterial): Promise<MaterialStatus> => {
     const [rem, mv] = await Promise.all([remaining(m.material, m.product ?? null), movement(m)])
     return buildMaterialStatus({
@@ -166,6 +177,7 @@ export async function GET(request: Request) {
       usageDates: mv.usedOn,
       windowEnd: to,
       fromISO: today,
+      settings,
     })
   }
 
@@ -328,6 +340,8 @@ export async function GET(request: Request) {
       bitters: Number(fg.find((r) => r.product === "Bitters")?.available ?? 0),
       ginger: Number(fg.find((r) => r.product === "Ginger")?.available ?? 0),
     },
+    // The configured recipe, resolved from the same settings the material rates used.
+    bom: [configuredBom.Bitters, configuredBom.Ginger],
     byDay,
     byShift,
     materials,

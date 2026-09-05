@@ -1,4 +1,5 @@
 import type { MaterialStatus } from "@/lib/domain/stock-status"
+import type { ProductBom } from "@/lib/domain/bom"
 
 // ============================================================================
 // The wire contract for GET /api/analytics/report.
@@ -68,6 +69,13 @@ export interface OverviewReport extends ReportCommon {
   }
   /** Cumulative on-hand, all-time — deliberately NOT scoped by the date filter. */
   finishedGoods: { bitters: number; ginger: number }
+  /**
+   * The bill of materials as CONFIGURED, one entry per product. Sent with the report
+   * rather than derived on the client so the panel shows the recipe the reports
+   * themselves projected with — the recipe is admin-editable, and a client holding its
+   * own copy of it is how the two would come to disagree.
+   */
+  bom: ProductBom[]
   byDay: DaySeriesPoint[]
   byShift: ShiftSeriesPoint[]
 }

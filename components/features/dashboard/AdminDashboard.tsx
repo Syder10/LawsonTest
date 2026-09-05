@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ArrowRight, ShieldCheck, Users, Warehouse } from "lucide-react"
+import { ArrowRight, ShieldCheck, SlidersHorizontal, Users, Warehouse } from "lucide-react"
 import { Card, Chip, PageHeader, SectionTitle } from "@/components/primitives"
 
 // Admin landing. Was zinc-only — the ONLY screen in the app on a second neutral
@@ -22,6 +22,12 @@ const AREAS = [
     Icon: Warehouse,
     title: "Stock levels",
     body: "Every tracked material with its remaining balance and days of cover.",
+  },
+  {
+    href: "/dashboard/admin/settings",
+    Icon: SlidersHorizontal,
+    title: "Settings",
+    body: "The numbers behind every projection: the production forecast, what each container holds, and the per-carton recipes.",
   },
 ]
 

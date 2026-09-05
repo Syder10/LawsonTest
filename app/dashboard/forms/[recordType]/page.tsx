@@ -3,6 +3,7 @@ import { notFound } from "next/navigation"
 import RecordEntryForm from "./record-entry-form"
 import { getRecordType } from "@/lib/domain/record-types"
 import { currentGhanaShift, expectedShiftForGroup, shiftDateFor } from "@/lib/shift-config"
+import { settingsFromRow } from "@/lib/domain/settings"
 import { PageHeader } from "@/components/primitives"
 
 export const dynamic = "force-dynamic"
@@ -30,6 +31,12 @@ export default async function RecordTypePage(
         .select("full_name, department, group_number")
         .eq("id", user.id)
         .single()
+
+    // The admin-editable conversions, for the live "≈ 8,000 pcs" caption under a
+    // container count. Read here rather than in the client component so the caption
+    // cannot show a stale factor while the dashboards use the current one.
+    const { data: settingsRow } = await supabase.from("app_settings").select("*").maybeSingle()
+    const conversions = settingsFromRow(settingsRow).conversions
 
     const supervisorName: string = profile?.full_name ?? user.email?.split("@")[0] ?? "Supervisor"
     const department: string     = profile?.department ?? "General"
@@ -87,6 +94,7 @@ export default async function RecordTypePage(
                 groupNumber={groupNumber}
                 initialDate={initialDate}
                 initialShift={initialShift}
+                conversions={conversions}
             />
         </div>
     )

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { FORM_FIELDS, type FormFieldDef } from "@/lib/domain/form-config"
 import { getRecordType } from "@/lib/domain/record-types"
 import { ledgerUnitFor } from "@/lib/domain/materials"
+import type { Conversions } from "@/lib/domain/settings"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -42,6 +43,8 @@ interface RecordEntryFormProps {
   groupNumber: number
   initialDate: string
   initialShift: string
+  /** Admin-editable container contents, for the live secondary-quantity caption. */
+  conversions?: Conversions
 }
 
 /** scope (product / herb name / "tank-3") -> field label -> message */
@@ -76,6 +79,7 @@ export default function RecordEntryForm({
   groupNumber,
   initialDate,
   initialShift,
+  conversions,
 }: RecordEntryFormProps) {
   const router = useRouter()
   const def = getRecordType(recordType)
@@ -86,7 +90,7 @@ export default function RecordEntryForm({
   const isHerbs = def?.storage.kind === "stock" && def.storage.material === "herb"
   // The unit the ledger counts this material in, when it is a vessel rather than a
   // piece (alcohol: 250 L drums). Drives the live litres caption on number fields.
-  const ledgerUnit = def?.storage.kind === "stock" ? ledgerUnitFor(def.storage.material) : undefined
+  const ledgerUnit = def?.storage.kind === "stock" ? ledgerUnitFor(def.storage.material, conversions) : undefined
   const isExtraction = recordType === "Extraction Monitoring Records"
   const isConcentrate = recordType === "Daily Records Alcohol For Concentrate"
 

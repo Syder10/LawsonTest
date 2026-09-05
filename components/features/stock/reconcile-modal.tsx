@@ -4,22 +4,39 @@ import { useState } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Field, NumberInput, Select, TextInput } from "@/components/primitives"
+import { ledgerUnitFor } from "@/lib/domain/materials"
 import { toast } from "sonner"
 import type { Product, Shift } from "@/lib/db/types"
 
 // The materials whose stock is a DERIVED ledger (reconcilable here). PPE
 // (seal tape / hair nets / masks / gloves) is still a running total via
 // raw_materials_received and is intentionally NOT reconciled through this screen.
-export const LEDGER_MATERIALS: { code: string; name: string; unit: string; tracksProduct?: boolean; isHerb?: boolean }[] = [
-  { code: "alcohol", name: "Alcohol", unit: "litres" },
-  { code: "preform", name: "Preforms", unit: "bags" },
-  { code: "caps", name: "Caps", unit: "pcs" },
-  { code: "labels", name: "Labels", unit: "pcs", tracksProduct: true },
-  { code: "caramel", name: "Caramel", unit: "units", tracksProduct: true },
-  { code: "herb", name: "Herb", unit: "units", isHerb: true },
-  { code: "tax_stamp", name: "Tax Stamps", unit: "pcs" },
-  { code: "carton", name: "Cartons", unit: "pcs", tracksProduct: true },
+//
+// THE UNIT IS DERIVED, NOT WRITTEN HERE. This list used to say "litres" for alcohol
+// and "pcs" for caps and labels while the ledger counts drums, boxes and rolls — so
+// the form asked for a physical count in one unit and re-anchored the ledger in
+// another, which for alcohol is a factor of 250. Taking the word from the same
+// registry every other screen reads makes that disagreement impossible rather than
+// merely fixed. tax_stamp and carton really are counted in pieces and have no
+// registry entry, hence the fallback.
+const RECONCILABLE: { code: string; name: string; tracksProduct?: boolean; isHerb?: boolean }[] = [
+  { code: "alcohol", name: "Alcohol" },
+  { code: "preform", name: "Preforms" },
+  { code: "caps", name: "Caps" },
+  { code: "labels", name: "Labels", tracksProduct: true },
+  { code: "caramel", name: "Caramel", tracksProduct: true },
+  { code: "herb", name: "Herb", isHerb: true },
+  { code: "tax_stamp", name: "Tax Stamps" },
+  { code: "carton", name: "Cartons", tracksProduct: true },
 ]
+
+export const LEDGER_MATERIALS: {
+  code: string
+  name: string
+  unit: string
+  tracksProduct?: boolean
+  isHerb?: boolean
+}[] = RECONCILABLE.map((m) => ({ ...m, unit: ledgerUnitFor(m.code)?.unit ?? "pcs" }))
 
 export interface ReconcileTarget {
   material: string

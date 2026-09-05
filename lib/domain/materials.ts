@@ -1,17 +1,26 @@
 // Box → piece conversion constants for received raw materials / PPE.
 // Previously copy-pasted across the procurement route and two procurement
-// pages; centralised here. (These are mirrored by the consumable_materials
-// seed row values in the DB for reference/display.)
+// pages; centralised here.
+//
+// EVERY FIGURE BELOW IS A DEFAULT. The live values are admin-editable in
+// `app_settings` (see lib/domain/settings.ts), so anything that reads settings should
+// take the conversion from there and use these only as the fallback — one number, one
+// source, with the constants standing in when the table cannot be reached.
 
-import { VESSEL } from "@/lib/domain/bom"
+import { DEFAULT_SETTINGS, type Conversions as SettingsConversions } from "@/lib/domain/settings"
 
-export const STAMP_COILS_PER_BOX = 6
-export const STAMP_PCS_PER_COIL = 15_000
+const D = DEFAULT_SETTINGS.conversions
+
+export const STAMP_COILS_PER_BOX = D.stampCoilsPerBox
+export const STAMP_PCS_PER_COIL = D.stampPcsPerCoil
 export const STAMP_PCS_PER_BOX = STAMP_COILS_PER_BOX * STAMP_PCS_PER_COIL // 90,000
-export const TAPE_PCS_PER_BOX = 24
-export const HAIRNET_PACKS_PER_BOX = 10
-export const NOSEMASK_PACKS_PER_BOX = 40
-export const GLOVES_PACKS_PER_BOX = 10
+export const TAPE_PCS_PER_BOX = D.tapePcsPerBox
+export const HAIRNET_PACKS_PER_BOX = D.hairnetPacksPerBox
+export const NOSEMASK_PACKS_PER_BOX = D.nosemaskPacksPerBox
+export const GLOVES_PACKS_PER_BOX = D.glovesPacksPerBox
+
+/** Pieces in one received box of stamps, for a given configuration. */
+export const stampPcsPerBox = (c: SettingsConversions): number => c.stampCoilsPerBox * c.stampPcsPerCoil
 
 export type MaterialType =
   | "tax_stamp"
@@ -34,20 +43,25 @@ export const ALL_MATERIAL_TYPES: MaterialType[] = [
   "gloves",
 ]
 
-/** Units per received box for the box-based materials. */
-export function pcsPerBox(material: MaterialType): number {
+/** Units per received box for the box-based materials, for a given configuration. */
+export function pcsPerBoxFor(material: MaterialType, c: SettingsConversions): number {
   switch (material) {
     case "seal_tape":
-      return TAPE_PCS_PER_BOX
+      return c.tapePcsPerBox
     case "hair_net":
-      return HAIRNET_PACKS_PER_BOX
+      return c.hairnetPacksPerBox
     case "nose_mask":
-      return NOSEMASK_PACKS_PER_BOX
+      return c.nosemaskPacksPerBox
     case "gloves":
-      return GLOVES_PACKS_PER_BOX
+      return c.glovesPacksPerBox
     default:
       return 1
   }
+}
+
+/** Units per received box on the defaults. Prefer `pcsPerBoxFor` where settings exist. */
+export function pcsPerBox(material: MaterialType): number {
+  return pcsPerBoxFor(material, D)
 }
 
 // ============================================================================
@@ -64,14 +78,14 @@ export function pcsPerBox(material: MaterialType): number {
 // it is the honest primary unit. Litres are derived for display, never stored.
 // ============================================================================
 
-/** One drum of raw ethanol. Same constant the BOM uses — not a second opinion. */
-export const DRUM_LITRES = VESSEL.drum.litres // 250
+/** One drum of raw ethanol. The default — `Conversions.drumLitres` is the live value. */
+export const DRUM_LITRES = D.drumLitres // 250
 /** The 20 L drum the floor calls a "gallon". Also the BOM's caramel vessel. */
-export const CARAMEL_GALLON_LITRES = VESSEL.gallon.litres // 20
-/** User-confirmed 2026-08-31. */
-export const CAPS_PCS_PER_BOX = 4000
-export const LABEL_PCS_PER_ROLL = 4000
-export const PREFORM_PCS_PER_BAG = 1008
+export const CARAMEL_GALLON_LITRES = D.gallonLitres // 20
+/** User-confirmed 2026-08-31, and editable since. */
+export const CAPS_PCS_PER_BOX = D.capsPcsPerBox
+export const LABEL_PCS_PER_ROLL = D.labelPcsPerRoll
+export const PREFORM_PCS_PER_BAG = D.preformPcsPerBag
 
 export interface LedgerUnit {
   /** Unit a supervisor enters and the ledger stores. */
@@ -106,6 +120,22 @@ export const LEDGER_UNITS: Record<string, LedgerUnit> = {
 }
 
 /**
+ * How many of the secondary unit one container holds, for a given configuration.
+ * The unit WORDS above are fixed in code (entry-form labels are built from them and
+ * those labels key submissions); only the QUANTITIES are admin-editable.
+ */
+const eachQtyFor = (material: string, c: SettingsConversions): number | undefined => {
+  switch (material) {
+    case "alcohol": return c.drumLitres
+    case "caps": return c.capsPcsPerBox
+    case "labels": return c.labelPcsPerRoll
+    case "caramel": return c.gallonLitres
+    case "preform": return c.preformPcsPerBag
+    default: return undefined
+  }
+}
+
+/**
  * Row keys that don't match their material code. The dashboards and the ledger
  * disagree on the plural for preforms, so an exact-match lookup silently dropped the
  * unit on the procurement row — the same class of drift as the old
@@ -113,27 +143,21 @@ export const LEDGER_UNITS: Record<string, LedgerUnit> = {
  */
 const KEY_ALIASES: Record<string, string> = { preforms: "preform" }
 
-export const ledgerUnitFor = (key: string): LedgerUnit | undefined => {
+export const ledgerUnitFor = (
+  key: string,
+  conversions?: SettingsConversions,
+): LedgerUnit | undefined => {
   const k = Object.hasOwn(KEY_ALIASES, key) ? KEY_ALIASES[key] : key
-  if (Object.hasOwn(LEDGER_UNITS, k)) return LEDGER_UNITS[k]
   // Dashboard rows are keyed per product or per variant — "labels_bitters",
   // "caramel_ginger", "herb_alligator_pepper" — so fall back to the material prefix
   // rather than silently losing the unit on exactly the rows that show it.
-  const base = Object.keys(LEDGER_UNITS).find((m) => k === m || k.startsWith(`${m}_`))
-  return base ? LEDGER_UNITS[base] : undefined
-}
+  const base = Object.hasOwn(LEDGER_UNITS, k)
+    ? k
+    : Object.keys(LEDGER_UNITS).find((m) => k === m || k.startsWith(`${m}_`))
+  if (!base) return undefined
 
-/**
- * Expected consumption, for sanity-checking a measured burn rate.
- *
- * User-confirmed 2026-08-31: alcohol runs about 100 drums per shift, two production
- * shifts a day. This is NOT used to compute anything — it is shown beside the
- * measured rate so a figure that is wildly off reads as "check the entry" instead of
- * quietly driving a reorder decision.
- */
-export const EXPECTED_DAILY_BURN: Record<string, number> = {
-  alcohol: 200,
+  const defaults = LEDGER_UNITS[base]
+  if (!conversions || !defaults.each) return defaults
+  const qty = eachQtyFor(base, conversions)
+  return qty === undefined ? defaults : { unit: defaults.unit, each: { qty, unit: defaults.each.unit } }
 }
-
-export const expectedDailyBurn = (key: string): number | null =>
-  Object.hasOwn(EXPECTED_DAILY_BURN, key) ? EXPECTED_DAILY_BURN[key] : null

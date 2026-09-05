@@ -6,12 +6,14 @@ import {
   CARTON_LITRES,
   PRODUCT_BOM,
   VESSEL,
+  bomFor,
   cartonsPerBatch,
   estimateUsage,
   recipeBalances,
   recipeLitres,
   vesselsPerCarton,
 } from "@/lib/domain/bom"
+import { DEFAULT_SETTINGS, type ProductionSettings } from "@/lib/domain/settings"
 
 const PRODUCTS: Product[] = ["Bitters", "Ginger"]
 
@@ -70,11 +72,17 @@ describe("Bitters recipe (confirmed 2026-08-26)", () => {
   })
 
   it("measures each ingredient in its own vessel", () => {
-    expect(byKey.alcohol.vessel).toBe(VESSEL.drum)
-    expect(byKey.concentrate.vessel).toBe(VESSEL.tank)
-    expect(byKey.water.vessel).toBe(VESSEL.rambo)
-    expect(byKey.spices.vessel).toBe(VESSEL.tank)
-    expect(byKey.caramel.vessel).toBe(VESSEL.gallon)
+    // Compared by name and capacity rather than identity: capacities are settings
+    // now, so each reading builds its own vessel object.
+    expect(byKey.alcohol.vessel).toEqual(VESSEL.drum)
+    expect(byKey.concentrate.vessel).toEqual(VESSEL.tank)
+    expect(byKey.water.vessel).toEqual(VESSEL.rambo)
+    expect(byKey.spices.vessel).toEqual(VESSEL.tank)
+    expect(byKey.caramel.vessel).toEqual(VESSEL.gallon)
+  })
+
+  it("names no vessel after its capacity, which is editable", () => {
+    for (const v of Object.values(VESSEL)) expect(v.name).not.toMatch(/\d/)
   })
 
   it("reproduces the original vessel factors that were correct", () => {
@@ -94,9 +102,9 @@ describe("Bitters recipe (confirmed 2026-08-26)", () => {
     expect(vesselsPerCarton(byKey.concentrate)).not.toBeCloseTo(2 / 900, 6)
   })
 
-  it("is fully confirmed", () => {
-    expect(bom.confirmed).toBe(true)
-    expect(bom.ingredients.every((i) => i.confirmed)).toBe(true)
+  it("fills its carton exactly", () => {
+    expect(bom.fillsCarton).toBe(true)
+    expect(bom.cartonLitres).toBe(CARTON_LITRES)
   })
 })
 
@@ -147,8 +155,8 @@ describe("Ginger recipe (confirmed 2026-08-26)", () => {
     expect(byKey.caramel.litresPerCarton).toBe(0.0135)
   })
 
-  it("is fully confirmed", () => {
-    expect(bom.confirmed).toBe(true)
+  it("fills its carton exactly, on a different batch size", () => {
+    expect(bom.fillsCarton).toBe(true)
   })
 })
 
@@ -157,7 +165,7 @@ describe("estimateUsage", () => {
     const alcohol = estimateUsage("Bitters", 100).find((l) => l.key === "alcohol")!
     expect(alcohol.litres).toBe(250)
     expect(alcohol.vessels).toBe(1) // exactly one 250 L drum
-    expect(alcohol.vessel.name).toBe("drum")
+    expect(alcohol.vessel?.name).toBe("drum")
   })
 
   it("scales linearly", () => {
@@ -186,11 +194,6 @@ describe("estimateUsage", () => {
     )
   })
 
-  it("carries the confirmed flag through, so the UI can warn per ingredient", () => {
-    expect(estimateUsage("Bitters", 10).every((l) => l.confirmed)).toBe(true)
-    expect(estimateUsage("Ginger", 10).every((l) => l.confirmed)).toBe(true)
-  })
-
   it("does not mutate the source recipe", () => {
     const before = JSON.stringify(PRODUCT_BOM.Bitters)
     estimateUsage("Bitters", 12345)
@@ -203,5 +206,108 @@ describe("estimateUsage", () => {
       expect(keys).not.toContain("tax_stamp")
       expect(keys).not.toContain("carton")
     }
+  })
+})
+
+// ════════════════════════════════════════════════════════════════════════════
+// The recipe and every conversion are admin-editable, so the readings above have
+// to follow a configuration rather than the constants they were written against.
+// ════════════════════════════════════════════════════════════════════════════
+describe("bomFor — an edited configuration", () => {
+  const edit = (patch: Partial<ProductionSettings>): ProductionSettings => ({
+    ...DEFAULT_SETTINGS,
+    ...patch,
+  })
+
+  it("returns the confirmed defaults for the default settings", () => {
+    expect(bomFor(DEFAULT_SETTINGS)).toEqual(PRODUCT_BOM)
+  })
+
+  it("follows an edited ingredient quantity", () => {
+    const bom = bomFor(
+      edit({
+        recipes: {
+          ...DEFAULT_SETTINGS.recipes,
+          Bitters: [
+            { ingredient: "alcohol", label: "Raw ethanol", litresPerCarton: 3 },
+            { ingredient: "water", label: "Water", litresPerCarton: 6 },
+          ],
+        },
+      }),
+    )
+    expect(bom.Bitters.ingredients.map((i) => i.key)).toEqual(["alcohol", "water"])
+    expect(bom.Bitters.totalLitres).toBe(9)
+    expect(bom.Bitters.fillsCarton).toBe(true)
+    // Ginger is untouched by an edit to Bitters.
+    expect(bom.Ginger).toEqual(PRODUCT_BOM.Ginger)
+  })
+
+  it("flags a recipe that no longer fills its carton instead of quietly scaling it", () => {
+    const bom = bomFor(
+      edit({
+        recipes: {
+          ...DEFAULT_SETTINGS.recipes,
+          Ginger: [{ ingredient: "water", label: "Water", litresPerCarton: 8 }],
+        },
+      }),
+    )
+    expect(bom.Ginger.fillsCarton).toBe(false)
+    expect(bom.Ginger.totalLitres).toBe(8)
+    expect(bom.Ginger.cartonLitres).toBe(9)
+  })
+
+  it("moves the carton size, and with it what a recipe must sum to", () => {
+    const settings = edit({
+      conversions: { ...DEFAULT_SETTINGS.conversions, bottlesPerCarton: 24 },
+    })
+    const bom = bomFor(settings)
+    expect(bom.Bitters.cartonLitres).toBe(18)
+    // The stored recipe still describes a 9 L carton, so it must read as broken —
+    // changing the carton without the recipe is exactly how the two drift apart.
+    expect(bom.Bitters.fillsCarton).toBe(false)
+    expect(bom.Bitters.cartonsPerBatch).toBe(50)
+  })
+
+  it("takes vessel capacities from the settings, so a re-tanked plant needs no deploy", () => {
+    const bom = bomFor(
+      edit({ conversions: { ...DEFAULT_SETTINGS.conversions, drumLitres: 200, gallonLitres: 25 } }),
+    )
+    const byKey = Object.fromEntries(bom.Bitters.ingredients.map((i) => [i.key, i]))
+    expect(byKey.alcohol.vessel?.litres).toBe(200)
+    // 2.5 L ÷ 200 L per drum = 0.0125 drums, up from 0.01.
+    expect(vesselsPerCarton(byKey.alcohol)).toBe(0.0125)
+    expect(byKey.caramel.vessel?.litres).toBe(25)
+  })
+
+  it("shows an unknown ingredient in litres only rather than guessing a container", () => {
+    const bom = bomFor(
+      edit({
+        recipes: {
+          ...DEFAULT_SETTINGS.recipes,
+          Bitters: [
+            { ingredient: "honey", label: "Honey", litresPerCarton: 1 },
+            { ingredient: "water", label: "Water", litresPerCarton: 8 },
+          ],
+        },
+      }),
+    )
+    const honey = bom.Bitters.ingredients.find((i) => i.key === "honey")!
+    expect(honey.vessel).toBeNull()
+    expect(vesselsPerCarton(honey)).toBeNull()
+    expect(estimateUsage("Bitters", 100, bom).find((l) => l.key === "honey")!.vessels).toBeNull()
+  })
+
+  it("keeps the derived readings in step when passed a configuration", () => {
+    const settings = edit({
+      recipes: {
+        ...DEFAULT_SETTINGS.recipes,
+        Ginger: [{ ingredient: "water", label: "Water", litresPerCarton: 9 }],
+      },
+    })
+    const bom = bomFor(settings)
+    expect(recipeLitres("Ginger", bom)).toBe(9)
+    expect(recipeBalances("Ginger", bom)).toBe(true)
+    expect(cartonsPerBatch("Ginger", bom)).toBeCloseTo(1000 / 9, 10)
+    expect(estimateUsage("Ginger", 10, bom).map((l) => l.key)).toEqual(["water"])
   })
 })

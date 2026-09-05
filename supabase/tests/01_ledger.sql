@@ -75,8 +75,9 @@ begin
 end $$;
 
 -- Tax stamps + cartons as a DERIVED ledger.
--- Baseline stamps 100000; receive 90000 more; produce 100 Bitters cartons (×9
--- stamps) + 50 Ginger (×6) = 900+300 = 1200 consumed → 100000+90000-1200 = 188800.
+-- Every bottle is stamped, so packaging_bom is 12 per carton for both products.
+-- Baseline stamps 100000; receive 90000 more; produce 100 Bitters cartons + 50 Ginger
+-- = 150 × 12 = 1800 consumed → 100000 + 90000 - 1800 = 188200.
 insert into public.stock_counts (date, shift, material, counted_qty, computed_qty, kind)
 values ('2026-08-01', null, 'tax_stamp', 100000, 0, 'baseline');
 insert into public.raw_materials_received (date, material_type, stamp_boxes, stamp_total_pcs)
@@ -88,7 +89,7 @@ values ('2026-08-03','Morning','Packaging','Ginger',50);
 do $$
 declare s numeric := public.stock_remaining_asof('tax_stamp','2026-08-03');
 begin
-  assert s = 188800, format('tax_stamp remaining expected 188800, got %s', s);
+  assert s = 188200, format('tax_stamp remaining expected 188200, got %s', s);
   raise notice 'PASS tax_stamp derived ledger: remaining %', s;
 end $$;
 
@@ -108,8 +109,8 @@ update public.packaging_daily_records set quantity_cartons_produced = 200
 do $$
 declare s numeric := public.stock_remaining_asof('tax_stamp','2026-08-03');
 begin
-  -- now 100000+90000 - (200*9 + 50*6) = 190000 - 2100 = 187900
-  assert s = 187900, format('tax_stamp after edit expected 187900, got %s', s);
+  -- now 100000+90000 - ((200 + 50) * 12) = 190000 - 3000 = 187000
+  assert s = 187000, format('tax_stamp after edit expected 187000, got %s', s);
   raise notice 'PASS stamp self-heal on packaging edit: remaining %', s;
 end $$;
 

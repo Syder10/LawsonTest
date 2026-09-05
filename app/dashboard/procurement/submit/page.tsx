@@ -5,9 +5,10 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import { CheckCircle2 } from "lucide-react"
 import { toast } from "sonner"
 import {
-  STAMP_COILS_PER_BOX, STAMP_PCS_PER_COIL, STAMP_PCS_PER_BOX, TAPE_PCS_PER_BOX,
-  PPE_TYPES, pcsPerBox, type MaterialType,
+  PPE_TYPES, pcsPerBoxFor, stampPcsPerBox, type MaterialType,
 } from "@/lib/domain/materials"
+import { DEFAULT_CONVERSIONS, settingsFromRow, type Conversions } from "@/lib/domain/settings"
+import { stampsPerCarton } from "@/lib/domain/expected-burn"
 import { DEPARTMENTS } from "@/lib/domain/record-types"
 import { groupsForDepartment } from "@/lib/shift-config"
 import { Card, Choice, Eyebrow, Field, NumberInput, PageHeader, Select, TextArea, TextInput } from "@/components/primitives"
@@ -83,12 +84,20 @@ export default function ProcurementSubmitPage() {
   const [ppeGivenUnit, setPpeGivenUnit] = useState("Boxes")
   const [ppeGivenTo,   setPpeGivenTo]   = useState("")
 
+  // The admin-editable pack sizes. Defaults stand until the row is read, and stay if it
+  // cannot be — the numbers below are then the ones the server would use anyway.
+  const [conversions, setConversions] = useState<Conversions>(DEFAULT_CONVERSIONS)
+
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data } = await supabase.from("profiles").select("full_name").eq("id", user.id).single()
-      setUserName(data?.full_name || "Procurement Officer")
+      const [profileRes, settingsRes] = await Promise.all([
+        supabase.from("profiles").select("full_name").eq("id", user.id).single(),
+        supabase.from("app_settings").select("*").maybeSingle(),
+      ])
+      setUserName(profileRes.data?.full_name || "Procurement Officer")
+      setConversions(settingsFromRow(settingsRes.data).conversions)
     }
     load()
   }, [supabase])
@@ -102,11 +111,15 @@ export default function ProcurementSubmitPage() {
   }
 
   // ── Live calculations ──────────────────────────────────────────────────
+  // Pack sizes are admin-editable, so the preview reads them from the settings rather
+  // than from the constants: the server converts boxes to pieces with the SAME figures
+  // when the receipt is written, and a preview that disagreed with what got stored
+  // would be worse than showing nothing.
   const stampBoxesN = Number(stampBoxes || 0)
-  const stampCoils  = stampBoxesN * STAMP_COILS_PER_BOX
-  const stampPcs    = stampBoxesN * STAMP_PCS_PER_BOX
+  const stampCoils  = stampBoxesN * conversions.stampCoilsPerBox
+  const stampPcs    = stampBoxesN * stampPcsPerBox(conversions)
 
-  const ppb          = pcsPerBox(material)
+  const ppb          = pcsPerBoxFor(material, conversions)
   const ppeBoxesN    = Number(ppeBoxesIn  || 0)
   const ppePcsIn     = ppeBoxesN * ppb
   const ppeGivenOutN = Number(ppeGivenOut || 0)
@@ -222,8 +235,8 @@ export default function ProcurementSubmitPage() {
         {material === "tax_stamp" && (
           <div className="space-y-4">
             <Note>
-              <p>1 box = {STAMP_COILS_PER_BOX} coils &nbsp;·&nbsp; 1 coil = {fmt(STAMP_PCS_PER_COIL)} pcs</p>
-              <p>Bitters = 9 stamps/carton &nbsp;·&nbsp; Ginger = 6 stamps/carton</p>
+              <p>1 box = {conversions.stampCoilsPerBox} coils &nbsp;·&nbsp; 1 coil = {fmt(conversions.stampPcsPerCoil)} pcs</p>
+              <p>Every bottle is stamped &nbsp;·&nbsp; {fmt(stampsPerCarton(conversions))} stamps per carton of {conversions.bottlesPerCarton}</p>
             </Note>
             <Field label="Boxes received" required>
               {p => <NumberInput {...p} placeholder="0" value={stampBoxes} onChange={e => setStampBoxes(e.target.value)} />}
@@ -258,10 +271,8 @@ export default function ProcurementSubmitPage() {
         {PPE_TYPES.includes(material) && (
           <div className="space-y-4">
             <Note>
-              {material === "seal_tape"  && `1 box = ${TAPE_PCS_PER_BOX} pcs`}
-              {material === "hair_net"   && `1 box = ${pcsPerBox("hair_net")} packs`}
-              {material === "nose_mask"  && `1 box = ${pcsPerBox("nose_mask")} packs`}
-              {material === "gloves"     && `1 box = ${pcsPerBox("gloves")} packs`}
+              {material === "seal_tape"  && `1 box = ${ppb} pcs`}
+              {material !== "seal_tape"  && `1 box = ${ppb} packs`}
             </Note>
 
             <Field

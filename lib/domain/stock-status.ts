@@ -1,5 +1,7 @@
 import { distinctDays, projectRunOut, usageSpanOperatingDays } from "@/lib/domain/operating-days"
-import { expectedDailyBurn, ledgerUnitFor } from "@/lib/domain/materials"
+import { ledgerUnitFor } from "@/lib/domain/materials"
+import { expectedDailyBurn } from "@/lib/domain/expected-burn"
+import { DEFAULT_SETTINGS, type ProductionSettings } from "@/lib/domain/settings"
 
 // ============================================================================
 // The ONE contract for a material's stock status.
@@ -128,11 +130,14 @@ export function buildMaterialStatus(input: {
   /** The report window's end date. */
   windowEnd: string
   fromISO: string
+  /** Admin-editable forecast. Defaults to the confirmed figures. */
+  settings?: ProductionSettings
 }): MaterialStatus {
   const burnDays = usageSpanOperatingDays(input.usageDates, input.windowEnd, input.fromISO)
   const measured = projectRunOut(input.remaining, input.usedInWindow, burnDays, input.fromISO)
   const sampleDays = distinctDays(input.usageDates)
-  const expectedPerDay = expectedDailyBurn(input.key)
+  const settings = input.settings ?? DEFAULT_SETTINGS
+  const expectedPerDay = expectedDailyBurn(input.key, settings)
 
   const thin = sampleDays < MIN_SAMPLE_DAYS
   const implausible = burnLooksImplausible({ avgPerDay: measured.avgPerOperatingDay, expectedPerDay })
@@ -145,7 +150,7 @@ export function buildMaterialStatus(input: {
 
   // The entry unit and its piece/litre equivalent come from the ledger-unit registry,
   // so one material cannot be captioned "litres" on one screen and "drums" on another.
-  const ledger = ledgerUnitFor(input.key)
+  const ledger = ledgerUnitFor(input.key, settings.conversions)
   return {
     key: input.key,
     label: input.label,

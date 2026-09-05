@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ClipboardList, History, Home, PackagePlus, User, Users, Warehouse } from "lucide-react"
+import { ClipboardList, History, Home, PackagePlus, SlidersHorizontal, User, Users, Warehouse } from "lucide-react"
 import { isActiveNav, navFor, type NavKey } from "@/lib/domain/roles"
 import { cn } from "@/lib/utils"
 
@@ -25,6 +25,7 @@ const ICON: Record<NavKey, typeof Home> = {
   history: History,
   stock: Warehouse,
   users: Users,
+  settings: SlidersHorizontal,
   profile: User,
 }
 

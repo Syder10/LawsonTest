@@ -103,8 +103,14 @@ create table public.herb_types (
 );
 
 -- ── packaging_bom: materials consumed per carton produced ────────────────────
--- Single source of truth for the stamp/carton consumption rates that were
--- previously hardcoded in the procurement route (9 stamps/Bitters, 6/Ginger).
+-- Single source of truth for the stamp/carton consumption rates that were once
+-- hardcoded in the procurement route.
+--
+-- STAMPS ARE 12 PER CARTON FOR BOTH PRODUCTS (user-confirmed 2026-09-03: every
+-- bottle carries a tax stamp, and a carton is 12 bottles). This supersedes an
+-- earlier 9/6 split — under that reading a third of Bitters bottles and half of
+-- Ginger bottles would have gone out unstamped, and the ledger would have
+-- under-deducted stamps by the same margin on every packaging record.
 -- Read by stock_balance_core (0005) to DERIVE stamp/carton consumption from the
 -- packaging records, so it self-corrects on edit/delete and cannot drift.
 --
@@ -119,8 +125,8 @@ create table public.packaging_bom (
   cartons_per_carton integer not null default 1
 );
 insert into public.packaging_bom (product, stamps_per_carton, cartons_per_carton) values
-  ('Bitters', 9, 1),
-  ('Ginger',  6, 1);
+  ('Bitters', 12, 1),
+  ('Ginger',  12, 1);
 
 -- ── RLS: reference data is world-readable (authenticated), admin-writable ────
 alter table public.departments          enable row level security;

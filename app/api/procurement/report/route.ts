@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { requireProcurement } from "@/lib/auth/guards"
-import { STAMP_PCS_PER_COIL, STAMP_COILS_PER_BOX, TAPE_PCS_PER_BOX, HAIRNET_PACKS_PER_BOX, NOSEMASK_PACKS_PER_BOX, GLOVES_PACKS_PER_BOX } from "@/lib/domain/materials"
 import { operatingDaysBetween } from "@/lib/domain/operating-days"
+import { settingsFromRow, type Conversions } from "@/lib/domain/settings"
+import { stampsPerCarton } from "@/lib/domain/expected-burn"
 import { buildMaterialStatus, THRESHOLD_PAYLOAD, type ProcurementMaterialStatus } from "@/lib/domain/stock-status"
 import type { Product } from "@/lib/db/types"
 
@@ -23,18 +24,18 @@ import type { Product } from "@/lib/db/types"
 // shared with /api/analytics/report so the two contracts cannot diverge.
 // ============================================================================
 
-const STAMPS_PER_CARTON = { Bitters: 9, Ginger: 6 } as const
-
-function breakdown(key: string, pcs: number): string | null {
+/** Boxes-and-loose reading of a piece balance, on the configured pack sizes. */
+function breakdown(key: string, pcs: number, c: Conversions): string | null {
+  const split = (per: number, loose: string) => `${Math.floor(pcs / per)} boxes · ${pcs % per} ${loose}`
   switch (key) {
     case "tax_stamp": {
-      const coils = Math.floor(pcs / STAMP_PCS_PER_COIL)
-      return `${Math.floor(coils / STAMP_COILS_PER_BOX)} boxes · ${coils % STAMP_COILS_PER_BOX} coils · ${pcs % STAMP_PCS_PER_COIL} pcs`
+      const coils = Math.floor(pcs / c.stampPcsPerCoil)
+      return `${Math.floor(coils / c.stampCoilsPerBox)} boxes · ${coils % c.stampCoilsPerBox} coils · ${pcs % c.stampPcsPerCoil} pcs`
     }
-    case "seal_tape": return `${Math.floor(pcs / TAPE_PCS_PER_BOX)} boxes · ${pcs % TAPE_PCS_PER_BOX} loose`
-    case "hair_net": return `${Math.floor(pcs / HAIRNET_PACKS_PER_BOX)} boxes · ${pcs % HAIRNET_PACKS_PER_BOX} packs`
-    case "nose_mask": return `${Math.floor(pcs / NOSEMASK_PACKS_PER_BOX)} boxes · ${pcs % NOSEMASK_PACKS_PER_BOX} packs`
-    case "gloves": return `${Math.floor(pcs / GLOVES_PACKS_PER_BOX)} boxes · ${pcs % GLOVES_PACKS_PER_BOX} packs`
+    case "seal_tape": return split(c.tapePcsPerBox, "loose")
+    case "hair_net": return split(c.hairnetPacksPerBox, "packs")
+    case "nose_mask": return split(c.nosemaskPacksPerBox, "packs")
+    case "gloves": return split(c.glovesPacksPerBox, "packs")
     default: return null
   }
 }
@@ -71,21 +72,41 @@ export async function GET(request: Request) {
       usageDates: o.usedOn,
       windowEnd: to,
       fromISO: today,
+      settings,
     }),
     group: o.group,
     receivedInWindow: Math.round(o.received),
-    breakdown: breakdown(o.key, o.remaining),
+    breakdown: breakdown(o.key, o.remaining, settings.conversions),
   })
 
-  const [balancesRes, liveRes, pkgRes, receiptsRes, stockRes, blowingRes] = await Promise.all([
+  const [balancesRes, liveRes, pkgRes, receiptsRes, stockRes, blowingRes, settingsRes, recipesRes, bomRes] = await Promise.all([
     supabase.from("consumable_stock").select("material, product, remaining_pcs"),
     supabase.rpc("finished_goods_stock"),
     supabase.from("packaging_daily_records").select("date, product, quantity_cartons_produced").gte("date", from).lte("date", to),
     supabase.from("raw_materials_received").select("*").gte("date", from).lte("date", to).order("date", { ascending: false }).order("created_at", { ascending: false }).limit(200),
     supabase.from("stock_records").select("date, material, product, quantity_received, quantity_used").in("material", ["alcohol", "caps", "labels", "caramel"]).gte("date", from).lte("date", to),
     supabase.from("blowing_daily_records").select("date, quantity_received_bags, preforms_used_bags").gte("date", from).lte("date", to),
+    // The admin-editable forecast. A missing row (0006 not applied) degrades to the
+    // confirmed defaults rather than zeroing every expected rate.
+    supabase.from("app_settings").select("*").maybeSingle(),
+    supabase.from("product_recipes").select("product, ingredient, label, litres_per_carton, display_order"),
+    // The rate the LEDGER deducts. Saving settings writes it here too, but reading it
+    // rather than recomputing means the "used" figure below always matches the balance
+    // the ledger actually derived — even if that write had failed.
+    supabase.from("packaging_bom").select("product, stamps_per_carton"),
   ])
 
+  const settings = settingsFromRow(settingsRes.data, recipesRes.data)
+  /**
+   * Stamps per carton as the LEDGER deducts them. Falls back to the settings-derived
+   * rate (bottles per carton × stamps per bottle) if packaging_bom cannot be read —
+   * never to a hardcoded number, which is how a 9-versus-12 disagreement survived here
+   * for weeks.
+   */
+  const stampRateFor = (product: Product): number => {
+    const row = (bomRes.data ?? []).find((b) => b.product === product)
+    return row ? Number(row.stamps_per_carton) : stampsPerCarton(settings.conversions)
+  }
   const balances = balancesRes.data ?? []
   const receipts = receiptsRes.data ?? []
   const pkg = pkgRes.data ?? []
@@ -119,7 +140,8 @@ export async function GET(request: Request) {
     receipts.filter((r: any) => r.material_type === mt).reduce((s: number, r: any) => s + (r.ppe_given_pcs || 0), 0)
   const givenOutOn = (mt: string) =>
     receipts.filter((r: any) => r.material_type === mt && (r.ppe_given_pcs || 0) > 0).map((r: any) => r.date as string)
-  const stampsUsed = sumProduced(bitters) * STAMPS_PER_CARTON.Bitters + sumProduced(ginger) * STAMPS_PER_CARTON.Ginger
+  const stampsUsed =
+    sumProduced(bitters) * stampRateFor("Bitters") + sumProduced(ginger) * stampRateFor("Ginger")
   const packagingOn = producedOn(pkg)
 
   const procurement = [

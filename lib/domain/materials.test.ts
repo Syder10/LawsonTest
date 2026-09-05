@@ -9,9 +9,13 @@ import {
   STAMP_PCS_PER_BOX,
   STAMP_PCS_PER_COIL,
   TAPE_PCS_PER_BOX,
+  ledgerUnitFor,
   pcsPerBox,
+  pcsPerBoxFor,
+  stampPcsPerBox,
   type MaterialType,
 } from "@/lib/domain/materials"
+import { DEFAULT_CONVERSIONS, type Conversions } from "@/lib/domain/settings"
 
 describe("tax stamp conversions", () => {
   it("puts 6 coils in a stamp box", () => {
@@ -129,5 +133,55 @@ describe("pcsPerBox", () => {
 
   it("falls back to 1 for an unrecognised material rather than throwing", () => {
     expect(pcsPerBox("apron" as MaterialType)).toBe(1)
+  })
+})
+
+// ════════════════════════════════════════════════════════════════════════════
+// Every figure above is a DEFAULT: the live pack sizes and container contents are
+// admin-editable, and the procurement route writes a box→pieces conversion INTO the
+// row it stores. A stale factor there is a permanently wrong balance.
+// ════════════════════════════════════════════════════════════════════════════
+describe("settings-driven conversions", () => {
+  const convert = (patch: Partial<Conversions>): Conversions => ({ ...DEFAULT_CONVERSIONS, ...patch })
+
+  it("agrees with the defaults when handed the default conversions", () => {
+    expect(stampPcsPerBox(DEFAULT_CONVERSIONS)).toBe(STAMP_PCS_PER_BOX)
+    for (const m of ALL_MATERIAL_TYPES) {
+      expect(pcsPerBoxFor(m, DEFAULT_CONVERSIONS), m).toBe(pcsPerBox(m))
+    }
+  })
+
+  it("follows an edited pack size", () => {
+    expect(stampPcsPerBox(convert({ stampCoilsPerBox: 4, stampPcsPerCoil: 10_000 }))).toBe(40_000)
+    expect(pcsPerBoxFor("gloves", convert({ glovesPacksPerBox: 20 }))).toBe(20)
+    expect(pcsPerBoxFor("seal_tape", convert({ tapePcsPerBox: 36 }))).toBe(36)
+  })
+
+  it("still returns 1 for the materials counted in pieces already", () => {
+    expect(pcsPerBoxFor("carton_bitters", convert({ tapePcsPerBox: 99 }))).toBe(1)
+    expect(pcsPerBoxFor("tax_stamp", DEFAULT_CONVERSIONS)).toBe(1)
+  })
+
+  it("takes the count per container from the settings, not from the constant", () => {
+    // The unit WORD stays in code (it keys the entry-form labels); only the quantity
+    // moves, and it must move on every screen at once.
+    expect(ledgerUnitFor("alcohol", convert({ drumLitres: 200 }))).toEqual({
+      unit: "drums",
+      each: { qty: 200, unit: "litres" },
+    })
+    expect(ledgerUnitFor("caps", convert({ capsPcsPerBox: 5000 }))?.each?.qty).toBe(5000)
+    expect(ledgerUnitFor("caramel_ginger", convert({ gallonLitres: 25 }))?.each?.qty).toBe(25)
+    // Prefixed and aliased keys resolve the same way.
+    expect(ledgerUnitFor("preforms", convert({ preformPcsPerBag: 500 }))?.each?.qty).toBe(500)
+    expect(ledgerUnitFor("labels_bitters", convert({ labelPcsPerRoll: 1000 }))?.each?.qty).toBe(1000)
+  })
+
+  it("leaves a material with no stated content bare, whatever the settings say", () => {
+    // Herb sacks have no stated weight and the business asked for none to be shown.
+    expect(ledgerUnitFor("herb_alligator_pepper", DEFAULT_CONVERSIONS)).toEqual({ unit: "sacks" })
+  })
+
+  it("keeps the default when no conversions are passed", () => {
+    expect(ledgerUnitFor("alcohol")?.each?.qty).toBe(DEFAULT_CONVERSIONS.drumLitres)
   })
 })

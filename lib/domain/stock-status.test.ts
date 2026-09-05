@@ -64,7 +64,7 @@ describe("buildMaterialStatus — the contract", () => {
   // Fri 14th → Thu 20th August 2026 is SIX operating days (Sunday the 16th is not
   // one), so a sample recorded on those two dates spans 6 operating days.
   const SPAN_6 = ["2026-08-14", "2026-08-20"]
-  const at = (over: { remaining: number; usedInWindow: number; usageDates?: string[] }) =>
+  const at = (over: { remaining: number; usedInWindow: number; usageDates?: string[]; key?: string }) =>
     buildMaterialStatus({
       key: "caps",
       label: "Caps",
@@ -74,6 +74,11 @@ describe("buildMaterialStatus — the contract", () => {
       fromISO: FROM,
       ...over,
     })
+
+  // Herbs have a ledger unit but no forecast rate (extraction has no per-carton
+  // recipe), which makes them the material for testing the MEASURED path.
+  const measuredOnly = (over: { remaining: number; usedInWindow: number; usageDates?: string[] }) =>
+    at({ ...over, key: "herb" })
 
   const built = at({ remaining: 500, usedInWindow: 120 })
 
@@ -109,9 +114,11 @@ describe("buildMaterialStatus — the contract", () => {
 
   it("derives the burn rate per OPERATING day, not per calendar day", () => {
     // 120 used over 6 operating days = 20/day, so 500 remaining lasts 25 days.
-    expect(built.burnDays).toBe(6)
-    expect(built.avgPerDay).toBe(20)
-    expect(built.operatingDaysLeft).toBe(25)
+    const m = measuredOnly({ remaining: 500, usedInWindow: 120 })
+    expect(m.burnDays).toBe(6)
+    expect(m.avgPerDay).toBe(20)
+    expect(m.operatingDaysLeft).toBe(25)
+    expect(m.basis).toBe("measured")
   })
 
   it("reports how much data the projection rests on", () => {
@@ -120,14 +127,14 @@ describe("buildMaterialStatus — the contract", () => {
   })
 
   it("sets the level from the projection rather than taking it on trust", () => {
-    expect(built.level).toBe("none") // 25 days is comfortable
-    const tight = at({ remaining: 60, usedInWindow: 120 })
+    expect(measuredOnly({ remaining: 500, usedInWindow: 120 }).level).toBe("none") // 25 days
+    const tight = measuredOnly({ remaining: 60, usedInWindow: 120 })
     expect(tight.operatingDaysLeft).toBe(3)
     expect(tight.level).toBe("red")
   })
 
-  it("reports no usage as null days and projects no run-out date", () => {
-    const idle = at({ remaining: 40, usedInWindow: 0, usageDates: [] })
+  it("reports no usage as null days where there is no rate to fall back on", () => {
+    const idle = measuredOnly({ remaining: 40, usedInWindow: 0, usageDates: [] })
     expect(idle.operatingDaysLeft).toBeNull()
     expect(idle.runOutDate).toBeNull()
     expect(idle.avgPerDay).toBe(0)
@@ -136,7 +143,7 @@ describe("buildMaterialStatus — the contract", () => {
   })
 
   it("projects a real run-out date when stock is short", () => {
-    const soon = at({ remaining: 40, usedInWindow: 120 })
+    const soon = measuredOnly({ remaining: 40, usedInWindow: 120 })
     expect(soon.runOutDate).toMatch(/^\d{4}-\d{2}-\d{2}$/)
     expect(soon.runOutDate! >= FROM).toBe(true)
   })
@@ -154,7 +161,7 @@ describe("buildMaterialStatus — the contract", () => {
     // (26 of them), turning 25/day into 0.96/day. The denominator is now the day the
     // data actually covers, so the MEASURED rate is 25/day.
     const oneDay = buildMaterialStatus({
-      key: "caps", label: "Caps", unit: "pcs", // no expected rate → measured is used
+      key: "herb", label: "Herbs", unit: "sacks", // no forecast rate → measured is used
       remaining: 600, usedInWindow: 25,
       usageDates: ["2026-08-20"], windowEnd: "2026-08-20", fromISO: "2026-08-20",
     })
@@ -349,14 +356,17 @@ describe("ledger units", () => {
   })
 
   it("leaves a material outside the ledger registry untouched", () => {
-    const stamps = buildMaterialStatus({
-      key: "tax_stamp", label: "Tax Stamps", unit: "pcs",
+    // PPE is issued to people rather than consumed per carton: no container unit, and
+    // no forecast rate to fall back on.
+    const ppe = buildMaterialStatus({
+      key: "seal_tape", label: "Seal Tape", unit: "pcs",
       remaining: 1000, usedInWindow: 100,
       usageDates: [FROM], windowEnd: FROM, fromISO: FROM,
     })
-    expect(stamps.unit).toBe("pcs")
-    expect(stamps.unitEach).toBeUndefined()
-    expect(stamps.expectedPerDay).toBeNull()
+    expect(ppe.unit).toBe("pcs")
+    expect(ppe.unitEach).toBeUndefined()
+    expect(ppe.expectedPerDay).toBeNull()
+    expect(ppe.basis).toBe("measured")
   })
 })
 

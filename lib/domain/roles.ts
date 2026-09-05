@@ -47,7 +47,7 @@ export const isKnownRole = (role: string): role is UserRole =>
 // a "More" overflow. That cap is a real constraint, so each role gets the three to
 // five things it actually does rather than every route it may access.
 
-export type NavKey = "home" | "submit" | "receive" | "history" | "stock" | "users" | "profile"
+export type NavKey = "home" | "submit" | "receive" | "history" | "stock" | "users" | "settings" | "profile"
 
 export interface NavItem {
   key: NavKey
@@ -63,6 +63,7 @@ const ITEM: Record<NavKey, NavItem> = {
   history: { key: "history", href: "/dashboard/history", label: "History" },
   stock: { key: "stock", href: "/dashboard/procurement/stock", label: "Stock" },
   users: { key: "users", href: "/dashboard/admin/users", label: "Users" },
+  settings: { key: "settings", href: "/dashboard/admin/settings", label: "Settings" },
   profile: { key: "profile", href: "/dashboard/profile", label: "Profile" },
 }
 
@@ -82,7 +83,7 @@ const NAV_BY_ROLE: Record<UserRole, NavKey[]> = {
   supervisor: ["home", "submit", "history", "profile"],
   manager: ["home", "stock", "profile"],
   procurement: ["home", "receive", "stock", "history", "profile"],
-  admin: ["home", "users", "stock", "profile"],
+  admin: ["home", "users", "stock", "settings", "profile"],
 }
 
 export function navFor(role: string): NavItem[] {

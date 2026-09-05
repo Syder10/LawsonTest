@@ -232,6 +232,51 @@ export type ConsumableMaterialRow = {
   display_order: number
 }
 
+/**
+ * Singleton settings row (0006). `id` is always true — the table has a CHECK that
+ * enforces it, so the app reads and writes the one row rather than a collection.
+ */
+export type AppSettingsRow = {
+  id: boolean
+  cartons_per_shift_bitters: number
+  cartons_per_shift_ginger: number
+  shifts_per_day: number
+  waste_allowance_pct: number
+  alcohol_drums_per_day: number
+  // Conversions (0007). Every number that feeds a calculation; the unit WORDS stay in
+  // code because entry-form labels — which key submissions — are built from them.
+  bottles_per_carton: number
+  bottle_litres: number
+  caps_per_bottle: number
+  labels_per_bottle: number
+  stamps_per_bottle: number
+  preforms_per_bottle: number
+  drum_litres: number
+  gallon_litres: number
+  tank_litres: number
+  rambo_litres: number
+  caps_pcs_per_box: number
+  label_pcs_per_roll: number
+  preform_pcs_per_bag: number
+  stamp_pcs_per_coil: number
+  stamp_coils_per_box: number
+  tape_pcs_per_box: number
+  hairnet_packs_per_box: number
+  nosemask_packs_per_box: number
+  gloves_packs_per_box: number
+  updated_at: string
+  updated_by: string | null
+}
+
+/** One ingredient of one product's per-carton recipe (0007). */
+export type ProductRecipeRow = {
+  product: Product
+  ingredient: string
+  label: string
+  litres_per_carton: number
+  display_order: number
+}
+
 export type PackagingBomRow = {
   product: Product
   stamps_per_carton: number
@@ -258,6 +303,8 @@ export type Database = {
       stock_materials: T<StockMaterialRow>
       consumable_materials: T<ConsumableMaterialRow>
       packaging_bom: T<PackagingBomRow>
+      app_settings: T<AppSettingsRow>
+      product_recipes: T<ProductRecipeRow>
       blowing_daily_records: T<BlowingRow>
       alcohol_blending_daily_records: T<AlcoholBlendingRow>
       ginger_production_records: T<GingerProductionRow>
@@ -331,6 +378,13 @@ export type Database = {
       finished_goods_stock: {
         Args: Record<string, never>
         Returns: { product: Product; available: number; total_produced: number; total_loaded: number }[]
+      }
+      // Replaces the recipes for the products in the payload, in ONE transaction, so
+      // the deferred carton-fills check judges the final state rather than a half-
+      // applied edit. Admin only (checked inside, since SECURITY DEFINER skips RLS).
+      save_recipes: {
+        Args: { payload: ProductRecipeRow[] }
+        Returns: ProductRecipeRow[]
       }
     }
     Enums: {

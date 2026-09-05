@@ -10,6 +10,7 @@ import { DayDetailDrawer } from "./manager/day-detail-drawer"
 import { BomPanel } from "./manager/bom-panel"
 import { fmt1 } from "./manager/viz"
 import { isDepartmentReport, type AnalyticsResponse } from "@/lib/domain/analytics-contract"
+import type { MaterialStatus } from "@/lib/domain/stock-status"
 import { Card, Eyebrow, EmptyState, StatTile } from "@/components/primitives"
 
 // ============================================================================
@@ -27,6 +28,16 @@ import { Card, Eyebrow, EmptyState, StatTile } from "@/components/primitives"
 
 /** A value that may be uncomputable (rate with no production) — never NaN. */
 const kpiValue = (v: number | null) => (v === null ? "—" : v)
+
+/**
+ * "250 litres each" under the drum count, from the material row rather than from a
+ * constant here: how much a drum holds is an admin setting, and a tile that restated it
+ * would be the one figure on the page that did not follow the settings.
+ */
+const alcoholEach = (materials: MaterialStatus[]): string | undefined => {
+  const each = materials.find((m) => m.key === "alcohol")?.unitEach
+  return each ? `${each.qty.toLocaleString()} ${each.unit} each` : undefined
+}
 
 export function ManagerDashboard() {
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS)
@@ -157,7 +168,9 @@ export function ManagerDashboard() {
                 label="Alcohol used"
                 value={overview.totals.alcohol_used}
                 unit="drums"
-                sub="250 L each"
+                // Litres per drum is a setting, so take it from the material row the
+                // report already built rather than restating it here.
+                sub={alcoholEach(overview.materials)}
                 icon={<Droplet className="w-5 h-5" />}
               />
               <StatTile
@@ -175,7 +188,11 @@ export function ManagerDashboard() {
               <ShiftBreakdown data={overview.byShift} />
             </div>
 
-            <BomPanel bitters={overview.totals.bitters_cartons} ginger={overview.totals.ginger_cartons} />
+            <BomPanel
+              bitters={overview.totals.bitters_cartons}
+              ginger={overview.totals.ginger_cartons}
+              bom={overview.bom}
+            />
           </div>
         )}
 

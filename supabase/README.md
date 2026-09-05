@@ -16,7 +16,15 @@ ones before it.
 | `0002_reference_data.sql` | Reference tables + seed: `departments`, `stock_materials`, `consumable_materials`, `herb_types`, `packaging_bom` (the stamp/carton rates the ledger derives consumption from). |
 | `0003_identity.sql` | `profiles` (1:1 with `auth.users`), the resilient `handle_new_user()` auto-provision trigger, RLS, and the guard that stops a supervisor changing their own `role` / `department` / `group_number`. |
 | `0004_records.sql` | Everything supervisors and procurement write to: the 7 typed production tables, consolidated `stock_records`, `no_work_records`, `consumable_stock` + `raw_materials_received`, `supervisor_streaks` / `supervisor_badges`, shared RLS/indexes/triggers, the PPE seed, and the one-record-per-shift unique indexes. Requires **PG15+** (`NULLS NOT DISTINCT`). |
-| `0005_ledger_and_grants.sql` | The derived stock ledger — `stock_counts` + `shift_rank`, `stock_balance_core`, `stock_opening`, `stock_remaining_asof`, `stock_ledger`, `record_stock_count`, `finished_goods_stock()` — then the Data API grants. **Must run last.** |
+| `0005_ledger_and_grants.sql` | The derived stock ledger — `stock_counts` + `shift_rank`, `stock_balance_core`, `stock_opening`, `stock_remaining_asof`, `stock_ledger`, `record_stock_count`, `finished_goods_stock()` — then the Data API grants. **Must run last of 0001–0005**, since it grants what they create. |
+| `0006_app_settings.sql` | The admin-editable production forecast (`app_settings`, one row) that days-left projections fall back on. Self-contained — it carries its own RLS and grants, so it runs cleanly **after** 0005 and can be applied on its own to an already-migrated database. |
+| `0007_settings_conversions_recipes.sql` | Makes the unit conversions (what a carton, vessel, box, roll or bag holds) and the per-carton `product_recipes` editable, with the carton invariant enforced by a deferred trigger and `save_recipes()` to replace a recipe atomically. Also self-contained. |
+
+> **The stamp rate lives in two places on purpose.** `app_settings` says one stamp per
+> bottle; `packaging_bom` is what `stock_balance_core` actually deducts per carton. The
+> admin settings route writes the second from the first on every save, and
+> `supabase/tests/05_settings.sql` asserts they agree — if they ever disagree, stamp
+> balances and every stamp projection drift apart silently.
 
 > Consolidated from a previous 15-file set. The squash was verified schema-identical
 > with `scripts/verify-squash.sh`, which diffs four independent projections
@@ -94,6 +102,8 @@ tsc and the build); `.github/workflows/ci.yml` runs the same files in CI.
 | `01_ledger.sql` | Out-of-order shift self-healing, reconciliation variance, preform/stamp/carton derived balances, no drift on edit. |
 | `02_security.sql` | The profile privilege guard (incl. that admin + service-role paths still work), the duplicate-submission guards and their exemptions, and `handle_new_user`'s tolerance of bad metadata. |
 | `03_api_grants.sql` | The Data API grants, the "every public table has RLS" invariant those grants depend on, and that `anon` cannot execute the SECURITY DEFINER stock functions. |
+| `04_dept_scope.sql` | Per-department reads: each department reaches its own rows, a cross-department filter yields nothing, and per-material balances stay independent. |
+| `05_settings.sql` | The settings singleton and its conversions; that `packaging_bom` deducts the stamp rate the settings imply; the carton invariant (rejects a breaking edit, allows a rebalancing one); and `save_recipes` — admin only, atomic, still bound by the invariant, unreachable by `anon`. |
 
 ```bash
 npm run validate     # everything
