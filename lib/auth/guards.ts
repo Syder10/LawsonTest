@@ -50,4 +50,25 @@ export async function requireRole(roles: UserRole[]): Promise<GuardResult> {
 // Convenience wrappers for the common cases.
 export const requireStaff = () => requireRole(["manager", "admin"])
 export const requireAdmin = () => requireRole(["admin"])
-export const requireProcurement = () => requireRole(["procurement", "manager", "admin"])
+
+/**
+ * May RECORD a physical stock movement: a receipt, an invoice, a stock count, a
+ * dispatch. Mirrors the SQL predicate `can_write_stock()` (0008).
+ *
+ * Managers and admins are included because management owns reconciliation — a stock
+ * count is their instrument for correcting ledger drift.
+ */
+export const requireStockWrite = () => requireRole(["stock", "manager", "admin"])
+
+/**
+ * May READ stock data. Adds `procurement`, which writes nothing. Mirrors the SQL
+ * predicate `can_read_stock()` (0008).
+ */
+export const requireStockRead = () => requireRole(["stock", "procurement", "manager", "admin"])
+
+// `requireProcurement` (procurement + manager + admin) is GONE as of 0008, rather
+// than redefined. It meant "may touch stock", which the split makes ambiguous: the
+// procurement office may now read stock and may not write it, so any single
+// redefinition would have silently widened or narrowed every one of its call sites.
+// Deleting it forces each one to state which half it needs, and a stale import fails
+// the typecheck instead of quietly resolving to the wrong rule.

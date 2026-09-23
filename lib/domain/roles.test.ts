@@ -136,8 +136,8 @@ describe("isKnownRole", () => {
 })
 
 describe("ROLES", () => {
-  it("lists the four application roles in privilege order", () => {
-    expect(ROLES).toEqual(["supervisor", "manager", "admin", "procurement"])
+  it("lists the five application roles in privilege order", () => {
+    expect(ROLES).toEqual(["supervisor", "manager", "admin", "procurement", "stock"])
   })
 
   it("contains no duplicates", () => {
@@ -151,12 +151,14 @@ describe("ROLE_LABELS", () => {
       supervisor: "Supervisor",
       manager: "Manager",
       admin: "Administrator",
-      procurement: "Stock Office",
+      procurement: "Procurement",
+      stock: "Stock Keeper",
     })
   })
 
-  it("renames procurement to the business-facing 'Stock Office'", () => {
-    expect(ROLE_LABELS.procurement).toBe("Stock Office")
+  it("labels the new split roles distinctly: 'Procurement' (read-only) vs 'Stock Keeper' (writes)", () => {
+    expect(ROLE_LABELS.procurement).toBe("Procurement")
+    expect(ROLE_LABELS.stock).toBe("Stock Keeper")
   })
 
   it("expands admin to 'Administrator'", () => {
@@ -194,15 +196,18 @@ describe("ROLE_COLORS", () => {
     }
   })
 
-  it("gives each role a distinct palette", () => {
+  it("gives each role a palette — stock and procurement share one by design", () => {
+    // stock and procurement sit at the same rung deliberately: neither outranks the
+    // other, they do different jobs. Distinguishing them by weight would imply a
+    // privilege ordering that does not exist, and the label already tells them apart.
     const palettes = ROLES.map((r) => ROLE_COLORS[r])
-    expect(new Set(palettes).size).toBe(palettes.length)
+    expect(new Set(palettes).size).toBe(4)
   })
 })
 
 describe("roleLabel", () => {
   it("returns the label for each known role", () => {
-    expect(ROLES.map(roleLabel)).toEqual(["Supervisor", "Manager", "Administrator", "Stock Office"])
+    expect(ROLES.map(roleLabel)).toEqual(["Supervisor", "Manager", "Administrator", "Procurement", "Stock Keeper"])
   })
 
   it("falls back to 'Supervisor' for an unknown role", () => {

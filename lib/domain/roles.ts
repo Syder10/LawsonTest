@@ -2,14 +2,52 @@ import type { UserRole } from "@/lib/db/types"
 
 // Shared role presentation. The label map was duplicated in the dashboard
 // layout header and the user-management screen.
-export const ROLES: UserRole[] = ["supervisor", "manager", "admin", "procurement"]
+export const ROLES: UserRole[] = ["supervisor", "manager", "admin", "procurement", "stock"]
 
+/**
+ * `stock` is "Stock Keeper" and `procurement` is "Procurement" — the labels changed
+ * with the 0008 split, and the change matters.
+ *
+ * `procurement` used to be labelled "Stock Office", which was accurate when one role
+ * did both jobs. It is now the read-only buying office, so keeping that label on it
+ * would have named the wrong role after the job moved: someone assigning accounts
+ * would give the store's staff the role that cannot record a receipt.
+ */
 export const ROLE_LABELS: Record<string, string> = {
   supervisor: "Supervisor",
   manager: "Manager",
   admin: "Administrator",
-  procurement: "Stock Office",
+  procurement: "Procurement",
+  stock: "Stock Keeper",
 }
+
+/**
+ * What each role is FOR, shown beside the label wherever an account is assigned.
+ *
+ * The stock/procurement distinction is invisible from the names alone, and picking
+ * the wrong one leaves someone unable to do their job (or able to re-anchor the
+ * ledger when they should not be). The screen that assigns roles is the only place
+ * that can prevent it, so it says so.
+ */
+export const ROLE_DESCRIPTIONS: Record<string, string> = {
+  supervisor: "Files production records for one department",
+  manager: "Reads analytics; can record stock counts",
+  admin: "Full access, plus users and settings",
+  procurement: "Reads stock data — cannot record receipts or counts",
+  stock: "Records receipts, invoices, stock counts and dispatch",
+}
+
+/** Roles that may RECORD a physical stock movement. Mirrors SQL `can_write_stock()`. */
+export const STOCK_WRITE_ROLES: UserRole[] = ["stock", "manager", "admin"]
+
+/** Roles that may READ stock data. Mirrors SQL `can_read_stock()`. */
+export const STOCK_READ_ROLES: UserRole[] = ["stock", "procurement", "manager", "admin"]
+
+export const canWriteStock = (role: string): boolean =>
+  (STOCK_WRITE_ROLES as string[]).includes(role)
+
+export const canReadStock = (role: string): boolean =>
+  (STOCK_READ_ROLES as string[]).includes(role)
 
 /**
  * Role badge styling, on the semantic tokens.
@@ -23,6 +61,10 @@ export const ROLE_LABELS: Record<string, string> = {
 export const ROLE_COLORS: Record<string, string> = {
   admin: "bg-brand-solid text-brand-ink border-brand-solid",
   manager: "bg-brand-subtle text-brand-subtle-ink border-brand/25",
+  // stock and procurement sit at the same rung deliberately: neither outranks the
+  // other, they do different jobs. Distinguishing them by weight would imply a
+  // privilege ordering that does not exist, and the label already tells them apart.
+  stock: "bg-surface-sunken text-ink-secondary border-line-strong",
   procurement: "bg-surface-sunken text-ink-secondary border-line-strong",
   supervisor: "bg-surface-card text-ink-muted border-hairline",
 }
@@ -78,11 +120,17 @@ const ITEM: Record<NavKey, NavItem> = {
  * detail through the dashboard's day drawer and the export, and /dashboard/history
  * remains reachable by URL for anyone whose role permits it — it is simply not a
  * tab, because it was never part of their job.
+ *
+ * The stock keeper records receipts, invoices, counts and dispatch. Their tabs are
+ * the operational surfaces they work from: Home, Receive (raw materials in), Stock
+ * (the dashboard), History (their receipts log), and Profile. Invoices and dispatch
+ * will be separate pages under the stock route when built (Phase 4).
  */
 const NAV_BY_ROLE: Record<UserRole, NavKey[]> = {
   supervisor: ["home", "submit", "history", "profile"],
   manager: ["home", "stock", "profile"],
   procurement: ["home", "receive", "stock", "history", "profile"],
+  stock: ["home", "receive", "stock", "history", "profile"],
   admin: ["home", "users", "stock", "settings", "profile"],
 }
 

@@ -19,6 +19,22 @@ ones before it.
 | `0005_ledger_and_grants.sql` | The derived stock ledger — `stock_counts` + `shift_rank`, `stock_balance_core`, `stock_opening`, `stock_remaining_asof`, `stock_ledger`, `record_stock_count`, `finished_goods_stock()` — then the Data API grants. **Must run last of 0001–0005**, since it grants what they create. |
 | `0006_app_settings.sql` | The admin-editable production forecast (`app_settings`, one row) that days-left projections fall back on. Self-contained — it carries its own RLS and grants, so it runs cleanly **after** 0005 and can be applied on its own to an already-migrated database. |
 | `0007_settings_conversions_recipes.sql` | Makes the unit conversions (what a carton, vessel, box, roll or bag holds) and the per-carton `product_recipes` editable, with the carton invariant enforced by a deferred trigger and `save_recipes()` to replace a recipe atomically. Also self-contained. |
+| `0008_stock_separation.sql` | Separates stock keeping from procurement. Adds the `stock` role to `user_role`, splits the access predicate into `can_write_stock()` / `can_read_stock()` (keeping `is_procurement_staff()` as an alias of the read side so no existing policy needs rewriting), and makes `procurement` **read-only**. Adds `invoices` + `invoice_lines`, `dispatches` + `dispatch_lines`, the `record_invoice()` / `record_dispatch()` atomic write RPCs, the `dispatch_totals()` / `dispatch_breakdown()` aggregations, and a nullable `raw_materials_received.invoice_line_id`. Self-contained. |
+
+> **`0008` removes a capability from an existing role.** After applying it, a
+> `procurement` account can no longer log receipts, issue PPE or record a stock
+> count. Move anyone who physically handles stock to the new role first:
+> `update public.profiles set role = 'stock' where email = '…';`
+> Accounts that only *read* stock data stay `procurement`. Skipping this step
+> leaves the store unable to do its job — see PRD.md §9.
+
+> **Dispatch does not feed the finished-goods balance, and there is no variance
+> report.** `finished_goods_stock()` keeps deriving from
+> `packaging_daily_records.quantity_cartons_loaded`; the dispatch log records the
+> same physical event in detail beside it. Dispatched totals may therefore differ
+> from cartons loaded and nothing flags it. That is the decision (PRD.md §3.3), and
+> `supabase/tests/06_stock_separation.sql` asserts the divergence so it cannot be
+> "fixed" silently.
 
 > **The stamp rate lives in two places on purpose.** `app_settings` says one stamp per
 > bottle; `packaging_bom` is what `stock_balance_core` actually deducts per carton. The

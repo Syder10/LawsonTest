@@ -9,7 +9,15 @@
 // using them makes every query row resolve to `never`.
 
 export type Shift = "Morning" | "Afternoon" | "Night"
-export type UserRole = "admin" | "manager" | "supervisor" | "procurement"
+/**
+ * `stock` (0008) records every PHYSICAL movement — receipts, invoices, counts,
+ * dispatch. `procurement` reads the same data and writes none of it.
+ *
+ * The two are separate roles because they are separate people: a stock count
+ * re-anchors the derived ledger, so letting whoever reads a report also record one
+ * means a reporting account can rewrite history. See PRD.md §1.
+ */
+export type UserRole = "admin" | "manager" | "supervisor" | "procurement" | "stock"
 export type Product = "Bitters" | "Ginger"
 
 // Envelope columns shared by every record row.
@@ -182,6 +190,95 @@ export type RawMaterialReceivedRow = {
   ppe_given_to: string | null
   remarks: string | null
   created_at: string
+  /**
+   * The invoice line this delivery was billed under (0008). NULL is normal and must
+   * stay recordable — goods arrive before paperwork, and an invoice's deletion sets
+   * this back to null rather than removing the fact that goods arrived.
+   */
+  invoice_line_id: string | null
+}
+
+// ── Supplier invoices (0008) ────────────────────────────────────────────────
+
+/**
+ * An invoice HEADER as the supplier's document states it.
+ *
+ * `declared_total` is what the document says, which may legitimately differ from the
+ * sum of `invoice_lines.line_total`: real invoices carry freight, tax and discounts
+ * the line model does not represent. That mismatch is WARNED about in the UI and
+ * never blocked — refusing a real document makes users type a fake total, at which
+ * point the record is worthless. See PRD.md FR-9.
+ */
+export type InvoiceRow = {
+  id: string
+  supplier: string
+  invoice_number: string
+  invoice_date: string
+  /** ISO 4217, three upper-case letters. Stored beside the amount — a bare number is not a price. */
+  currency: string
+  declared_total: number | null
+  remarks: string | null
+  recorded_by: string | null
+  user_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * One line of an invoice. `material_type` is free text, not a constrained material
+ * code: an invoice may carry freight, a spare part or a service line, none of which
+ * is a stock material. The constrained code lives on the receipt that links here.
+ */
+export type InvoiceLineRow = {
+  id: string
+  invoice_id: string
+  material_type: string
+  description: string | null
+  quantity: number
+  unit: string
+  unit_cost: number
+  line_total: number // generated: quantity × unit_cost
+  display_order: number
+  created_at: string
+}
+
+// ── Dispatch: the outbound delivery log (0008) ───────────────────────────────
+
+/**
+ * One outbound load: which vehicle, which driver, to where, under which waybill.
+ *
+ * Dated by the day the shift STARTED, like every other record in this schema — use
+ * `shiftDateFor()`, never `new Date()`.
+ *
+ * DELIBERATELY NOT wired into the finished-goods balance, and there is no variance
+ * report. `finished_goods_stock()` keeps deriving from
+ * `packaging_daily_records.quantity_cartons_loaded`; this log sits beside it. The two
+ * may differ and nothing flags it — that is the decision (PRD.md §3.3), asserted in
+ * supabase/tests/06_stock_separation.sql so it cannot be "fixed" silently.
+ */
+export type DispatchRow = {
+  id: string
+  date: string
+  shift: Shift
+  vehicle_reg: string
+  driver_name: string
+  destination: string
+  /** The document number the business searches by. Unique where present, many nulls allowed. */
+  waybill_number: string | null
+  released_by: string | null
+  remarks: string | null
+  user_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** Cartons per product on one load. `cartons > 0`; one line per product per dispatch. */
+export type DispatchLineRow = {
+  id: string
+  dispatch_id: string
+  product: Product
+  cartons: number
+  created_at: string
 }
 
 export type SupervisorStreakRow = {
@@ -317,6 +414,10 @@ export type Database = {
       no_work_records: T<NoWorkRow>
       consumable_stock: T<ConsumableStockRow>
       raw_materials_received: T<RawMaterialReceivedRow>
+      invoices: T<InvoiceRow>
+      invoice_lines: T<InvoiceLineRow>
+      dispatches: T<DispatchRow>
+      dispatch_lines: T<DispatchLineRow>
       supervisor_streaks: T<SupervisorStreakRow>
       supervisor_badges: T<SupervisorBadgeRow>
     }
@@ -385,6 +486,60 @@ export type Database = {
       save_recipes: {
         Args: { payload: ProductRecipeRow[] }
         Returns: ProductRecipeRow[]
+      }
+
+      // ── 0008: stock separation ──────────────────────────────────────────
+      // Both write RPCs exist because their rule spans more than one statement, and
+      // over the Data API a header insert followed by a lines insert is TWO
+      // transactions — a failure between them leaves a header with no lines.
+
+      /** Insert a dispatch and its product lines atomically. Gated to can_write_stock(). */
+      record_dispatch: {
+        Args: {
+          p_date: string
+          p_shift: Shift
+          p_vehicle: string
+          p_driver: string
+          p_destination: string
+          /** [{ product, cartons }] — zero-carton entries are skipped, all-zero is rejected. */
+          p_lines: { product: Product; cartons: number }[]
+          p_waybill?: string | null
+          p_remarks?: string | null
+        }
+        Returns: DispatchRow
+      }
+
+      /** Insert an invoice and its lines atomically. Gated to can_write_stock(). */
+      record_invoice: {
+        Args: {
+          p_supplier: string
+          p_invoice_number: string
+          p_invoice_date: string
+          p_lines: {
+            material_type: string
+            description?: string | null
+            quantity: number
+            unit: string
+            unit_cost: number
+          }[]
+          p_currency?: string
+          /** What the document declares. NOT validated against the line sum — see FR-9. */
+          p_declared_total?: number | null
+          p_remarks?: string | null
+        }
+        Returns: InvoiceRow
+      }
+
+      /** Cartons dispatched per product in a window. SECURITY INVOKER — caller's RLS applies. */
+      dispatch_totals: {
+        Args: { p_from: string; p_to: string }
+        Returns: { product: Product; cartons: number; loads: number }[]
+      }
+
+      /** Cartons dispatched grouped by vehicle, driver or destination (whitelisted). */
+      dispatch_breakdown: {
+        Args: { p_from: string; p_to: string; p_dimension: "vehicle" | "driver" | "destination" }
+        Returns: { label: string; cartons: number; loads: number }[]
       }
     }
     Enums: {

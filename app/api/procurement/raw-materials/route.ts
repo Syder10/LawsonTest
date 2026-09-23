@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireProcurement } from "@/lib/auth/guards"
+import { requireStockRead, requireStockWrite } from "@/lib/auth/guards"
 import type { Product } from "@/lib/db/types"
 import {
   ALL_MATERIAL_TYPES,
@@ -30,7 +30,7 @@ async function conversionsFor(supabase: SupabaseClient<Database>): Promise<Conve
 // consumable_stock running total; tax_stamp + carton come from the DERIVED ledger
 // (stock_remaining_asof) now that they no longer keep a running total.
 export async function GET() {
-  const auth = await requireProcurement()
+  const auth = await requireStockRead()
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
   const { supabase } = auth.ctx
   const today = new Date().toISOString().slice(0, 10)
@@ -84,8 +84,12 @@ export async function GET() {
 
 // POST — record a delivery / issue. The row is inserted through the RLS-bound
 // client; the DB trigger (apply_raw_material_received) updates the balance.
+//
+// requireStockWrite, not requireStockRead: logging a receipt permanently changes a
+// balance, so the read-only procurement office is excluded (PRD.md §4.1). The
+// raw_materials_insert policy enforces the same rule in SQL via can_write_stock().
 export async function POST(request: NextRequest) {
-  const auth = await requireProcurement()
+  const auth = await requireStockWrite()
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
   const { user, profile, supabase } = auth.ctx
 

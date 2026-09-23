@@ -4,6 +4,7 @@ import { bomFor } from "@/lib/domain/bom"
 import { operatingDaysBetween } from "@/lib/domain/operating-days"
 import { settingsFromRow } from "@/lib/domain/settings"
 import { buildMaterialStatus, THRESHOLD_PAYLOAD, type MaterialStatus } from "@/lib/domain/stock-status"
+import { cartonsProducedByDay } from "@/lib/domain/production"
 import type { DepartmentReport, KpiValue, OverviewReport } from "@/lib/domain/analytics-contract"
 import {
   allMaterials,
@@ -297,17 +298,9 @@ export async function GET(request: Request) {
   const ofProduct = (p: string) => pkg.filter((r) => r.product === p)
   const sumProduced = (rows: Row[]) => rows.reduce((s, r) => s + num(r.quantity_cartons_produced), 0)
 
-  const dayMap = new Map<string, { total: number; bitters: number; ginger: number }>()
-  for (const r of pkg) {
-    const date = String(r.date)
-    const v = num(r.quantity_cartons_produced)
-    const d = dayMap.get(date) ?? { total: 0, bitters: 0, ginger: 0 }
-    d.total += v
-    if (r.product === "Bitters") d.bitters += v
-    if (r.product === "Ginger") d.ginger += v
-    dayMap.set(date, d)
-  }
-  const byDay = [...dayMap.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([date, v]) => ({ date, ...v }))
+  // Per-day produced series, shared with the stock dashboard via lib/domain/production
+  // so the two cannot drift.
+  const byDay = cartonsProducedByDay(pkg)
 
   const byShift = SHIFT_ORDER.map((s) => {
     const rows = pkg.filter((r) => r.shift === s)

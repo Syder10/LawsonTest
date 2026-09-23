@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { requireProcurement } from "@/lib/auth/guards"
+import { requireStockRead, requireStockWrite } from "@/lib/auth/guards"
 import type { Product, Shift } from "@/lib/db/types"
 
 // PostgREST serializes `numeric` as JSON strings; coerce the numeric fields so
@@ -11,18 +11,24 @@ const numify = (c: Record<string, any> | null) =>
 // Management stock baseline + reconciliation.
 //
 // Supervisors record only received/used; opening/remaining are derived. This
-// route is how management/procurement (a) set the day-one baseline and (b)
-// correct drift after a physical count. Each count re-anchors the ledger and
+// route is how the stock office and management (a) set the day-one baseline and
+// (b) correct drift after a physical count. Each count re-anchors the ledger and
 // records the counted-vs-computed variance (shrinkage/surplus signal).
 //
-// Gated to procurement + manager + admin (requireProcurement). The actual write
-// goes through the SECURITY DEFINER record_stock_count RPC, which snapshots the
-// computed balance so variance is captured atomically.
+// WRITES are gated to stock + manager + admin (requireStockWrite); READS also
+// allow the read-only procurement office (requireStockRead). A count RE-ANCHORS
+// the ledger — it rewrites what every later balance computes to — so it is the
+// highest-consequence permission in the stock/procurement split, and procurement
+// deliberately does not have it (PRD.md §4.1). The RPC re-checks the same rule in
+// SQL via can_write_stock(), so this guard is defence in depth, not the boundary.
+//
+// The actual write goes through the SECURITY DEFINER record_stock_count RPC, which
+// snapshots the computed balance so variance is captured atomically.
 // ============================================================================
 
 // POST — record a baseline or reconciliation count.
 export async function POST(request: NextRequest) {
-  const auth = await requireProcurement()
+  const auth = await requireStockWrite()
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
   const { supabase } = auth.ctx
 
@@ -71,8 +77,9 @@ export async function POST(request: NextRequest) {
 }
 
 // GET — recent counts + variances (for the reconcile log / variance panels).
+// Read-only, so procurement is included.
 export async function GET(request: NextRequest) {
-  const auth = await requireProcurement()
+  const auth = await requireStockRead()
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
   const { supabase } = auth.ctx
 

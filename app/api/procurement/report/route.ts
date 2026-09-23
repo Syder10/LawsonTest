@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server"
-import { requireProcurement } from "@/lib/auth/guards"
+import { requireStockRead } from "@/lib/auth/guards"
 import { operatingDaysBetween } from "@/lib/domain/operating-days"
 import { settingsFromRow, type Conversions } from "@/lib/domain/settings"
 import { stampsPerCarton } from "@/lib/domain/expected-burn"
 import { buildMaterialStatus, THRESHOLD_PAYLOAD, type ProcurementMaterialStatus } from "@/lib/domain/stock-status"
+import { cartonsProducedByDay, cartonsProducedTotals } from "@/lib/domain/production"
 import type { Product } from "@/lib/db/types"
 
 // ============================================================================
@@ -41,7 +42,7 @@ function breakdown(key: string, pcs: number, c: Conversions): string | null {
 }
 
 export async function GET(request: Request) {
-  const auth = await requireProcurement()
+  const auth = await requireStockRead()
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
   const supabase = auth.ctx.supabase
 
@@ -188,6 +189,10 @@ export async function GET(request: Request) {
       bitters: live.find((l) => l.product === "Bitters")?.available ?? 0,
       ginger: live.find((l) => l.product === "Ginger")?.available ?? 0,
     },
+    // FR-18: cartons produced in the window, per product and per day, from the same
+    // packaging rows the balance derives from.
+    produced: cartonsProducedTotals(pkg),
+    producedByDay: cartonsProducedByDay(pkg),
     receipts: receipts.map((r: any) => ({
       date: r.date, material_type: r.material_type, received_by: r.received_by,
       received_pcs: r.material_type === "tax_stamp" ? r.stamp_total_pcs : r.material_type.startsWith("carton") ? r.carton_total_pcs : r.ppe_pcs_in,
