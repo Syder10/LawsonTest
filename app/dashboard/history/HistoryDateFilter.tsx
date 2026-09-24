@@ -9,9 +9,13 @@ import { Card, Field, Select, TextInput } from "@/components/primitives"
 interface HistoryDateFilterProps {
   selectedDate: string | null
   selectedShift: string | null
+  selectedType: string | null
+  /** Record types the current role may see. A type filter is only shown when
+      there is more than one to choose between. */
+  types: { value: string; label: string }[]
 }
 
-export default function HistoryDateFilter({ selectedDate, selectedShift }: HistoryDateFilterProps) {
+export default function HistoryDateFilter({ selectedDate, selectedShift, selectedType, types }: HistoryDateFilterProps) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -27,11 +31,26 @@ export default function HistoryDateFilter({ selectedDate, selectedShift }: Histo
   )
 
   const clearAll = () => router.push(pathname)
-  const hasFilter = !!selectedDate || !!selectedShift
+  const showTypes = types.length > 1
+  const selectedTypeLabel = types.find((t) => t.value === selectedType)?.label ?? null
+  const hasFilter = !!selectedDate || !!selectedShift || !!selectedType
 
   return (
     <Card padded>
       <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+        {showTypes && (
+          <Field label="Record type" className="flex-1">
+            {(a11y) => (
+              <Select {...a11y} value={selectedType || ""} onChange={(e) => updateParams("type", e.target.value || null)}>
+                <option value="">All record types</option>
+                {types.map((t) => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </Select>
+            )}
+          </Field>
+        )}
+
         <Field label="Date" className="flex-1">
           {(a11y) => (
             <TextInput
@@ -68,6 +87,9 @@ export default function HistoryDateFilter({ selectedDate, selectedShift }: Histo
 
       {hasFilter && (
         <div className="mt-3 flex flex-wrap gap-2">
+          {selectedTypeLabel && (
+            <FilterChip label={selectedTypeLabel} onRemove={() => updateParams("type", null)} />
+          )}
           {selectedDate && (
             <FilterChip
               label={new Date(selectedDate + "T00:00:00Z").toLocaleDateString(undefined, {

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import Link from "next/link"
 import { cn } from "@/lib/utils"
 
 // ============================================================================
@@ -29,6 +30,9 @@ export interface Column<T> {
   hideOnMobile?: boolean
   /** Align digits vertically (numeric columns). */
   numeric?: boolean
+  /** Sits above a whole-row link so its own controls (a button) stay clickable
+      without triggering the row navigation. Only meaningful with `rowHref`. */
+  interactive?: boolean
 }
 
 export function DataTable<T>({
@@ -37,6 +41,7 @@ export function DataTable<T>({
   rowKey,
   empty,
   className,
+  rowHref,
 }: {
   columns: Column<T>[]
   rows: T[]
@@ -44,6 +49,10 @@ export function DataTable<T>({
   /** Shown instead of the table when there are no rows. */
   empty?: ReactNode
   className?: string
+  /** Makes the whole row a link to this href. Implemented as a stretched link
+      inside the primary cell, so the markup stays a valid table and no client
+      `useRouter` is needed. Cells marked `interactive` sit above it. */
+  rowHref?: (row: T) => string
 }) {
   if (rows.length === 0 && empty) return <>{empty}</>
 
@@ -73,7 +82,13 @@ export function DataTable<T>({
           </thead>
           <tbody className="divide-y divide-hairline">
             {rows.map((row) => (
-              <tr key={rowKey(row)} className="hover:bg-surface-sunken/60 transition-colors">
+              <tr
+                key={rowKey(row)}
+                className={cn(
+                  "hover:bg-surface-sunken/60 transition-colors",
+                  rowHref && "relative cursor-pointer",
+                )}
+              >
                 {columns.map((c) => (
                   <td
                     key={c.key}
@@ -81,9 +96,16 @@ export function DataTable<T>({
                       "px-3 py-2.5 text-ink-secondary",
                       c.align === "right" ? "text-right" : "text-left",
                       c.numeric && "tnum",
+                      c.interactive && "relative z-10 w-px",
                     )}
                   >
-                    {c.cell(row)}
+                    {rowHref && c === primary ? (
+                      <Link href={rowHref(row)} className="after:absolute after:inset-0 hover:text-brand transition-colors">
+                        {c.cell(row)}
+                      </Link>
+                    ) : (
+                      c.cell(row)
+                    )}
                   </td>
                 ))}
               </tr>
@@ -95,11 +117,19 @@ export function DataTable<T>({
       {/* ── Mobile: one card per row ──────────────────────────────────────── */}
       <ul className="sm:hidden divide-y divide-hairline">
         {rows.map((row) => (
-          <li key={rowKey(row)} className="px-4 py-3">
-            <div className="font-bold text-ink-primary break-words">{primary.cell(row)}</div>
+          <li key={rowKey(row)} className={cn("px-4 py-3", rowHref && "relative")}>
+            <div className="font-bold text-ink-primary break-words">
+              {rowHref ? (
+                <Link href={rowHref(row)} className="after:absolute after:inset-0">
+                  {primary.cell(row)}
+                </Link>
+              ) : (
+                primary.cell(row)
+              )}
+            </div>
             <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5">
               {rest.map((c) => (
-                <div key={c.key} className="min-w-0">
+                <div key={c.key} className={cn("min-w-0", c.interactive && "relative z-10")}>
                   {/* NOT truncated. `truncate` implies white-space: nowrap, which on a
                       360px phone clipped both the header and — worse — any cell that
                       stacks two lines (a figure plus its unit, or "1 day of data"):

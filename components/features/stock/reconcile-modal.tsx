@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from "@/components/ui/button"
 import { Field, NumberInput, Select, TextInput } from "@/components/primitives"
 import { ledgerUnitFor } from "@/lib/domain/materials"
+import { materialDescriptorForKey } from "@/lib/domain/stock-materials"
 import { toast } from "sonner"
 import type { Product, Shift } from "@/lib/db/types"
 
@@ -48,22 +49,13 @@ export interface ReconcileTarget {
 }
 
 // Map a dashboard material-row key → a ledger reconcile target, or null if the
-// row isn't a derived-ledger material (PPE). Handles both dashboards' key
-// conventions (manager uses cartons_*, procurement uses carton_*).
+// row isn't reconcilable (PPE). Delegates to the shared stock-material registry so
+// the key → { material, product } mapping lives in one place; the registry folds
+// both dashboards' key conventions (manager cartons_*, procurement carton_*).
 export function ledgerTargetForKey(key: string): { material: string; product?: Product } | null {
-  switch (key) {
-    case "alcohol": return { material: "alcohol" }
-    case "preforms": return { material: "preform" }
-    case "caps": return { material: "caps" }
-    case "labels_bitters": return { material: "labels", product: "Bitters" }
-    case "labels_ginger": return { material: "labels", product: "Ginger" }
-    case "caramel_bitters": return { material: "caramel", product: "Bitters" }
-    case "caramel_ginger": return { material: "caramel", product: "Ginger" }
-    case "tax_stamp": return { material: "tax_stamp" }
-    case "carton_bitters": case "cartons_bitters": return { material: "carton", product: "Bitters" }
-    case "carton_ginger": case "cartons_ginger": return { material: "carton", product: "Ginger" }
-    default: return null // PPE (seal_tape / hair_net / nose_mask / gloves)
-  }
+  const d = materialDescriptorForKey(key)
+  if (!d || d.kind === "consumable") return null
+  return d.product ? { material: d.material, product: d.product } : { material: d.material }
 }
 
 const SHIFTS: Shift[] = ["Morning", "Afternoon", "Night"]

@@ -226,7 +226,7 @@ export function StockClient({ canWrite }: { canWrite: boolean }) {
   // The Count action is the only write on this table; readers do not see the column.
   if (canWrite) {
     materialColumns.push({
-      key: "action", header: "Action", align: "right",
+      key: "action", header: "Action", align: "right", interactive: true,
       cell: (m) => {
         const target = ledgerTargetForKey(m.key)
         if (!target) return <span className="text-ink-muted text-xs">—</span>
@@ -426,7 +426,12 @@ export function StockClient({ canWrite }: { canWrite: boolean }) {
               title="Materials — stock & days left"
               hint={`operating days (Mon–Sat) · critical ≤ ${data.thresholds.redDays} · low ≤ ${data.thresholds.amberDays}`}
             />
-            <DataTable columns={materialColumns} rows={sorted} rowKey={(m) => m.key} />
+            <DataTable
+              columns={materialColumns}
+              rows={sorted}
+              rowKey={(m) => m.key}
+              rowHref={(m) => `/dashboard/procurement/stock/material/${m.key}`}
+            />
           </Card>
 
           {/* Dispatched (FR-16, FR-19): cartons out per product, with vehicle,

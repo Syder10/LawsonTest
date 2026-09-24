@@ -5,6 +5,7 @@ import { Suspense } from "react"
 import HistoryDateFilter from "./HistoryDateFilter"
 import { RECORD_TYPES, recordTypesForDepartment, type RecordTypeDef } from "@/lib/domain/record-types"
 import { enrichWithBalances } from "@/lib/domain/stock-ledger"
+import { StockLedgerIndex } from "@/components/features/stock/ledger-index"
 import { Card, Chip, EmptyState, PageHeader } from "@/components/primitives"
 
 // Columns hidden from the per-record detail grid (envelope + internal + those
@@ -28,9 +29,9 @@ export const dynamic = "force-dynamic"
 export default async function HistoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string; shift?: string }>
+  searchParams: Promise<{ date?: string; shift?: string; type?: string }>
 }) {
-  const { date: filterDate, shift: filterShift } = await searchParams
+  const { date: filterDate, shift: filterShift, type: filterType } = await searchParams
 
   const supabase = await createServerSupabase()
   const { data: { user } } = await supabase.auth.getUser()
@@ -42,12 +43,33 @@ export default async function HistoryPage({
     .eq("id", user.id)
     .single()
 
+  // Stock and procurement have no department, so the production-record view is
+  // empty for them (recordTypesForDepartment(null) is []). Their History is the
+  // stock ledger instead: on-hand per material, each row opening its full history.
+  if (profile?.role === "stock" || profile?.role === "procurement") {
+    return (
+      <div className="space-y-6 max-w-5xl mx-auto animate-fade-in-up">
+        <PageHeader
+          title="Stock ledger"
+          description="Current on-hand by material. Open a material for its full dated history."
+        />
+        <StockLedgerIndex />
+      </div>
+    )
+  }
+
   const isManager = profile?.role === "manager" || profile?.role === "admin"
   const defs: RecordTypeDef[] = isManager
     ? RECORD_TYPES
     : profile?.department
       ? recordTypesForDepartment(profile.department)
       : []
+
+  // The record-type filter is scoped to the role's own def list, so a supervisor
+  // only ever sees the types their department files. An unknown ?type= (bookmarked
+  // from another role) simply matches nothing and falls through to all.
+  const typeOptions = defs.map((d) => ({ value: d.label, label: d.label }))
+  const activeDefs = filterType ? defs.filter((d) => d.label === filterType) : defs
 
   // Always bounded. The limit was previously SKIPPED whenever a date filter was
   // present, so a manager filtering one day fetched every matching row across all
@@ -59,7 +81,7 @@ export default async function HistoryPage({
 
   // RLS scopes supervisors to their own rows automatically.
   const results = await Promise.all(
-    defs.map(async (def): Promise<Record<string, any>[]> => {
+    activeDefs.map(async (def): Promise<Record<string, any>[]> => {
       const table = def.storage.kind === "table" ? def.storage.table : "stock_records"
       let query = (supabase.from(table) as any)
         .select("*")
@@ -89,7 +111,7 @@ export default async function HistoryPage({
     .map(([label]) => label)
 
   const hasRecords = allRecords.length > 0
-  const hasFilter = !!filterDate || !!filterShift
+  const hasFilter = !!filterDate || !!filterShift || !!filterType
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto animate-fade-in-up">
@@ -105,7 +127,12 @@ export default async function HistoryPage({
       />
 
       <Suspense fallback={<div className="h-20 rounded-2xl border border-hairline bg-surface-sunken animate-pulse" />}>
-        <HistoryDateFilter selectedDate={filterDate || null} selectedShift={filterShift || null} />
+        <HistoryDateFilter
+          selectedDate={filterDate || null}
+          selectedShift={filterShift || null}
+          selectedType={filterType || null}
+          types={typeOptions}
+        />
       </Suspense>
 
       {hasFilter && (
