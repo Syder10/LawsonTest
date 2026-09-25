@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/auth/guards"
 import { createAdminSupabase } from "@/lib/supabase/admin"
+import { isKnownRole } from "@/lib/domain/roles"
 import type { UserRole } from "@/lib/db/types"
-
-const ROLES: UserRole[] = ["supervisor", "manager", "admin", "procurement"]
 
 // GET /api/admin/users — list all users (admin only).
 export async function GET() {
@@ -33,7 +32,7 @@ export async function POST(request: Request) {
   if (!username || !password || !role) {
     return NextResponse.json({ error: "username, password and role are required" }, { status: 400 })
   }
-  if (!ROLES.includes(role)) return NextResponse.json({ error: "Invalid role" }, { status: 400 })
+  if (!isKnownRole(role)) return NextResponse.json({ error: "Invalid role" }, { status: 400 })
   if (String(password).length < 6) {
     return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 })
   }

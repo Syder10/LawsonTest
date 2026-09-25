@@ -194,7 +194,7 @@ export async function GET(request: Request) {
     produced: cartonsProducedTotals(pkg),
     producedByDay: cartonsProducedByDay(pkg),
     receipts: receipts.map((r: any) => ({
-      date: r.date, material_type: r.material_type, received_by: r.received_by,
+      id: r.id, date: r.date, material_type: r.material_type, received_by: r.received_by,
       received_pcs: r.material_type === "tax_stamp" ? r.stamp_total_pcs : r.material_type.startsWith("carton") ? r.carton_total_pcs : r.ppe_pcs_in,
       given_pcs: r.ppe_given_pcs || 0, given_to: r.ppe_given_to || null, remarks: r.remarks || null,
     })),

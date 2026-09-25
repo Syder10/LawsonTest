@@ -6,6 +6,7 @@ import { RefreshCw, Loader2, AlertCircle, AlertTriangle, PackageCheck, Send, Cli
 import { fmt, fmt1, shortDay } from "@/components/features/dashboard/manager/viz"
 import { MIN_SAMPLE_DAYS, burnLooksImplausible, byUrgency } from "@/lib/domain/stock-status"
 import type { ProcurementMaterialStatus } from "@/lib/domain/stock-status"
+import { ALL_TIME, isAllTime, requestFrom, ALL_TIME_LABEL } from "@/lib/domain/date-window"
 import type { ProducedDay, ProducedTotals } from "@/lib/domain/production"
 import type { DispatchBreakdownRow, DispatchTotal } from "@/lib/domain/dispatch"
 import type { Product } from "@/lib/db/types"
@@ -59,6 +60,7 @@ interface StockCount {
 const iso = (d: Date) => d.toISOString().slice(0, 10)
 const daysAgo = (n: number) => iso(new Date(Date.now() - n * 86_400_000))
 const PRESETS = [
+  { label: "All time", from: () => ALL_TIME },
   { label: "7d", from: () => daysAgo(6) },
   { label: "30d", from: () => daysAgo(29) },
   { label: "90d", from: () => daysAgo(89) },
@@ -77,7 +79,7 @@ const MAT_LABEL: Record<string, string> = {
 // The RPCs enforce the same rule again, so this is presentation, not the boundary.
 // ============================================================================
 export function StockClient({ canWrite }: { canWrite: boolean }) {
-  const [from, setFrom] = useState(daysAgo(29))
+  const [from, setFrom] = useState(ALL_TIME)
   const [to, setTo] = useState(iso(new Date()))
   const [data, setData] = useState<Report | null>(null)
   const [loading, setLoading] = useState(true)
@@ -98,7 +100,7 @@ export function StockClient({ canWrite }: { canWrite: boolean }) {
   // dispatch error leaves this section empty rather than blanking the whole page.
   const loadDispatch = useCallback(async () => {
     try {
-      const res = await fetch(`/api/dispatch?from=${from}&to=${to}`)
+      const res = await fetch(`/api/dispatch?from=${requestFrom(from)}&to=${to}`)
       if (res.ok) setDispatch(await res.json())
     } catch { /* silent — the dispatched section stays empty */ }
   }, [from, to])
@@ -111,7 +113,7 @@ export function StockClient({ canWrite }: { canWrite: boolean }) {
     setLoading(true)
     setError(false)
     try {
-      const res = await fetch(`/api/procurement/report?from=${from}&to=${to}`)
+      const res = await fetch(`/api/procurement/report?from=${requestFrom(from)}&to=${to}`)
       if (!res.ok) throw new Error()
       setData(await res.json())
       loadCounts()
@@ -132,6 +134,14 @@ export function StockClient({ canWrite }: { canWrite: boolean }) {
   const sorted = data ? [...data.materials].sort(byUrgency) : []
   const critical = sorted.filter((m) => m.level === "red").length
   const low = sorted.filter((m) => m.level === "yellow").length
+
+  // What window the figures cover, for the card hints. All-time shows the label
+  // rather than the floor date we send the server (which would read "Jan 1, 2000").
+  const windowLabel = isAllTime(from)
+    ? ALL_TIME_LABEL
+    : data
+      ? `${shortDay(data.filters.from)} – ${shortDay(data.filters.to)}`
+      : ""
 
   // Produced (FR-18) newest day first, matching the receipts and counts logs.
   const producedRows = data ? [...data.producedByDay].reverse() : []
@@ -412,7 +422,7 @@ export function StockClient({ canWrite }: { canWrite: boolean }) {
           </div>
 
           <Card>
-            <CardHeader title="Produced per day" hint={`${shortDay(data.filters.from)} – ${shortDay(data.filters.to)}`} />
+            <CardHeader title="Produced per day" hint={windowLabel} />
             <DataTable
               columns={producedColumns}
               rows={producedRows}
@@ -449,7 +459,7 @@ export function StockClient({ canWrite }: { canWrite: boolean }) {
           />
 
           <Card>
-            <CardHeader title="Receipts & issuance" hint={`${shortDay(data.filters.from)} – ${shortDay(data.filters.to)}`} />
+            <CardHeader title="Receipts & issuance" hint={windowLabel} />
             <DataTable
               columns={receiptColumns}
               rows={data.receipts}

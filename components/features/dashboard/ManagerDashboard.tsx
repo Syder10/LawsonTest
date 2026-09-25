@@ -11,6 +11,7 @@ import { BomPanel } from "./manager/bom-panel"
 import { fmt1 } from "./manager/viz"
 import { isDepartmentReport, type AnalyticsResponse } from "@/lib/domain/analytics-contract"
 import type { MaterialStatus } from "@/lib/domain/stock-status"
+import { isAllTime, requestFrom, ALL_TIME_LABEL } from "@/lib/domain/date-window"
 import { Card, Eyebrow, EmptyState, StatTile } from "@/components/primitives"
 
 // ============================================================================
@@ -51,7 +52,7 @@ export function ManagerDashboard() {
     const seq = ++requestRef.current
     setLoading(true)
     try {
-      const p = new URLSearchParams({ from: filters.from, to: filters.to })
+      const p = new URLSearchParams({ from: requestFrom(filters.from), to: filters.to })
       if (filters.shift) p.set("shift", filters.shift)
       if (filters.department) p.set("department", filters.department)
       if (filters.product) p.set("product", filters.product)
@@ -85,9 +86,15 @@ export function ManagerDashboard() {
             <p className="text-xs font-medium text-ink-muted mt-1 tnum">
               Updated {new Date(report.last_updated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               <span className="mx-1.5 opacity-40">·</span>
-              {report.windowDays} days
-              <span className="mx-1.5 opacity-40">·</span>
-              {report.operatingDaysInWindow} operating
+              {isAllTime(filters.from) ? (
+                ALL_TIME_LABEL
+              ) : (
+                <>
+                  {report.windowDays} days
+                  <span className="mx-1.5 opacity-40">·</span>
+                  {report.operatingDaysInWindow} operating
+                </>
+              )}
               {criticalCount > 0 && (
                 <span className="ml-1.5 text-critical-ink font-bold">
                   · {criticalCount} material{criticalCount > 1 ? "s" : ""} critical

@@ -186,7 +186,14 @@ export function MaterialsTable({
             </button>
           }
         />
-        <DataTable columns={materialColumns} rows={sorted} rowKey={(m) => m.key} />
+        <DataTable
+          columns={materialColumns}
+          rows={sorted}
+          rowKey={(m) => m.key}
+          // Only the aggregated "Herbs" row drills down (to the per-variant hub);
+          // every other material is a live status row with its own Count action.
+          rowHref={(m) => (m.key === "herb" ? "/dashboard/procurement/stock/herbs" : null)}
+        />
       </Card>
 
       {counts.length > 0 && (

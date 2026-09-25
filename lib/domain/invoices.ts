@@ -161,6 +161,51 @@ export const FULFILMENT_LABELS: Record<FulfilmentState, string> = {
   over: "Over-delivered",
 }
 
+/** One invoice line still awaiting delivery, carrying its parent's identity so a
+    picker can group and label it without a second lookup. */
+export interface OpenInvoiceLine {
+  id: string
+  invoiceId: string
+  supplier: string
+  invoiceNumber: string
+  materialType: string
+  unit: string
+  invoiced: number
+  received: number
+  outstanding: number
+}
+
+/**
+ * The invoice lines still open for receiving, flattened across a set of invoices.
+ *
+ * A line is open when its `fulfilment` is `outstanding` or `part`: there is still a
+ * quantity to receive against it. `complete` and `over` lines are dropped, because the
+ * receive-form picker exists to link a NEW receipt to something not yet fully delivered.
+ * Order follows the invoices as given, then line order within each. Inputs come from
+ * `toInvoiceDetail`, so every figure is already coerced.
+ */
+export function openInvoiceLines(invoices: InvoiceDetail[]): OpenInvoiceLine[] {
+  const open: OpenInvoiceLine[] = []
+  for (const inv of invoices) {
+    for (const line of inv.lines) {
+      const f = fulfilment(line)
+      if (f.state !== "outstanding" && f.state !== "part") continue
+      open.push({
+        id: line.id,
+        invoiceId: inv.id,
+        supplier: inv.supplier,
+        invoiceNumber: inv.invoiceNumber,
+        materialType: line.materialType,
+        unit: line.unit,
+        invoiced: line.quantity,
+        received: line.receivedQuantity,
+        outstanding: f.outstanding,
+      })
+    }
+  }
+  return open
+}
+
 // ── Validation ──────────────────────────────────────────────────────────────
 
 export interface InvoiceValidation {

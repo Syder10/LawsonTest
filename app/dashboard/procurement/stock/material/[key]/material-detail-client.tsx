@@ -7,6 +7,7 @@ import { ArrowLeft, ClipboardCheck, PackageCheck } from "lucide-react"
 import { fmt, shortDay } from "@/components/features/dashboard/manager/viz"
 import type { StockMaterialDescriptor } from "@/lib/domain/stock-materials"
 import type { CountEntry, LedgerEntry, MaterialDetail, SourceRecord } from "@/lib/domain/material-detail"
+import { ALL_TIME, isAllTime, ALL_TIME_LABEL } from "@/lib/domain/date-window"
 import {
   Card,
   CardHeader,
@@ -25,6 +26,7 @@ const PRESETS = [
   { label: "7d", from: () => daysAgo(6) },
   { label: "30d", from: () => daysAgo(29) },
   { label: "90d", from: () => daysAgo(89) },
+  { label: "All time", from: () => ALL_TIME },
 ]
 const numOrDash = (v: number | null) => (v === null ? "—" : fmt(v))
 
@@ -37,12 +39,18 @@ export function MaterialDetailClient({
   from,
   to,
   canWrite,
+  backHref = "/dashboard/procurement/stock",
+  backLabel = "Stock levels",
 }: {
   descriptor: StockMaterialDescriptor
   detail: MaterialDetail
   from: string
   to: string
   canWrite: boolean
+  /** Where the top back-link returns. Herbs come from their own hub, everything
+      else from the stock levels page. */
+  backHref?: string
+  backLabel?: string
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -63,6 +71,10 @@ export function MaterialDetailClient({
 
   const inHeader = descriptor.kind === "consumable" ? "In" : "Received"
   const outHeader = descriptor.kind === "consumable" ? "Issued" : "Used"
+
+  // All-time travels as the empty sentinel, so caption it "All time" rather than
+  // formatting the floor date the query actually ran against.
+  const rangeLabel = isAllTime(from) ? ALL_TIME_LABEL : `${shortDay(from)} – ${shortDay(to)}`
 
   const sourceColumns: Column<SourceRecord>[] = [
     {
@@ -119,15 +131,15 @@ export function MaterialDetailClient({
   return (
     <div className="space-y-5 max-w-5xl mx-auto animate-fade-in-up">
       <Link
-        href="/dashboard/procurement/stock"
+        href={backHref}
         className="inline-flex items-center gap-1.5 text-xs font-bold text-ink-secondary hover:text-brand transition-colors"
       >
-        <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" /> Stock levels
+        <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" /> {backLabel}
       </Link>
 
       <PageHeader
         title={descriptor.label}
-        description={`${shortDay(from)} – ${shortDay(to)}`}
+        description={rangeLabel}
         actions={
           canWrite && reconcileTarget ? (
             <button
@@ -192,7 +204,7 @@ export function MaterialDetailClient({
         <Card>
           <CardHeader
             title={descriptor.kind === "ledger" ? "Filed records" : "Receipts & issuance"}
-            hint={`${shortDay(from)} – ${shortDay(to)}`}
+            hint={rangeLabel}
           />
           <DataTable
             columns={sourceColumns}

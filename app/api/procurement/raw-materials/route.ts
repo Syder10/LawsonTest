@@ -15,6 +15,11 @@ import type { Database } from "@/lib/db/types"
 type Balance = { remaining_pcs: number; total_received_pcs: number; total_used_pcs: number }
 const EMPTY: Balance = { remaining_pcs: 0, total_received_pcs: 0, total_used_pcs: 0 }
 
+// A well-formed invoice line id is a uuid. Checking the shape before the lookup keeps
+// a garbage value on a 400 ("not found") rather than letting Postgres raise 22P02 and
+// turning a bad request into a 500.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 /**
  * The admin-editable pack sizes. A box→pieces factor is written INTO the row here, so
  * it has to be the configured one: a receipt logged under a stale factor would put the
@@ -126,6 +131,32 @@ export async function POST(request: NextRequest) {
     row.ppe_given_unit = body.ppe_given_unit || "Boxes"
     row.ppe_given_pcs = Number(body.ppe_given_pcs || 0)
     row.ppe_given_to = body.ppe_given_to || null
+  }
+
+  // FR-10/FR-11: a receipt MAY reference an invoice line, and is equally valid with
+  // none. When an id is given, confirm it resolves to a readable line before storing
+  // it — a receipt pointing at a line that does not exist would show a phantom
+  // received-against-invoiced figure on the invoices screen. Material and unit are NOT
+  // cross-checked: the line's material is free text and units legitimately differ (a
+  // line billed in boxes, a receipt counted in pcs), so a mismatch is tolerated (FR-9).
+  const invoiceLineId = typeof body.invoice_line_id === "string" ? body.invoice_line_id.trim() : ""
+  if (invoiceLineId) {
+    if (!UUID_RE.test(invoiceLineId)) {
+      return NextResponse.json({ error: "Invoice line not found." }, { status: 400 })
+    }
+    const { data: line, error: lineErr } = await supabase
+      .from("invoice_lines")
+      .select("id")
+      .eq("id", invoiceLineId)
+      .maybeSingle()
+    if (lineErr) {
+      console.error("[procurement] invoice line lookup error:", lineErr.message)
+      return NextResponse.json({ error: "Could not verify the invoice line" }, { status: 500 })
+    }
+    if (!line) {
+      return NextResponse.json({ error: "Invoice line not found." }, { status: 400 })
+    }
+    row.invoice_line_id = invoiceLineId
   }
 
   const { data, error } = await supabase.from("raw_materials_received").insert(row).select().single()

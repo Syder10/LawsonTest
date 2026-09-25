@@ -3,8 +3,16 @@
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { AlertCircle, Download, FileText, Loader2, Plus, RefreshCw } from "lucide-react"
-import { shortDay } from "@/components/features/dashboard/manager/viz"
-import { fulfilment, totalsAgree, type InvoiceDetail } from "@/lib/domain/invoices"
+import { shortDay, fmt } from "@/components/features/dashboard/manager/viz"
+import {
+  FULFILMENT_LABELS,
+  fulfilment,
+  totalMismatchNote,
+  totalsAgree,
+  type FulfilmentState,
+  type InvoiceDetail,
+  type InvoiceLineDetail,
+} from "@/lib/domain/invoices"
 import {
   Card,
   CardHeader,
@@ -15,6 +23,13 @@ import {
   StatTile,
   type Column,
 } from "@/components/primitives"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface Report {
   filters: { from: string; to: string }
@@ -57,12 +72,52 @@ function toCsv(rows: InvoiceDetail[]): string {
   return [head.join(","), ...body].join("\n")
 }
 
+// Received-against-invoiced by line (FR-10). Reuses the domain's `fulfilment` for the
+// running difference and `FULFILMENT_LABELS` for the state, so nothing is recomputed
+// here. Received is a pcs sum; a line billed in another unit is compared best-effort.
+const STATE_TONE: Record<FulfilmentState, "good" | "warning" | "neutral"> = {
+  complete: "good",
+  over: "warning",
+  part: "warning",
+  outstanding: "neutral",
+}
+
+function InvoiceLineBreakdown({ invoice }: { invoice: InvoiceDetail }) {
+  const note = totalMismatchNote(invoice.declaredTotal, invoice.lineTotal, invoice.currency)
+  const columns: Column<InvoiceLineDetail>[] = [
+    { key: "material", header: "Material", primary: true, cell: (l) => <span className="font-semibold text-ink-primary">{l.materialType}</span> },
+    { key: "invoiced", header: "Invoiced", align: "right", numeric: true, cell: (l) => <span>{fmt(l.quantity)} <span className="text-ink-muted text-xs">{l.unit}</span></span> },
+    { key: "received", header: "Received", align: "right", numeric: true, cell: (l) => <span>{fmt(l.receivedQuantity)} <span className="text-ink-muted text-xs">pcs</span></span> },
+    { key: "outstanding", header: "Outstanding", align: "right", numeric: true, cell: (l) => <span className="font-semibold text-ink-primary">{fmt(fulfilment(l).outstanding)} <span className="text-ink-muted text-xs">{l.unit}</span></span> },
+    { key: "status", header: "Status", cell: (l) => { const s = fulfilment(l).state; return <Chip tone={STATE_TONE[s]}>{FULFILMENT_LABELS[s]}</Chip> } },
+  ]
+  return (
+    <div className="space-y-3">
+      {note && (
+        <p className="text-xs font-medium text-warning-ink bg-warning-subtle border border-warning/30 rounded-xl px-3 py-2">
+          {note}
+        </p>
+      )}
+      <DataTable
+        columns={columns}
+        rows={invoice.lines}
+        rowKey={(l) => l.id}
+        empty={<EmptyState compact title="This invoice has no lines" />}
+      />
+      <p className="text-xs text-ink-muted font-medium">
+        Received is counted in pieces; lines billed in another unit are compared best-effort.
+      </p>
+    </div>
+  )
+}
+
 export function InvoicesClient({ canWrite }: { canWrite: boolean }) {
   const [from, setFrom] = useState(daysAgo(89))
   const [to, setTo] = useState(iso(new Date()))
   const [data, setData] = useState<Report | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
+  const [selected, setSelected] = useState<InvoiceDetail | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -123,6 +178,17 @@ export function InvoicesClient({ canWrite }: { canWrite: boolean }) {
       },
     },
     { key: "by", header: "Recorded by", hideOnMobile: true, cell: (i) => i.recordedBy ?? "-" },
+    {
+      key: "action", header: "", align: "right", interactive: true,
+      cell: (i) => (
+        <button
+          onClick={() => setSelected(i)}
+          className="h-8 px-3 rounded-lg border border-hairline bg-surface-card text-xs font-bold text-ink-secondary hover:border-brand transition-colors whitespace-nowrap"
+        >
+          Lines
+        </button>
+      ),
+    },
   ]
 
   return (
@@ -220,6 +286,16 @@ export function InvoicesClient({ canWrite }: { canWrite: boolean }) {
           </Card>
         </div>
       )}
+
+      <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>{selected ? `${selected.supplier} · ${selected.invoiceNumber}` : "Invoice lines"}</DialogTitle>
+            <DialogDescription>Quantity received against quantity invoiced, by line.</DialogDescription>
+          </DialogHeader>
+          {selected && <InvoiceLineBreakdown invoice={selected} />}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

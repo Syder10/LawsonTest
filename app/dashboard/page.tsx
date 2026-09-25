@@ -4,6 +4,7 @@ import { ManagerDashboard }     from "@/components/features/dashboard/ManagerDas
 import { SupervisorDashboard }  from "@/components/features/dashboard/SupervisorDashboard"
 import { AdminDashboard }       from "@/components/features/dashboard/AdminDashboard"
 import { ProcurementDashboard } from "@/components/features/dashboard/ProcurementDashboard"
+import { StockDashboard }       from "@/components/features/dashboard/StockDashboard"
 import { getProfileForUser } from "@/lib/auth/profile"
 
 export default async function DashboardPage() {
@@ -21,5 +22,6 @@ export default async function DashboardPage() {
     if (role === "admin")        return <AdminDashboard />
     if (role === "manager")      return <ManagerDashboard />
     if (role === "procurement")  return <ProcurementDashboard />
+    if (role === "stock")        return <StockDashboard userName={profile.full_name} />
     return <SupervisorDashboard userId={user.id} />
 }

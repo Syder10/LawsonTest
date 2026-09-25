@@ -81,6 +81,39 @@ export function stockMaterialKeys(): string[] {
   return STOCK_MATERIALS.map((m) => m.key)
 }
 
+// ── Herbs ───────────────────────────────────────────────────────────────────────
+// Herbs are NOT in STOCK_MATERIALS: the manager overview and Concentrate view show a
+// single aggregated "Herbs" row (key "herb") across every herb_types variant. The
+// drill-down needs a descriptor PER variant, built on demand here so there is still
+// exactly one place that spells out how a herb maps to the stock ledger (NFR-2). The
+// unit comes from the ledger-unit registry ("sacks"), not a literal; a sack's weight
+// has never been stated, so no unitEach conversion is implied.
+const HERB_KEY_PREFIX = "herb:"
+
+/** Detail-page descriptor for one herb variant, e.g. herbDescriptor("Lemon Grass"). */
+export function herbDescriptor(variant: string): StockMaterialDescriptor {
+  return {
+    key: `${HERB_KEY_PREFIX}${variant}`,
+    material: "herb",
+    product: null,
+    variant,
+    label: `Herbs — ${variant}`,
+    unit: ledgerUnit("herb"),
+    kind: "ledger",
+  }
+}
+
+/**
+ * The variant carried by a herb key ("herb:Lemon Grass" -> "Lemon Grass"), or null if
+ * `key` is not a herb key. Path segments arrive already URL-decoded, so the caller
+ * still validates the variant against herb_types before trusting it.
+ */
+export function parseHerbKey(key: string): string | null {
+  if (!key.startsWith(HERB_KEY_PREFIX)) return null
+  const variant = key.slice(HERB_KEY_PREFIX.length)
+  return variant.length > 0 ? variant : null
+}
+
 /** Everything but PPE re-anchors through stock counts, so everything but PPE is reconcilable. */
 export function isReconcilable(d: StockMaterialDescriptor): boolean {
   return d.kind !== "consumable"

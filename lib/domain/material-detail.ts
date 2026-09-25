@@ -205,6 +205,9 @@ async function loadSourceRecords(supabase: Db, d: StockMaterialDescriptor, from:
       .gte("date", from)
       .lte("date", to)
     if (d.product) q = q.eq("product", d.product)
+    // Herb descriptors carry a variant; no other ledger descriptor does, so this
+    // narrows a herb's records to its own type and is a no-op for the rest.
+    if (d.variant) q = q.eq("variant", d.variant)
     const { data } = await q.order("date", { ascending: false })
     return (data ?? []).map(normalizeStockRecord)
   }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import { CheckCircle2 } from "lucide-react"
 import { toast } from "sonner"
@@ -9,6 +9,7 @@ import {
 } from "@/lib/domain/materials"
 import { DEFAULT_CONVERSIONS, settingsFromRow, type Conversions } from "@/lib/domain/settings"
 import { stampsPerCarton } from "@/lib/domain/expected-burn"
+import { openInvoiceLines, type OpenInvoiceLine } from "@/lib/domain/invoices"
 import { DEPARTMENTS } from "@/lib/domain/record-types"
 import { groupsForDepartment } from "@/lib/shift-config"
 import { Card, Choice, Eyebrow, Field, NumberInput, PageHeader, Select, TextArea, TextInput } from "@/components/primitives"
@@ -34,6 +35,7 @@ const DEPT_GROUPS = DEPARTMENTS.map((dept) => ({ dept, groups: groupsForDepartme
 const GIVEN_OUT_UNITS = ["Boxes", "Packs"]
 
 function todayStr() { return new Date().toISOString().split("T")[0] }
+function daysAgoStr(n: number) { return new Date(Date.now() - n * 86_400_000).toISOString().split("T")[0] }
 function fmt(n: number) { return n.toLocaleString() }
 
 function ppeUnit(t: MaterialType): string {
@@ -88,6 +90,12 @@ export default function ProcurementSubmitPage() {
   // cannot be — the numbers below are then the ones the server would use anyway.
   const [conversions, setConversions] = useState<Conversions>(DEFAULT_CONVERSIONS)
 
+  // FR-10: an optional link to an open supplier-invoice line. Empty means unlinked,
+  // which is a valid receipt (FR-11). Options are the still-open lines across recent
+  // invoices, sourced from the same /api/invoices read the invoice log uses.
+  const [openLines, setOpenLines] = useState<OpenInvoiceLine[]>([])
+  const [invoiceLineId, setInvoiceLineId] = useState("")
+
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -102,12 +110,31 @@ export default function ProcurementSubmitPage() {
     load()
   }, [supabase])
 
+  // Open invoice lines for the picker. A failure here must never block a receipt, so
+  // it degrades to an empty list (the link is optional) rather than surfacing an error.
+  const loadOpenLines = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/invoices?from=${daysAgoStr(365)}`)
+      if (!res.ok) return
+      const json = await res.json()
+      setOpenLines(openInvoiceLines(json.invoices ?? []))
+    } catch {
+      /* leave the picker empty; linking is optional */
+    }
+  }, [])
+
+  useEffect(() => {
+    const run = async () => { await loadOpenLines() }
+    void run()
+  }, [loadOpenLines])
+
   const switchMaterial = (t: MaterialType) => {
     setMaterial(t)
     setStampBoxes("")
     setCartonPcs("")
     setPpeBoxesIn(""); setPpeGivenOut(""); setPpeGivenTo(""); setPpeGivenUnit("Boxes")
     setRemarks("")
+    setInvoiceLineId("")
   }
 
   // ── Live calculations ──────────────────────────────────────────────────
@@ -125,11 +152,29 @@ export default function ProcurementSubmitPage() {
   const ppeGivenOutN = Number(ppeGivenOut || 0)
   const ppeGivenPcs  = ppeGivenUnit === "Boxes" ? ppeGivenOutN * ppb : ppeGivenOutN // "Packs" = direct pcs
 
+  // ── Invoice-line link ──────────────────────────────────────────────────
+  // Open lines grouped by their invoice so the picker can show supplier · number as an
+  // optgroup heading. The received figure is a pcs sum, so when a line is billed in
+  // another unit the comparison is flagged as approximate rather than hidden.
+  const selectedLine = openLines.find((l) => l.id === invoiceLineId) ?? null
+  const lineGroups = Object.values(
+    openLines.reduce<Record<string, { label: string; lines: OpenInvoiceLine[] }>>((acc, l) => {
+      (acc[l.invoiceId] ??= { label: `${l.supplier} · ${l.invoiceNumber}`, lines: [] }).lines.push(l)
+      return acc
+    }, {}),
+  )
+  const linkedUnitIsPcs = selectedLine ? selectedLine.unit.trim().toLowerCase() === "pcs" : false
+
   // ── Submit ─────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     if (!date) { toast.error("Please select a date"); return }
 
-    const body: Record<string, unknown> = { date, material_type: material, remarks: remarks || null }
+    const body: Record<string, unknown> = {
+      date,
+      material_type: material,
+      remarks: remarks || null,
+      invoice_line_id: invoiceLineId || null,
+    }
 
     if (material === "tax_stamp") {
       if (stampBoxesN <= 0) { toast.error("Enter number of boxes received"); return }
@@ -167,6 +212,8 @@ export default function ProcurementSubmitPage() {
       setStampBoxes(""); setCartonPcs("")
       setPpeBoxesIn(""); setPpeGivenOut(""); setPpeGivenTo(""); setPpeGivenUnit("Boxes")
       setRemarks("")
+      setInvoiceLineId("")
+      loadOpenLines()
       toast.success("Submitted — stock balance updated")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Submission failed")
@@ -323,6 +370,51 @@ export default function ProcurementSubmitPage() {
               )}
             </div>
           </div>
+        )}
+      </Card>
+
+      {/* Optional link to a supplier-invoice line (FR-10). A receipt is equally valid
+          with none (FR-11), so the default is "Not linked". */}
+      <Card padded className="space-y-3">
+        <Eyebrow>Link to a supplier invoice (optional)</Eyebrow>
+        {openLines.length === 0 ? (
+          <p className="text-xs font-medium text-ink-muted">
+            No open invoice lines to link. You can still submit this receipt.
+          </p>
+        ) : (
+          <>
+            <Field label="Invoice line">
+              {p => (
+                <Select {...p} value={invoiceLineId} onChange={e => setInvoiceLineId(e.target.value)}>
+                  <option value="">Not linked</option>
+                  {lineGroups.map(g => (
+                    <optgroup key={g.label} label={g.label}>
+                      {g.lines.map(l => (
+                        <option key={l.id} value={l.id}>
+                          {l.materialType} — {fmt(l.outstanding)} of {fmt(l.invoiced)} {l.unit} outstanding
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </Select>
+              )}
+            </Field>
+
+            {selectedLine && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-2">
+                  <Derived label="Invoiced" value={`${fmt(selectedLine.invoiced)} ${selectedLine.unit}`} />
+                  <Derived label="Received" value={`${fmt(selectedLine.received)} pcs`} />
+                  <Derived label="Outstanding" value={`${fmt(selectedLine.outstanding)} ${selectedLine.unit}`} />
+                </div>
+                <Note>
+                  {linkedUnitIsPcs
+                    ? `This receipt counts toward the ${fmt(selectedLine.outstanding)} ${selectedLine.unit} still outstanding.`
+                    : `Received is counted in pieces; this line is billed in ${selectedLine.unit}, so the comparison is approximate. Recorded as given.`}
+                </Note>
+              </div>
+            )}
+          </>
         )}
       </Card>
 

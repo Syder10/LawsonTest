@@ -34,8 +34,8 @@ function rpcStatus(error: { code?: string; message: string }): number {
 // The receipt column that carries a received quantity depends on material type,
 // which is why the mapping lives in the route rather than in toInvoiceDetail.
 // Units may differ from the invoice line's declared unit (a line billed in boxes,
-// a receipt counted in pcs); the receive form does not yet set invoice_line_id,
-// so nothing is linked in practice and this stays a best-effort pcs sum.
+// a receipt counted in pcs), so this is a best-effort pcs sum: only receipts the
+// receive form has linked to a line (invoice_line_id set) contribute.
 function receivedPcs(r: Pick<RawMaterialReceivedRow, "material_type" | "stamp_total_pcs" | "carton_total_pcs" | "ppe_pcs_in">): number {
   if (r.material_type === "tax_stamp") return Number(r.stamp_total_pcs ?? 0)
   if (r.material_type.startsWith("carton")) return Number(r.carton_total_pcs ?? 0)

@@ -1,9 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/auth/guards"
 import { createAdminSupabase } from "@/lib/supabase/admin"
+import { isKnownRole } from "@/lib/domain/roles"
 import type { UserRole } from "@/lib/db/types"
-
-const ROLES: UserRole[] = ["supervisor", "manager", "admin", "procurement"]
 
 // Guard against removing the last admin (which would lock everyone out of the
 // admin panel). Returns true if `excludingId` is the only remaining admin.
@@ -22,7 +21,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const body = await request.json().catch(() => ({}))
   const { role, department, full_name, group_number } = body
 
-  if (role && !ROLES.includes(role)) {
+  if (role && !isKnownRole(role)) {
     return NextResponse.json({ error: "Invalid role" }, { status: 400 })
   }
 

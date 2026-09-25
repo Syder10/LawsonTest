@@ -49,10 +49,12 @@ export function DataTable<T>({
   /** Shown instead of the table when there are no rows. */
   empty?: ReactNode
   className?: string
-  /** Makes the whole row a link to this href. Implemented as a stretched link
+  /** Makes a row a link to the returned href. Implemented as a stretched link
       inside the primary cell, so the markup stays a valid table and no client
-      `useRouter` is needed. Cells marked `interactive` sit above it. */
-  rowHref?: (row: T) => string
+      `useRouter` is needed. Cells marked `interactive` sit above it. Return null
+      or undefined for a row that should NOT be a link — so a table can linkify
+      only some of its rows (e.g. only the aggregated "Herbs" row drills down). */
+  rowHref?: (row: T) => string | null | undefined
 }) {
   if (rows.length === 0 && empty) return <>{empty}</>
 
@@ -81,12 +83,14 @@ export function DataTable<T>({
             </tr>
           </thead>
           <tbody className="divide-y divide-hairline">
-            {rows.map((row) => (
+            {rows.map((row) => {
+              const href = rowHref?.(row)
+              return (
               <tr
                 key={rowKey(row)}
                 className={cn(
                   "hover:bg-surface-sunken/60 transition-colors",
-                  rowHref && "relative cursor-pointer",
+                  href && "relative cursor-pointer",
                 )}
               >
                 {columns.map((c) => (
@@ -99,8 +103,8 @@ export function DataTable<T>({
                       c.interactive && "relative z-10 w-px",
                     )}
                   >
-                    {rowHref && c === primary ? (
-                      <Link href={rowHref(row)} className="after:absolute after:inset-0 hover:text-brand transition-colors">
+                    {href && c === primary ? (
+                      <Link href={href} className="after:absolute after:inset-0 hover:text-brand transition-colors">
                         {c.cell(row)}
                       </Link>
                     ) : (
@@ -109,18 +113,21 @@ export function DataTable<T>({
                   </td>
                 ))}
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>
 
       {/* ── Mobile: one card per row ──────────────────────────────────────── */}
       <ul className="sm:hidden divide-y divide-hairline">
-        {rows.map((row) => (
-          <li key={rowKey(row)} className={cn("px-4 py-3", rowHref && "relative")}>
+        {rows.map((row) => {
+          const href = rowHref?.(row)
+          return (
+          <li key={rowKey(row)} className={cn("px-4 py-3", href && "relative")}>
             <div className="font-bold text-ink-primary break-words">
-              {rowHref ? (
-                <Link href={rowHref(row)} className="after:absolute after:inset-0">
+              {href ? (
+                <Link href={href} className="after:absolute after:inset-0">
                   {primary.cell(row)}
                 </Link>
               ) : (
@@ -145,7 +152,8 @@ export function DataTable<T>({
               ))}
             </dl>
           </li>
-        ))}
+          )
+        })}
       </ul>
     </div>
   )

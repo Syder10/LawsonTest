@@ -4,6 +4,7 @@ import { ChevronDown } from "lucide-react"
 import { DEPARTMENTS, PRODUCTS } from "@/lib/domain/record-types"
 import { hasProductSplit } from "@/lib/domain/dept-metrics"
 import { SHIFT_ORDER } from "@/lib/shift-config"
+import { ALL_TIME } from "@/lib/domain/date-window"
 
 export interface Filters {
   from: string
@@ -16,9 +17,14 @@ export interface Filters {
 const iso = (d: Date) => d.toISOString().slice(0, 10)
 const daysAgo = (n: number) => iso(new Date(Date.now() - n * 86_400_000))
 
-export const DEFAULT_FILTERS: Filters = { from: daysAgo(29), to: iso(new Date()), shift: "", department: "", product: "" }
+// All time is the default: the whole record, not a trailing window. The burn-rate
+// projections measure over the recorded-usage span (see usageSpanOperatingDays), so a
+// lifetime window does not distort "days left". The trailing presets stay for anyone
+// who wants a recent-only read.
+export const DEFAULT_FILTERS: Filters = { from: ALL_TIME, to: iso(new Date()), shift: "", department: "", product: "" }
 
 const PRESETS: { label: string; range: () => { from: string; to: string } }[] = [
+  { label: "All time", range: () => ({ from: ALL_TIME, to: iso(new Date()) }) },
   { label: "7d", range: () => ({ from: daysAgo(6), to: iso(new Date()) }) },
   { label: "30d", range: () => ({ from: daysAgo(29), to: iso(new Date()) }) },
   { label: "90d", range: () => ({ from: daysAgo(89), to: iso(new Date()) }) },

@@ -6,11 +6,14 @@ import {
   TOTAL_TOLERANCE,
   fulfilment,
   invoiceLinesToSend,
+  openInvoiceLines,
   sumLineTotals,
   toInvoiceDetail,
   totalMismatchNote,
   totalsAgree,
   validateInvoice,
+  type InvoiceDetail,
+  type InvoiceLineDetail,
 } from "@/lib/domain/invoices"
 import type { InvoiceLineRow, InvoiceRow } from "@/lib/db/types"
 
@@ -66,6 +69,59 @@ describe("fulfilment", () => {
   })
   it("guards a zero invoiced quantity rather than returning NaN", () => {
     expect(fulfilment({ quantity: 0, receivedQuantity: 0 }).pct).toBe(0)
+  })
+})
+
+describe("openInvoiceLines", () => {
+  const line = (
+    id: string,
+    quantity: number,
+    receivedQuantity: number,
+    extra: Partial<InvoiceLineDetail> = {},
+  ): InvoiceLineDetail => ({
+    id, materialType: "tax_stamp", description: null, quantity, unit: "boxes",
+    unitCost: 0, lineTotal: 0, receivedQuantity, ...extra,
+  })
+  const invoice = (
+    id: string,
+    lines: InvoiceLineDetail[],
+    extra: Partial<InvoiceDetail> = {},
+  ): InvoiceDetail => ({
+    id, supplier: "Kama", invoiceNumber: `INV-${id}`, invoiceDate: "2026-09-20",
+    currency: "GHS", declaredTotal: null, remarks: null, recordedBy: null,
+    lines, lineTotal: 0, ...extra,
+  })
+
+  it("keeps outstanding and part lines, dropping complete and over", () => {
+    const inv = invoice("i1", [
+      line("out", 10, 0),
+      line("part", 10, 4),
+      line("done", 10, 10),
+      line("over", 10, 12),
+    ])
+    expect(openInvoiceLines([inv]).map((l) => l.id)).toEqual(["out", "part"])
+  })
+
+  it("reports the outstanding quantity for a partial line", () => {
+    const [open] = openInvoiceLines([invoice("i1", [line("part", 10, 4)])])
+    expect(open.invoiced).toBe(10)
+    expect(open.received).toBe(4)
+    expect(open.outstanding).toBe(6)
+  })
+
+  it("flattens open lines across invoices, carrying parent identity", () => {
+    const out = openInvoiceLines([
+      invoice("i1", [line("a", 5, 0)], { supplier: "Kama", invoiceNumber: "INV-1" }),
+      invoice("i2", [line("b", 5, 0)], { supplier: "Zeta", invoiceNumber: "INV-2" }),
+    ])
+    expect(out).toHaveLength(2)
+    expect(out[0]).toMatchObject({ id: "a", invoiceId: "i1", supplier: "Kama", invoiceNumber: "INV-1" })
+    expect(out[1]).toMatchObject({ id: "b", invoiceId: "i2", supplier: "Zeta", invoiceNumber: "INV-2" })
+  })
+
+  it("returns nothing for no invoices or fully-received ones", () => {
+    expect(openInvoiceLines([])).toEqual([])
+    expect(openInvoiceLines([invoice("i1", [line("done", 10, 10)])])).toEqual([])
   })
 })
 
