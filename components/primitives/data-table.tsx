@@ -88,30 +88,41 @@ export function DataTable<T>({
               return (
               <tr
                 key={rowKey(row)}
-                className={cn(
-                  "hover:bg-surface-sunken/60 transition-colors",
-                  href && "relative cursor-pointer",
-                )}
+                className="hover:bg-surface-sunken/60 transition-colors"
               >
-                {columns.map((c) => (
+                {columns.map((c) => {
+                  // Only the primary cell of a linked row navigates. The click target
+                  // is the <a> itself (a block that carries the cell padding), NOT a
+                  // stretched overlay anchored to the <tr>/<td>: position:relative on a
+                  // table row is not a reliable containing block (Safari ignores it), so
+                  // an inset-0 overlay escaped the row and turned a large slab of the
+                  // page into a link to whichever linked row painted last — which is why
+                  // clicks anywhere landed on the last material (Gloves / Caramel).
+                  const cellHref = c === primary ? href : null
+                  return (
                   <td
                     key={c.key}
                     className={cn(
-                      "px-3 py-2.5 text-ink-secondary",
+                      "text-ink-secondary",
+                      cellHref ? "p-0" : "px-3 py-2.5",
                       c.align === "right" ? "text-right" : "text-left",
                       c.numeric && "tnum",
                       c.interactive && "relative z-10 w-px",
                     )}
                   >
-                    {href && c === primary ? (
-                      <Link href={href} className="after:absolute after:inset-0 hover:text-brand transition-colors">
+                    {cellHref ? (
+                      <Link
+                        href={cellHref}
+                        className="block px-3 py-2.5 cursor-pointer hover:text-brand transition-colors"
+                      >
                         {c.cell(row)}
                       </Link>
                     ) : (
                       c.cell(row)
                     )}
                   </td>
-                ))}
+                  )
+                })}
               </tr>
               )
             })}
