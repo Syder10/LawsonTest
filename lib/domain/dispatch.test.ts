@@ -9,6 +9,7 @@ import {
   toDispatchDetail,
   totalsFromDispatches,
   validateDispatch,
+  DISPATCH_BRANCHES,
   type DispatchDetail,
 } from "@/lib/domain/dispatch"
 import { PRODUCTS } from "@/lib/domain/record-types"
@@ -44,6 +45,14 @@ describe("validateDispatch", () => {
   })
   it("rejects a negative carton count on a line", () => {
     expect(validateDispatch({ ...good, lines: [line("Bitters", -1)] }).errors["cartons_Bitters"]).toBeTruthy()
+  })
+  it("accepts every confirmed branch and rejects an unlisted destination", () => {
+    expect(DISPATCH_BRANCHES).toEqual([
+      "Head Office", "Accra", "Bolgatanga", "Cape Coast", "Ho & Togo",
+      "Koforidua", "Takoradi", "Tarkwa", "Techiman", "Wa",
+    ])
+    for (const destination of DISPATCH_BRANCHES) expect(validateDispatch({ ...good, destination }).ok).toBe(true)
+    expect(validateDispatch({ ...good, destination: "Unknown" }).errors.destination).toBeTruthy()
   })
 })
 

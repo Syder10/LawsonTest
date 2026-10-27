@@ -31,17 +31,17 @@ export const ROLE_LABELS: Record<string, string> = {
  */
 export const ROLE_DESCRIPTIONS: Record<string, string> = {
   supervisor: "Files production records for one department",
-  manager: "Reads analytics; can record stock counts",
-  admin: "Full access, plus users and settings",
+  manager: "Views production and stock dashboards",
+  admin: "Manages users, access and system settings",
   procurement: "Reads stock data — cannot record receipts or counts",
-  stock: "Records receipts, invoices, stock counts and dispatch",
+  stock: "Records receipts, invoices, stock counts, dispatch and product returns",
 }
 
 /** Roles that may RECORD a physical stock movement. Mirrors SQL `can_write_stock()`. */
-export const STOCK_WRITE_ROLES: UserRole[] = ["stock", "manager", "admin"]
+export const STOCK_WRITE_ROLES: UserRole[] = ["stock"]
 
 /** Roles that may READ stock data. Mirrors SQL `can_read_stock()`. */
-export const STOCK_READ_ROLES: UserRole[] = ["stock", "procurement", "manager", "admin"]
+export const STOCK_READ_ROLES: UserRole[] = ["stock", "procurement", "manager"]
 
 export const canWriteStock = (role: string): boolean =>
   (STOCK_WRITE_ROLES as string[]).includes(role)
@@ -129,9 +129,9 @@ const ITEM: Record<NavKey, NavItem> = {
 const NAV_BY_ROLE: Record<UserRole, NavKey[]> = {
   supervisor: ["home", "submit", "history", "profile"],
   manager: ["home", "stock", "profile"],
-  procurement: ["home", "receive", "stock", "history", "profile"],
+  procurement: ["home", "stock", "history", "profile"],
   stock: ["home", "receive", "stock", "history", "profile"],
-  admin: ["home", "users", "stock", "settings", "profile"],
+  admin: ["home", "users", "settings", "profile"],
 }
 
 export function navFor(role: string): NavItem[] {

@@ -18,6 +18,9 @@ do $$ begin
 end $$;
 
 create schema if not exists auth;
+-- Supabase exposes auth.uid() to authenticated callers. Match that schema grant
+-- so tests with explicit auth.uid() cannot pass a denial for the wrong reason.
+grant usage on schema auth to authenticated, anon, service_role;
 create extension if not exists pgcrypto;
 
 -- raw_user_meta_data is required: handle_new_user() (0003) reads full_name /

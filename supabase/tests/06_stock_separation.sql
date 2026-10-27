@@ -100,7 +100,7 @@ begin
 
   perform set_config('request.jwt.claim.sub', 'c0000000-0000-0000-0000-00000000000c', true);
   select public.can_write_stock() into ok;
-  assert ok, 'manager must be able to write stock (management owns reconciliation)';
+  assert not ok, 'manager dashboards are read-only (user decision 2026-10-22)';
 
   perform set_config('request.jwt.claim.sub', 'd0000000-0000-0000-0000-00000000000d', true);
   select public.can_write_stock() into ok;
@@ -396,7 +396,7 @@ begin
   set local role authenticated;
   perform set_config('request.jwt.claim.sub', 'a0000000-0000-0000-0000-00000000000a', true);
   v := public.record_dispatch(
-    '2026-11-10', 'Morning', 'GT-4821-22', 'Kwame Mensah', 'Kumasi Depot',
+    '2026-11-10', 'Morning', 'GT-4821-22', 'Kwame Mensah', 'Head Office',
     '[{"product":"Bitters","cartons":120},{"product":"Ginger","cartons":40}]'::jsonb,
     'WB-5501', 'full load'
   );
@@ -436,7 +436,7 @@ begin
   perform set_config('request.jwt.claim.sub', 'a0000000-0000-0000-0000-00000000000a', true);
   begin
     perform public.record_dispatch(
-      '2026-11-10', 'Night', 'GT-0000-00', 'Nobody', 'Nowhere',
+      '2026-11-10', 'Night', 'GT-0000-00', 'Nobody', 'Wa',
       '[{"product":"Bitters","cartons":0},{"product":"Ginger","cartons":0}]'::jsonb);
   exception when others then
     bad := true;
@@ -455,7 +455,7 @@ begin
   set local role authenticated;
   perform set_config('request.jwt.claim.sub', 'a0000000-0000-0000-0000-00000000000a', true);
   begin
-    perform public.record_dispatch('2026-11-10', 'Morning', 'GT-2222-21', 'Kojo', 'Tema',
+    perform public.record_dispatch('2026-11-10', 'Morning', 'GT-2222-21', 'Kojo', 'Accra',
       '[{"product":"Bitters","cartons":10}]'::jsonb, 'WB-5501');
   exception when unique_violation then
     dup := true;
@@ -466,7 +466,7 @@ begin
   -- constraint would be semantically wrong here, hence the partial index.
   perform public.record_dispatch('2026-11-10', 'Morning', 'GT-3333-21', 'Adjoa', 'Cape Coast',
     '[{"product":"Ginger","cartons":15}]'::jsonb, null);
-  v := public.record_dispatch('2026-11-10', 'Morning', 'GT-4444-21', 'Kofi', 'Ho',
+  v := public.record_dispatch('2026-11-10', 'Morning', 'GT-4444-21', 'Kofi', 'Ho & Togo',
     '[{"product":"Ginger","cartons":25}]'::jsonb, null);
   select count(*) into n from public.dispatches where waybill_number is null;
   reset role;
@@ -549,8 +549,8 @@ begin
   perform set_config('request.jwt.claim.sub', 'a0000000-0000-0000-0000-00000000000a', true);
   select label, cartons into v_label, v_cartons
     from public.dispatch_breakdown('2026-11-10', '2026-11-10', 'destination')
-   where label = 'Kumasi Depot';
-  assert v_cartons = 160, format('Kumasi Depot expected 160 cartons, got %s', v_cartons);
+   where label = 'Head Office';
+  assert v_cartons = 160, format('Head Office expected 160 cartons, got %s', v_cartons);
 
   select label into v_label
     from public.dispatch_breakdown('2026-11-10', '2026-11-10', 'driver')

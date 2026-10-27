@@ -7,6 +7,8 @@ import {
   isKnownRole,
   navFor,
   roleLabel,
+  canReadStock,
+  canWriteStock,
 } from "@/lib/domain/roles"
 
 describe("navFor", () => {
@@ -53,7 +55,8 @@ describe("navFor", () => {
 
   it("routes each role to the work it actually does", () => {
     expect(navFor("supervisor").map((i) => i.key)).toContain("submit")
-    expect(navFor("procurement").map((i) => i.key)).toContain("receive")
+    expect(navFor("stock").map((i) => i.key)).toContain("receive")
+    expect(navFor("procurement").map((i) => i.key)).not.toContain("receive")
     expect(navFor("admin").map((i) => i.key)).toContain("users")
     expect(navFor("manager").map((i) => i.key)).toContain("stock")
   })
@@ -74,6 +77,17 @@ describe("navFor", () => {
 
   it("falls back to the supervisor list for an unrecognised role", () => {
     expect(navFor("nonsense")).toEqual(navFor("supervisor"))
+  })
+})
+
+describe("operational access", () => {
+  it("only lets Stock Keeper enter stock records", () => {
+    for (const role of ROLES) expect(canWriteStock(role), role).toBe(role === "stock")
+  })
+  it("keeps manager dashboards viewable and admin focused on system management", () => {
+    expect(canReadStock("manager")).toBe(true)
+    expect(canReadStock("admin")).toBe(false)
+    expect(navFor("admin").map((item) => item.key)).toEqual(["home", "users", "settings", "profile"])
   })
 })
 

@@ -1,6 +1,15 @@
 import type { DispatchRow, Product, Shift } from "@/lib/db/types"
 import { PRODUCTS } from "@/lib/domain/record-types"
 
+/** Confirmed dispatch branches, in the user's display order (2026-10-22). */
+export const DISPATCH_BRANCHES = [
+  "Head Office", "Accra", "Bolgatanga", "Cape Coast", "Ho & Togo",
+  "Koforidua", "Takoradi", "Tarkwa", "Techiman", "Wa",
+] as const
+export type DispatchBranch = (typeof DISPATCH_BRANCHES)[number]
+export const isDispatchBranch = (value: string): value is DispatchBranch =>
+  (DISPATCH_BRANCHES as readonly string[]).includes(value)
+
 // ============================================================================
 // Dispatch — the outbound delivery log.
 //
@@ -122,6 +131,9 @@ export function validateDispatch(input: Partial<DispatchInput>): DispatchValidat
     if (typeof v !== "string" || v.trim().length === 0) {
       errors[key as string] = `${label} is required.`
     }
+  }
+  if (typeof input.destination === "string" && input.destination.trim() && !isDispatchBranch(input.destination)) {
+    errors.destination = "Choose one of the listed branches."
   }
 
   // FR-13: a dispatch of nothing is a data-entry accident, so at least one line must

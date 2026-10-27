@@ -281,6 +281,20 @@ export type DispatchLineRow = {
   created_at: string
 }
 
+/** Physical finished-goods returns, in cartons. Each movement adds to on hand. */
+export type ProductReturnRow = {
+  id: string
+  date: string
+  shift: Shift
+  product: Product
+  cartons: number
+  returned_from: string | null
+  remarks: string | null
+  received_by: string | null
+  user_id: string | null
+  created_at: string
+}
+
 export type SupervisorStreakRow = {
   user_id: string
   current_streak: number
@@ -418,6 +432,7 @@ export type Database = {
       invoice_lines: T<InvoiceLineRow>
       dispatches: T<DispatchRow>
       dispatch_lines: T<DispatchLineRow>
+      product_returns: T<ProductReturnRow>
       supervisor_streaks: T<SupervisorStreakRow>
       supervisor_badges: T<SupervisorBadgeRow>
     }
@@ -479,6 +494,10 @@ export type Database = {
       finished_goods_stock: {
         Args: Record<string, never>
         Returns: { product: Product; available: number; total_produced: number; total_loaded: number }[]
+      }
+      product_return_totals: {
+        Args: { p_from: string; p_to: string }
+        Returns: { product: Product; cartons: number }[]
       }
       // Replaces the recipes for the products in the payload, in ONE transaction, so
       // the deferred carton-fills check judges the final state rather than a half-

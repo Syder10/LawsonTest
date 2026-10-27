@@ -2,6 +2,7 @@ import type { User } from "@supabase/supabase-js"
 import { createServerSupabase } from "@/lib/supabase/server"
 import type { ProfileRow, UserRole } from "@/lib/db/types"
 import { getProfileForUser } from "@/lib/auth/profile"
+import { STOCK_READ_ROLES, STOCK_WRITE_ROLES } from "@/lib/domain/roles"
 
 // ============================================================================
 // Auth guards — one implementation, used by every API route / server action.
@@ -48,23 +49,22 @@ export async function requireRole(roles: UserRole[]): Promise<GuardResult> {
 }
 
 // Convenience wrappers for the common cases.
-export const requireStaff = () => requireRole(["manager", "admin"])
+export const requireManager = () => requireRole(["manager"])
+export const requireSupervisor = () => requireRole(["supervisor"])
 export const requireAdmin = () => requireRole(["admin"])
 
 /**
  * May RECORD a physical stock movement: a receipt, an invoice, a stock count, a
- * dispatch. Mirrors the SQL predicate `can_write_stock()` (0008).
- *
- * Managers and admins are included because management owns reconciliation — a stock
- * count is their instrument for correcting ledger drift.
+ * dispatch or return. Only Stock Keeper writes (0010); managers view dashboards
+ * and admins manage the system.
  */
-export const requireStockWrite = () => requireRole(["stock", "manager", "admin"])
+export const requireStockWrite = () => requireRole(STOCK_WRITE_ROLES)
 
 /**
  * May READ stock data. Adds `procurement`, which writes nothing. Mirrors the SQL
- * predicate `can_read_stock()` (0008).
+ * predicate `can_read_stock()` (0010). Admin has system screens only.
  */
-export const requireStockRead = () => requireRole(["stock", "procurement", "manager", "admin"])
+export const requireStockRead = () => requireRole(STOCK_READ_ROLES)
 
 // `requireProcurement` (procurement + manager + admin) is GONE as of 0008, rather
 // than redefined. It meant "may touch stock", which the split makes ambiguous: the
