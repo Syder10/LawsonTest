@@ -25,11 +25,13 @@ export function MaterialsTable({
   redDays,
   amberDays,
   onReconciled,
+  canCount = false,
 }: {
   materials: MaterialStatus[]
   redDays: number
   amberDays: number
   onReconciled?: () => void
+  canCount?: boolean
 }) {
   const sorted = [...materials].sort(byUrgency)
   const [reconcile, setReconcile] = useState<ReconcileTarget | null>(null)
@@ -121,24 +123,30 @@ export function MaterialsTable({
     },
     { key: "runout", header: "Runs out", align: "right", hideOnMobile: true, cell: (m) => (m.runOutDate ? shortDay(m.runOutDate) : "—") },
     { key: "status", header: "Status", align: "right", cell: (m) => <StatusBadge level={m.level} /> },
-    {
-      key: "action", header: "Action", align: "right",
-      cell: (m) => {
-        const target = ledgerTargetForKey(m.key)
-        if (!target) return <span className="text-ink-muted text-xs">—</span>
-        return (
-          <button
-            onClick={() => {
-              setReconcile({ ...target, label: m.label, unit: m.unit, currentRemaining: m.remaining })
-              setOpen(true)
-            }}
-            className="h-9 px-2 text-xs font-bold text-brand hover:underline whitespace-nowrap"
-          >
-            Count
-          </button>
-        )
-      },
-    },
+    ...(canCount
+      ? [
+          {
+            key: "action",
+            header: "Action",
+            align: "right" as const,
+            cell: (m: MaterialStatus) => {
+              const target = ledgerTargetForKey(m.key)
+              if (!target) return <span className="text-ink-muted text-xs">—</span>
+              return (
+                <button
+                  onClick={() => {
+                    setReconcile({ ...target, label: m.label, unit: m.unit, currentRemaining: m.remaining })
+                    setOpen(true)
+                  }}
+                  className="h-9 px-2 text-xs font-bold text-brand hover:underline whitespace-nowrap"
+                >
+                  Count
+                </button>
+              )
+            },
+          },
+        ]
+      : []),
   ]
 
   const countColumns: Column<StockCount>[] = [
@@ -178,12 +186,14 @@ export function MaterialsTable({
           title="Materials — stock & days left"
           hint={`operating days (Mon–Sat) · critical ≤ ${redDays} · low ≤ ${amberDays}`}
           actions={
-            <button
-              onClick={() => { setReconcile(null); setOpen(true) }}
-              className="h-9 px-2.5 flex items-center gap-1.5 rounded-lg bg-brand-solid text-brand-ink text-xs font-bold hover:bg-brand-solid-hover transition-colors active:scale-[0.97]"
-            >
-              <ClipboardCheck className="w-3.5 h-3.5" aria-hidden="true" /> New count
-            </button>
+            canCount ? (
+              <button
+                onClick={() => { setReconcile(null); setOpen(true) }}
+                className="h-9 px-2.5 flex items-center gap-1.5 rounded-lg bg-brand-solid text-brand-ink text-xs font-bold hover:bg-brand-solid-hover transition-colors active:scale-[0.97]"
+              >
+                <ClipboardCheck className="w-3.5 h-3.5" aria-hidden="true" /> New count
+              </button>
+            ) : undefined
           }
         />
         <DataTable
@@ -203,7 +213,9 @@ export function MaterialsTable({
         </Card>
       )}
 
-      <ReconcileModal open={open} onClose={() => setOpen(false)} onDone={afterReconcile} target={reconcile} />
+      {canCount && (
+        <ReconcileModal open={open} onClose={() => setOpen(false)} onDone={afterReconcile} target={reconcile} />
+      )}
     </div>
   )
 }

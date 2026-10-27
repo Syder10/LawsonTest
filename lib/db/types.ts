@@ -289,6 +289,8 @@ export type ProductReturnRow = {
   product: Product
   cartons: number
   returned_from: string | null
+  driver_name: string | null
+  vehicle_reg: string | null
   remarks: string | null
   received_by: string | null
   user_id: string | null

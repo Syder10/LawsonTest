@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { PRODUCTS } from "@/lib/domain/record-types"
 import { SHIFT_ORDER, shiftDateFor } from "@/lib/shift-config"
-import { validateDispatch, type DispatchInput } from "@/lib/domain/dispatch"
+import { DISPATCH_BRANCHES, validateDispatch, type DispatchInput } from "@/lib/domain/dispatch"
 import type { Product, Shift } from "@/lib/db/types"
 import { Card, Eyebrow, Field, NumberInput, PageHeader, Select, TextArea, TextInput } from "@/components/primitives"
 import { Button } from "@/components/ui/button"
@@ -107,8 +107,15 @@ export function DispatchForm() {
         <Field label="Driver name" required error={errors.driverName}>
           {(p) => <TextInput {...p} value={driverName} onChange={(e) => setDriverName(e.target.value)} placeholder="Full name" />}
         </Field>
-        <Field label="Destination" required error={errors.destination}>
-          {(p) => <TextInput {...p} value={destination} onChange={(e) => setDestination(e.target.value)} placeholder="Where the load is going" />}
+        <Field label="Destination (branch)" required error={errors.destination}>
+          {(p) => (
+            <Select {...p} value={destination} onChange={(e) => setDestination(e.target.value)}>
+              <option value="">Select destination branch...</option>
+              {DISPATCH_BRANCHES.map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </Select>
+          )}
         </Field>
         <Field label="Waybill number" hint="Optional. Must be unique where given." error={errors.waybill}>
           {(p) => <TextInput {...p} value={waybill} onChange={(e) => setWaybill(e.target.value)} placeholder="Document number" />}

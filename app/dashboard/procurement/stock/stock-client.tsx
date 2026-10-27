@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
-import { RefreshCw, Loader2, AlertCircle, AlertTriangle, PackageCheck, Send, ClipboardCheck, Truck, FileText, Factory } from "lucide-react"
+import { RefreshCw, Loader2, AlertCircle, AlertTriangle, PackageCheck, Send, ClipboardCheck, Truck, FileText, Factory, RotateCcw } from "lucide-react"
 import { fmt, fmt1, shortDay } from "@/components/features/dashboard/manager/viz"
 import { MIN_SAMPLE_DAYS, burnLooksImplausible, byUrgency } from "@/lib/domain/stock-status"
 import type { ProcurementMaterialStatus } from "@/lib/domain/stock-status"
@@ -339,6 +339,12 @@ export function StockClient({ canWrite }: { canWrite: boolean }) {
           className="h-9 px-3 flex items-center gap-1.5 rounded-lg border border-hairline bg-surface-card text-xs font-bold text-ink-secondary hover:border-brand transition-colors"
         >
           <Truck className="w-3.5 h-3.5" aria-hidden="true" /> Dispatch
+        </Link>
+        <Link
+          href="/dashboard/procurement/returns"
+          className="h-9 px-3 flex items-center gap-1.5 rounded-lg border border-hairline bg-surface-card text-xs font-bold text-ink-secondary hover:border-brand transition-colors"
+        >
+          <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" /> Returns
         </Link>
         <Link
           href="/dashboard/procurement/invoices"

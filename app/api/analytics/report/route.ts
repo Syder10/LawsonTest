@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { requireStaff } from "@/lib/auth/guards"
+import { requireManager } from "@/lib/auth/guards"
 import { bomFor } from "@/lib/domain/bom"
 import { operatingDaysBetween } from "@/lib/domain/operating-days"
 import { settingsFromRow } from "@/lib/domain/settings"
@@ -51,7 +51,7 @@ type Row = Record<string, unknown>
 const num = (v: unknown) => (typeof v === "number" ? v : Number(v) || 0)
 
 export async function GET(request: Request) {
-  const auth = await requireStaff()
+  const auth = await requireManager()
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
   const supabase = auth.ctx.supabase
 
@@ -127,8 +127,9 @@ export async function GET(request: Request) {
       if (m.product) q = q.eq("product", m.product)
       const rows = ((await q).data ?? []) as Row[]
       const { data: bom } = await supabase.from("packaging_bom").select("product, stamps_per_carton, cartons_per_carton")
+      const bomRows = (bom ?? []) as { product: string; stamps_per_carton: number | string | null; cartons_per_carton: number | string | null }[]
       const rate = (p: unknown) => {
-        const row = (bom ?? []).find((b) => b.product === p)
+        const row = bomRows.find((b) => b.product === p)
         if (!row) return 0
         return m.material === "tax_stamp" ? num(row.stamps_per_carton) : num(row.cartons_per_carton)
       }
@@ -316,7 +317,7 @@ export async function GET(request: Request) {
     Promise.all(allMaterials().map(materialStatus)),
     supabase.rpc("finished_goods_stock"),
   ])
-  const fg = fgRes.data ?? []
+  const fg = (fgRes.data ?? []) as { product: string; available: number | string | null }[]
 
   const payload: OverviewReport = {
     ...common,

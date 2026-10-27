@@ -81,7 +81,7 @@ describe("navFor", () => {
 })
 
 describe("operational access", () => {
-  it("only lets Stock Keeper enter stock records", () => {
+  it("only lets Stock Officer enter stock records", () => {
     for (const role of ROLES) expect(canWriteStock(role), role).toBe(role === "stock")
   })
   it("keeps manager dashboards viewable and admin focused on system management", () => {
@@ -166,13 +166,13 @@ describe("ROLE_LABELS", () => {
       manager: "Manager",
       admin: "Administrator",
       procurement: "Procurement",
-      stock: "Stock Keeper",
+      stock: "Stock Officer",
     })
   })
 
-  it("labels the new split roles distinctly: 'Procurement' (read-only) vs 'Stock Keeper' (writes)", () => {
+  it("labels the new split roles distinctly: 'Procurement' (read-only) vs 'Stock Officer' (writes)", () => {
     expect(ROLE_LABELS.procurement).toBe("Procurement")
-    expect(ROLE_LABELS.stock).toBe("Stock Keeper")
+    expect(ROLE_LABELS.stock).toBe("Stock Officer")
   })
 
   it("expands admin to 'Administrator'", () => {
@@ -221,7 +221,7 @@ describe("ROLE_COLORS", () => {
 
 describe("roleLabel", () => {
   it("returns the label for each known role", () => {
-    expect(ROLES.map(roleLabel)).toEqual(["Supervisor", "Manager", "Administrator", "Procurement", "Stock Keeper"])
+    expect(ROLES.map(roleLabel)).toEqual(["Supervisor", "Manager", "Administrator", "Procurement", "Stock Officer"])
   })
 
   it("falls back to 'Supervisor' for an unknown role", () => {

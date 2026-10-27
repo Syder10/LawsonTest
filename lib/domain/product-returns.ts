@@ -1,11 +1,16 @@
 import type { Product, ProductReturnRow, Shift } from "@/lib/db/types"
 import { PRODUCTS } from "@/lib/domain/record-types"
 import { SHIFT_ORDER } from "@/lib/shift-config"
+import { DISPATCH_BRANCHES, type DispatchBranch } from "@/lib/domain/dispatch"
+
+export { DISPATCH_BRANCHES, type DispatchBranch }
 
 export interface ProductReturnInput {
   date: string
   shift: Shift
   returnedFrom?: string | null
+  driverName?: string | null
+  vehicleReg?: string | null
   remarks?: string | null
   lines: { product: Product; cartons: number }[]
 }
@@ -34,7 +39,7 @@ export function validateProductReturn(input: unknown): { ok: boolean; errors: Re
   const body = isObject(input) ? input : {}
   if (!isReturnDate(body.date)) errors.date = "Pick a valid date for the day the shift started."
   if (!(SHIFT_ORDER as readonly unknown[]).includes(body.shift)) errors.shift = "Choose a shift."
-  for (const key of ["returnedFrom", "remarks"]) {
+  for (const key of ["returnedFrom", "driverName", "vehicleReg", "remarks"]) {
     if (body[key] != null && typeof body[key] !== "string") errors[key] = "Enter text."
   }
   let positive = false
@@ -71,8 +76,16 @@ export function productReturnLinesToSend(lines: ProductReturnInput["lines"]): Pr
 /** PostgREST numeric fields arrive as strings; coerce before rendering or adding. */
 export function toProductReturnDetail(row: Omit<ProductReturnRow, "cartons"> & { cartons: number | string }): ProductReturnDetail {
   return {
-    id: row.id, date: row.date, shift: row.shift, product: row.product,
-    cartons: Number(row.cartons), returned_from: row.returned_from,
-    remarks: row.remarks, received_by: row.received_by, created_at: row.created_at,
+    id: row.id,
+    date: row.date,
+    shift: row.shift,
+    product: row.product,
+    cartons: Number(row.cartons),
+    returned_from: row.returned_from,
+    driver_name: row.driver_name ?? null,
+    vehicle_reg: row.vehicle_reg ?? null,
+    remarks: row.remarks,
+    received_by: row.received_by,
+    created_at: row.created_at,
   }
 }

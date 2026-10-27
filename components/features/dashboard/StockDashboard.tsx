@@ -5,6 +5,7 @@ import Link from "next/link"
 import {
   RefreshCw, Loader2, AlertCircle, AlertTriangle, PackageCheck, Send, ClipboardList,
   Truck, FileText, Warehouse, Factory, ChevronRight, ArrowUpRight, Boxes, History,
+  RotateCcw,
 } from "lucide-react"
 import { fmt, fmt1 } from "@/components/features/dashboard/manager/viz"
 import { byUrgency } from "@/lib/domain/stock-status"
@@ -15,7 +16,7 @@ import { ActionBtn } from "@/components/features/shared/action-btn"
 import { Card, CardHeader, Eyebrow, EmptyState, StatTile } from "@/components/primitives"
 
 // ============================================================================
-// Stock Keeper home — an operational command center, distinct from the supervisor
+// Stock Officer home — an operational command center, distinct from the supervisor
 // home (streaks/badges/leaderboard) and the read-only procurement home. The stock
 // office OWNS physical movement, so its landing page answers one question first:
 // what needs acting on right now. It reuses the endpoints the stock dashboard
@@ -100,7 +101,7 @@ export function StockDashboard({ userName }: { userName: string | null }) {
             <h1 className="mt-0.5 break-words text-xl sm:text-2xl font-bold tracking-tight text-white">
               {loading && !report
                 ? <span className="inline-block h-7 w-40 rounded-lg bg-white/10 animate-pulse" />
-                : (userName || "Stock Keeper")}
+                : (userName || "Stock Officer")}
             </h1>
             <p className="mt-0.5 text-sm font-medium text-white/60">Stock Office · command center</p>
 
@@ -239,6 +240,7 @@ export function StockDashboard({ userName }: { userName: string | null }) {
           <ActionBtn href="/dashboard/procurement/submit" icon={Send} label="Log a receipt or issue" primary />
           <ActionBtn href="/dashboard/procurement/stock" icon={ClipboardList} label="Stock levels & counts" />
           <ActionBtn href="/dashboard/procurement/dispatch" icon={Truck} label="Dispatch a load" />
+          <ActionBtn href="/dashboard/procurement/returns" icon={RotateCcw} label="Product returns" />
           <ActionBtn href="/dashboard/procurement/invoices" icon={FileText} label="Supplier invoices" />
           <ActionBtn href="/dashboard/history" icon={History} label="Stock history" />
         </div>

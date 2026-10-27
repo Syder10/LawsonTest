@@ -15,8 +15,8 @@ const numify = (c: Record<string, any> | null) =>
 // (b) correct drift after a physical count. Each count re-anchors the ledger and
 // records the counted-vs-computed variance (shrinkage/surplus signal).
 //
-// WRITES are gated to stock + manager + admin (requireStockWrite); READS also
-// allow the read-only procurement office (requireStockRead). A count RE-ANCHORS
+// WRITES are gated to stock only (requireStockWrite); READS also allow manager
+// and the read-only procurement office (requireStockRead). A count RE-ANCHORS
 // the ledger — it rewrites what every later balance computes to — so it is the
 // highest-consequence permission in the stock/procurement split, and procurement
 // deliberately does not have it (PRD.md §4.1). The RPC re-checks the same rule in

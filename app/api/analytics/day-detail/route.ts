@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server"
-import { requireStaff } from "@/lib/auth/guards"
+import { requireManager } from "@/lib/auth/guards"
 import { RECORD_TYPES } from "@/lib/domain/record-types"
 import { enrichWithBalances } from "@/lib/domain/stock-ledger"
 import type { Shift } from "@/lib/db/types"
 
 // Drill-down: every record submitted for a specific day, grouped by record type.
-// Optionally narrowed to a single shift and/or department. Managers/admins only
+// Optionally narrowed to a single shift and/or department. Managers only
 // (reads all rows via RLS). Powers the dashboard's "inspect this day" view.
 export async function GET(request: Request) {
-  const auth = await requireStaff()
+  const auth = await requireManager()
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
   const supabase = auth.ctx.supabase
 

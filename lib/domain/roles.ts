@@ -5,7 +5,7 @@ import type { UserRole } from "@/lib/db/types"
 export const ROLES: UserRole[] = ["supervisor", "manager", "admin", "procurement", "stock"]
 
 /**
- * `stock` is "Stock Keeper" and `procurement` is "Procurement" — the labels changed
+ * `stock` is "Stock Officer" and `procurement` is "Procurement" — the labels changed
  * with the 0008 split, and the change matters.
  *
  * `procurement` used to be labelled "Stock Office", which was accurate when one role
@@ -18,7 +18,7 @@ export const ROLE_LABELS: Record<string, string> = {
   manager: "Manager",
   admin: "Administrator",
   procurement: "Procurement",
-  stock: "Stock Keeper",
+  stock: "Stock Officer",
 }
 
 /**
@@ -121,7 +121,7 @@ const ITEM: Record<NavKey, NavItem> = {
  * remains reachable by URL for anyone whose role permits it — it is simply not a
  * tab, because it was never part of their job.
  *
- * The stock keeper records receipts, invoices, counts and dispatch. Their tabs are
+ * The stock officer records receipts, invoices, counts and dispatch. Their tabs are
  * the operational surfaces they work from: Home, Receive (raw materials in), Stock
  * (the dashboard), History (their receipts log), and Profile. Invoices and dispatch
  * will be separate pages under the stock route when built (Phase 4).

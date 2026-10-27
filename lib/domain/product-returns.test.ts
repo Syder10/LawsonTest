@@ -44,8 +44,17 @@ it("only sends products that were physically returned", () => {
 it("coerces PostgREST quantities and keeps the account id off the response", () => {
   const detail = toProductReturnDetail({
     id: "r1", date: "2026-10-22", shift: "Night", product: "Bitters", cartons: "12.5",
-    returned_from: "Accra", received_by: "Stock Keeper", remarks: null, user_id: "u1", created_at: "",
+    returned_from: "Accra", driver_name: "Kofi Mensah", vehicle_reg: "GT-555-24",
+    received_by: "Stock Officer", remarks: null, user_id: "u1", created_at: "",
   })
   expect(detail.cartons + 2).toBe(14.5)
+  expect(detail.driver_name).toBe("Kofi Mensah")
+  expect(detail.vehicle_reg).toBe("GT-555-24")
   expect(detail).not.toHaveProperty("user_id")
+})
+
+it("accepts valid driver and car information", () => {
+  expect(validateProductReturn({ ...good, driverName: "Kofi Mensah", vehicleReg: "GT-555-24" }).ok).toBe(true)
+  expect(validateProductReturn({ ...good, driverName: 123 }).errors.driverName).toBeTruthy()
+  expect(validateProductReturn({ ...good, vehicleReg: true }).errors.vehicleReg).toBeTruthy()
 })

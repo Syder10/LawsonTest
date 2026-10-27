@@ -54,8 +54,14 @@ export const requireSupervisor = () => requireRole(["supervisor"])
 export const requireAdmin = () => requireRole(["admin"])
 
 /**
+ * Staff view for production analytics and dashboards. Scoped to manager only,
+ * as admin is restricted to system management and does not view operational records.
+ */
+export const requireStaff = requireManager
+
+/**
  * May RECORD a physical stock movement: a receipt, an invoice, a stock count, a
- * dispatch or return. Only Stock Keeper writes (0010); managers view dashboards
+ * dispatch or return. Only Stock Officer writes (0010); managers view dashboards
  * and admins manage the system.
  */
 export const requireStockWrite = () => requireRole(STOCK_WRITE_ROLES)

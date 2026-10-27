@@ -1,17 +1,17 @@
 import { NextResponse } from "next/server"
-import { requireStaff } from "@/lib/auth/guards"
+import { requireManager } from "@/lib/auth/guards"
 import { RECORD_TYPES } from "@/lib/domain/record-types"
 
 // Activity summary (row count + latest date) for every record type, for the
-// admin/manager dashboard.
+// manager dashboard.
 //
 // vs the old route:
 //   • one call returns ALL record types (was one HTTP call per table).
-//   • uses the RLS-bound client — managers/admins read all rows via policy, so
+//   • uses the RLS-bound client — managers read all rows via policy, so
 //     no service-role key is needed.
 //   • record types come from the registry (no separate table allowlist).
 export async function GET() {
-  const auth = await requireStaff()
+  const auth = await requireManager()
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
   const { supabase } = auth.ctx
 
