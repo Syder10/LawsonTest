@@ -5,6 +5,13 @@ import { DISPATCH_BRANCHES, type DispatchBranch } from "@/lib/domain/dispatch"
 
 export { DISPATCH_BRANCHES, type DispatchBranch }
 
+export interface ProductReturnLineInput {
+  product: Product
+  cartons?: number
+  repackCartons?: number
+  spoilageCartons?: number
+}
+
 export interface ProductReturnInput {
   date: string
   shift: Shift
@@ -12,11 +19,16 @@ export interface ProductReturnInput {
   driverName?: string | null
   vehicleReg?: string | null
   remarks?: string | null
-  lines: { product: Product; cartons: number }[]
+  lines: ProductReturnLineInput[]
 }
 
 export type ProductReturnDetail = Omit<ProductReturnRow, "user_id">
-export interface ProductReturnTotal { product: Product; cartons: number }
+export interface ProductReturnTotal {
+  product: Product
+  cartons: number
+  repackCartons: number
+  spoilageCartons: number
+}
 export interface ProductReturnsReport {
   filters: { from: string; to: string }
   returns: ProductReturnDetail[]
@@ -55,9 +67,31 @@ export function validateProductReturn(input: unknown): { ok: boolean; errors: Re
       const product = String(line.product)
       if (seen.has(product)) errors.lines = "Enter each product only once."
       seen.add(product)
-      // Accept numbers only: Number(null), Number(true) and Number("") are not
-      // quantities, and accepting them would quietly change a malformed request.
-      const n = line.cartons
+      // Line may specify cartons, or repackCartons and spoilageCartons
+      const repack = line.repackCartons
+      const spoilage = line.spoilageCartons
+      let n = line.cartons
+
+      if (repack !== undefined && repack !== null) {
+        if (typeof repack !== "number" || !Number.isFinite(repack) || repack < 0 || repack >= 10_000_000_000) {
+          errors[`repack_${product}`] = "Enter a valid repack quantity of zero or more."
+        } else if (Math.abs(repack * 100 - Math.round(repack * 100)) > 0.0001) {
+          errors[`repack_${product}`] = "Use at most two decimal places."
+        }
+      }
+
+      if (spoilage !== undefined && spoilage !== null) {
+        if (typeof spoilage !== "number" || !Number.isFinite(spoilage) || spoilage < 0 || spoilage >= 10_000_000_000) {
+          errors[`spoilage_${product}`] = "Enter a valid spoilage quantity of zero or more."
+        } else if (Math.abs(spoilage * 100 - Math.round(spoilage * 100)) > 0.0001) {
+          errors[`spoilage_${product}`] = "Use at most two decimal places."
+        }
+      }
+
+      if (n === undefined && (repack !== undefined || spoilage !== undefined)) {
+        n = (Number(repack) || 0) + (Number(spoilage) || 0)
+      }
+
       if (typeof n !== "number" || !Number.isFinite(n) || n < 0 || n >= 10_000_000_000) {
         errors[`cartons_${product}`] = "Enter a valid carton quantity of zero or more."
       } else if (Math.abs(n * 100 - Math.round(n * 100)) > 0.0001) {
@@ -69,18 +103,43 @@ export function validateProductReturn(input: unknown): { ok: boolean; errors: Re
   return { ok: Object.keys(errors).length === 0, errors }
 }
 
-export function productReturnLinesToSend(lines: ProductReturnInput["lines"]): ProductReturnInput["lines"] {
-  return lines.filter((line) => Number.isFinite(line.cartons) && line.cartons > 0)
+export function productReturnLinesToSend(lines: ProductReturnInput["lines"]): (ProductReturnLineInput & { cartons: number; repackCartons?: number; spoilageCartons?: number })[] {
+  return lines
+    .map((line) => {
+      const hasSplit = line.repackCartons !== undefined || line.spoilageCartons !== undefined
+      const repack = Number.isFinite(line.repackCartons) ? Number(line.repackCartons) : 0
+      const spoilage = Number.isFinite(line.spoilageCartons) ? Number(line.spoilageCartons) : 0
+      const cartons = Number.isFinite(line.cartons) ? Number(line.cartons) : repack + spoilage
+      const res: ProductReturnLineInput & { cartons: number; repackCartons?: number; spoilageCartons?: number } = {
+        product: line.product,
+        cartons,
+      }
+      if (hasSplit) {
+        res.repackCartons = repack
+        res.spoilageCartons = spoilage
+      }
+      return res
+    })
+    .filter((line) => line.cartons > 0)
 }
 
 /** PostgREST numeric fields arrive as strings; coerce before rendering or adding. */
-export function toProductReturnDetail(row: Omit<ProductReturnRow, "cartons"> & { cartons: number | string }): ProductReturnDetail {
+export function toProductReturnDetail(row: Omit<ProductReturnRow, "cartons" | "repack_cartons" | "spoilage_cartons"> & {
+  cartons: number | string
+  repack_cartons?: number | string | null
+  spoilage_cartons?: number | string | null
+}): ProductReturnDetail {
+  const cartons = Number(row.cartons)
+  const repack_cartons = row.repack_cartons != null ? Number(row.repack_cartons) : cartons
+  const spoilage_cartons = row.spoilage_cartons != null ? Number(row.spoilage_cartons) : 0
   return {
     id: row.id,
     date: row.date,
     shift: row.shift,
     product: row.product,
-    cartons: Number(row.cartons),
+    cartons,
+    repack_cartons,
+    spoilage_cartons,
     returned_from: row.returned_from,
     driver_name: row.driver_name ?? null,
     vehicle_reg: row.vehicle_reg ?? null,

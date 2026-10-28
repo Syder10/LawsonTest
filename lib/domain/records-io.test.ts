@@ -40,12 +40,13 @@ describe("buildRecordRow - unknown record type", () => {
 })
 
 describe("buildRecordRow - envelope columns", () => {
-  it("always writes date, shift, group_number, department, supervisor_name and user_id", () => {
+  it("always writes date, shift, group_number, is_part_time, department, supervisor_name and user_id", () => {
     const row = built(buildRecordRow("Ginger Production", env({ department: "Alcohol and Blending" }), {})).row
     expect(row).toEqual({
       date: "2026-08-24",
       shift: "Morning",
       group_number: 2,
+      is_part_time: false,
       department: "Alcohol and Blending",
       supervisor_name: "Ama Mensah",
       user_id: "11111111-2222-3333-4444-555555555555",
@@ -429,6 +430,7 @@ describe("buildRecordRow - blank and unmapped fields", () => {
       "date",
       "shift",
       "group_number",
+      "is_part_time",
       "department",
       "supervisor_name",
       "user_id",

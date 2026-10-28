@@ -2,16 +2,13 @@ import type { UserRole } from "@/lib/db/types"
 
 // Shared role presentation. The label map was duplicated in the dashboard
 // layout header and the user-management screen.
-export const ROLES: UserRole[] = ["supervisor", "manager", "admin", "procurement", "stock"]
+export const ROLES: UserRole[] = ["supervisor", "manager", "admin", "procurement", "stock", "qc_officer", "qc_manager"]
 
 /**
  * `stock` is "Stock Officer" and `procurement` is "Procurement" — the labels changed
  * with the 0008 split, and the change matters.
  *
- * `procurement` used to be labelled "Stock Office", which was accurate when one role
- * did both jobs. It is now the read-only buying office, so keeping that label on it
- * would have named the wrong role after the job moved: someone assigning accounts
- * would give the store's staff the role that cannot record a receipt.
+ * `qc_officer` and `qc_manager` handle Quality Control inspection and standards.
  */
 export const ROLE_LABELS: Record<string, string> = {
   supervisor: "Supervisor",
@@ -19,15 +16,12 @@ export const ROLE_LABELS: Record<string, string> = {
   admin: "Administrator",
   procurement: "Procurement",
   stock: "Stock Officer",
+  qc_officer: "QC Officer",
+  qc_manager: "QC Manager",
 }
 
 /**
  * What each role is FOR, shown beside the label wherever an account is assigned.
- *
- * The stock/procurement distinction is invisible from the names alone, and picking
- * the wrong one leaves someone unable to do their job (or able to re-anchor the
- * ledger when they should not be). The screen that assigns roles is the only place
- * that can prevent it, so it says so.
  */
 export const ROLE_DESCRIPTIONS: Record<string, string> = {
   supervisor: "Files production records for one department",
@@ -35,6 +29,8 @@ export const ROLE_DESCRIPTIONS: Record<string, string> = {
   admin: "Manages users, access and system settings",
   procurement: "Reads stock data — cannot record receipts or counts",
   stock: "Records receipts, invoices, stock counts, dispatch and product returns",
+  qc_officer: "Records and inspects water, product, and raw material quality tests",
+  qc_manager: "Manages QC standards, reviews exceptions and monitors compliance",
 }
 
 /** Roles that may RECORD a physical stock movement. Mirrors SQL `can_write_stock()`. */
@@ -49,6 +45,12 @@ export const canWriteStock = (role: string): boolean =>
 export const canReadStock = (role: string): boolean =>
   (STOCK_READ_ROLES as string[]).includes(role)
 
+export const canAccessQc = (role: string): boolean =>
+  (["qc_officer", "qc_manager", "admin"] as string[]).includes(role)
+
+export const canManageQc = (role: string): boolean =>
+  (["qc_manager", "admin"] as string[]).includes(role)
+
 /**
  * Role badge styling, on the semantic tokens.
  *
@@ -61,11 +63,10 @@ export const canReadStock = (role: string): boolean =>
 export const ROLE_COLORS: Record<string, string> = {
   admin: "bg-brand-solid text-brand-ink border-brand-solid",
   manager: "bg-brand-subtle text-brand-subtle-ink border-brand/25",
-  // stock and procurement sit at the same rung deliberately: neither outranks the
-  // other, they do different jobs. Distinguishing them by weight would imply a
-  // privilege ordering that does not exist, and the label already tells them apart.
+  qc_manager: "bg-brand-subtle text-brand-subtle-ink border-brand/25",
   stock: "bg-surface-sunken text-ink-secondary border-line-strong",
   procurement: "bg-surface-sunken text-ink-secondary border-line-strong",
+  qc_officer: "bg-surface-sunken text-ink-secondary border-line-strong",
   supervisor: "bg-surface-card text-ink-muted border-hairline",
 }
 
@@ -89,7 +90,7 @@ export const isKnownRole = (role: string): role is UserRole =>
 // a "More" overflow. That cap is a real constraint, so each role gets the three to
 // five things it actually does rather than every route it may access.
 
-export type NavKey = "home" | "submit" | "receive" | "history" | "stock" | "users" | "settings" | "profile"
+export type NavKey = "home" | "submit" | "receive" | "history" | "stock" | "users" | "settings" | "profile" | "qc"
 
 export interface NavItem {
   key: NavKey
@@ -101,30 +102,17 @@ export interface NavItem {
 const ITEM: Record<NavKey, NavItem> = {
   home: { key: "home", href: "/dashboard", label: "Home" },
   submit: { key: "submit", href: "/dashboard/forms", label: "Submit" },
-  receive: { key: "receive", href: "/dashboard/procurement/submit", label: "Receive" },
+  receive: { key: "receive", href: "/dashboard/stock/receipts", label: "Receive" },
   history: { key: "history", href: "/dashboard/history", label: "History" },
-  stock: { key: "stock", href: "/dashboard/procurement/stock", label: "Stock" },
+  stock: { key: "stock", href: "/dashboard/stock", label: "Stock" },
   users: { key: "users", href: "/dashboard/admin/users", label: "Users" },
   settings: { key: "settings", href: "/dashboard/admin/settings", label: "Settings" },
   profile: { key: "profile", href: "/dashboard/profile", label: "Profile" },
+  qc: { key: "qc", href: "/dashboard/qc", label: "QC" },
 }
 
 /**
  * Nav is scoped to what a role actually DOES, not to everything it may read.
- *
- * Only supervisors submit production records, so only they get Submit. Procurement
- * gets Receive (raw materials in, PPE issued out) and History, because their history
- * IS their receipts log — but not Submit, since they file no production records.
- * Managers and admins file nothing at all: they read the analytics dashboard, so
- * neither Submit nor History belongs on their bar. Managers still see record-level
- * detail through the dashboard's day drawer and the export, and /dashboard/history
- * remains reachable by URL for anyone whose role permits it — it is simply not a
- * tab, because it was never part of their job.
- *
- * The stock officer records receipts, invoices, counts and dispatch. Their tabs are
- * the operational surfaces they work from: Home, Receive (raw materials in), Stock
- * (the dashboard), History (their receipts log), and Profile. Invoices and dispatch
- * will be separate pages under the stock route when built (Phase 4).
  */
 const NAV_BY_ROLE: Record<UserRole, NavKey[]> = {
   supervisor: ["home", "submit", "history", "profile"],
@@ -132,6 +120,8 @@ const NAV_BY_ROLE: Record<UserRole, NavKey[]> = {
   procurement: ["home", "stock", "history", "profile"],
   stock: ["home", "receive", "stock", "history", "profile"],
   admin: ["home", "users", "settings", "profile"],
+  qc_officer: ["home", "qc", "profile"],
+  qc_manager: ["home", "qc", "profile"],
 }
 
 export function navFor(role: string): NavItem[] {

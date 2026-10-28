@@ -172,7 +172,7 @@ export function StockLedgerIndex() {
           columns={columns}
           rows={shown}
           rowKey={(m) => m.key}
-          rowHref={(m) => `/dashboard/procurement/stock/material/${m.key}`}
+          rowHref={(m) => `/dashboard/stock/material/${m.key}`}
           empty={<EmptyState compact title="No materials to show" />}
         />
       </Card>

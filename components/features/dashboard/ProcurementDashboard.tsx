@@ -28,8 +28,8 @@ export function ProcurementDashboard() {
       </div>
 
       <div className="space-y-2">
-        <ActionBtn href="/dashboard/procurement/stock" icon={BarChart2} label="Stock levels & days of cover" primary />
-        <ActionBtn href="/dashboard/procurement/submit" icon={FileText} label="Log a receipt or issue" />
+        <ActionBtn href="/dashboard/stock" icon={BarChart2} label="Stock levels & days of cover" primary />
+        <ActionBtn href="/dashboard/stock/monthly-report" icon={FileText} label="Monthly stock report" />
         <ActionBtn href="/dashboard/history" icon={History} label="Submission history" />
       </div>
     </div>

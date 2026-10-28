@@ -2,20 +2,12 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ClipboardList, History, Home, PackagePlus, SlidersHorizontal, User, Users, Warehouse } from "lucide-react"
+import { ClipboardList, FlaskConical, History, Home, PackagePlus, SlidersHorizontal, User, Users, Warehouse } from "lucide-react"
 import { isActiveNav, navFor, type NavKey } from "@/lib/domain/roles"
 import { cn } from "@/lib/utils"
 
 // ============================================================================
 // Role-aware navigation.
-//
-// Bottom tab bar on phones (where supervisors work, often one-handed at a
-// machine) and a header row on desktop (where managers work). The routes come
-// from lib/domain/roles so the two renderings can never disagree.
-//
-// This replaces a hub-and-spoke model with no persistent nav at all: the only way
-// between sections was a dashboard card out and a back-arrow in, and three of the
-// four roles had no link to their own Profile whatsoever.
 // ============================================================================
 
 const ICON: Record<NavKey, typeof Home> = {
@@ -27,6 +19,7 @@ const ICON: Record<NavKey, typeof Home> = {
   users: Users,
   settings: SlidersHorizontal,
   profile: User,
+  qc: FlaskConical,
 }
 
 /** Horizontal nav for the header. Hidden below `md`, where the tab bar takes over. */

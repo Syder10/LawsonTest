@@ -5,7 +5,7 @@ import Link from "next/link"
 import {
   RefreshCw, Loader2, AlertCircle, AlertTriangle, PackageCheck, Send, ClipboardList,
   Truck, FileText, Warehouse, Factory, ChevronRight, ArrowUpRight, Boxes, History,
-  RotateCcw,
+  RotateCcw, Calendar, Gift,
 } from "lucide-react"
 import { fmt, fmt1 } from "@/components/features/dashboard/manager/viz"
 import { byUrgency } from "@/lib/domain/stock-status"
@@ -200,7 +200,7 @@ export function StockDashboard({ userName }: { userName: string | null }) {
             {attention.map((m) => (
               <li key={m.key}>
                 <Link
-                  href={`/dashboard/procurement/stock/material/${m.key}`}
+                  href={`/dashboard/stock/material/${m.key}`}
                   className="group flex items-center gap-3 px-4 sm:px-5 py-3 hover:bg-surface-sunken transition-colors"
                 >
                   <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${m.level === "red" ? "bg-critical" : "bg-warning"}`} aria-hidden="true" />
@@ -224,7 +224,7 @@ export function StockDashboard({ userName }: { userName: string | null }) {
         )}
         {report && (
           <div className="px-5 py-3 border-t border-hairline">
-            <Link href="/dashboard/procurement/stock" className="inline-flex items-center gap-1 text-xs font-bold text-brand hover:underline">
+            <Link href="/dashboard/stock" className="inline-flex items-center gap-1 text-xs font-bold text-brand hover:underline">
               View all stock levels <ArrowUpRight className="w-3.5 h-3.5" aria-hidden="true" />
             </Link>
           </div>
@@ -237,11 +237,13 @@ export function StockDashboard({ userName }: { userName: string | null }) {
       <div className="animate-fade-in-up" style={step(4)}>
         <Eyebrow className="mb-2 block">Quick actions</Eyebrow>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <ActionBtn href="/dashboard/procurement/submit" icon={Send} label="Log a receipt or issue" primary />
-          <ActionBtn href="/dashboard/procurement/stock" icon={ClipboardList} label="Stock levels & counts" />
-          <ActionBtn href="/dashboard/procurement/dispatch" icon={Truck} label="Dispatch a load" />
-          <ActionBtn href="/dashboard/procurement/returns" icon={RotateCcw} label="Product returns" />
-          <ActionBtn href="/dashboard/procurement/invoices" icon={FileText} label="Supplier invoices" />
+          <ActionBtn href="/dashboard/stock/monthly-report" icon={Calendar} label="Monthly stock report" primary />
+          <ActionBtn href="/dashboard/stock/receipts" icon={Send} label="Log a receipt or issue" />
+          <ActionBtn href="/dashboard/stock" icon={ClipboardList} label="Stock levels & counts" />
+          <ActionBtn href="/dashboard/stock/dispatch" icon={Truck} label="Dispatch a load" />
+          <ActionBtn href="/dashboard/stock/returns" icon={RotateCcw} label="Product returns" />
+          <ActionBtn href="/dashboard/stock/donations" icon={Gift} label="Donations & samples" />
+          <ActionBtn href="/dashboard/stock/invoices" icon={FileText} label="Supplier invoices" />
           <ActionBtn href="/dashboard/history" icon={History} label="Stock history" />
         </div>
       </div>

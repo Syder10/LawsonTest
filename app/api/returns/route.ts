@@ -38,6 +38,8 @@ export async function POST(request: NextRequest) {
     shift: body.shift!,
     product: line.product,
     cartons: line.cartons,
+    repack_cartons: line.repackCartons ?? line.cartons,
+    spoilage_cartons: line.spoilageCartons ?? 0,
     returned_from: body.returnedFrom?.trim() || null,
     driver_name: body.driverName?.trim() || null,
     vehicle_reg: body.vehicleReg?.trim() || null,

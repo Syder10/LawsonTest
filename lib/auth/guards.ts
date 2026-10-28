@@ -72,6 +72,13 @@ export const requireStockWrite = () => requireRole(STOCK_WRITE_ROLES)
  */
 export const requireStockRead = () => requireRole(STOCK_READ_ROLES)
 
+/**
+ * QC access guards: QC Officers and QC Managers can view records and submit tests.
+ * Only QC Managers (and admins) can configure standards or view executive QC metrics.
+ */
+export const requireQcAccess = () => requireRole(["qc_officer", "qc_manager", "admin"])
+export const requireQcManager = () => requireRole(["qc_manager", "admin"])
+
 // `requireProcurement` (procurement + manager + admin) is GONE as of 0008, rather
 // than redefined. It meant "may touch stock", which the split makes ambiguous: the
 // procurement office may now read stock and may not write it, so any single

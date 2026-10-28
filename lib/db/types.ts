@@ -17,7 +17,7 @@ export type Shift = "Morning" | "Afternoon" | "Night"
  * re-anchors the derived ledger, so letting whoever reads a report also record one
  * means a reporting account can rewrite history. See PRD.md §1.
  */
-export type UserRole = "admin" | "manager" | "supervisor" | "procurement" | "stock"
+export type UserRole = "admin" | "manager" | "supervisor" | "procurement" | "stock" | "qc_officer" | "qc_manager"
 export type Product = "Bitters" | "Ginger"
 
 // Envelope columns shared by every record row.
@@ -26,6 +26,7 @@ type RecordEnvelope = {
   date: string
   shift: Shift
   group_number: number | null
+  is_part_time?: boolean
   department: string
   supervisor_name: string | null
   remarks: string | null
@@ -288,6 +289,8 @@ export type ProductReturnRow = {
   shift: Shift
   product: Product
   cartons: number
+  repack_cartons: number
+  spoilage_cartons: number
   returned_from: string | null
   driver_name: string | null
   vehicle_reg: string | null
@@ -295,6 +298,102 @@ export type ProductReturnRow = {
   received_by: string | null
   user_id: string | null
   created_at: string
+}
+
+export type DonationRow = {
+  id: string
+  date: string
+  shift: Shift
+  product: Product
+  cartons: number
+  recipient: string
+  remarks: string | null
+  user_id: string | null
+  created_at: string
+}
+
+export type QcStatus =
+  | "in_range"
+  | "below_range"
+  | "above_range"
+  | "out_of_range"
+  | "standard_not_configured"
+  | "not_evaluated"
+  | "incomplete"
+
+export type QcCategory = "water" | "product" | "raw_materials"
+
+export type QcStandardRow = {
+  id: string
+  record_type: string
+  parameter_key: string
+  parameter_label: string
+  unit: string | null
+  lower_limit: number | null
+  upper_limit: number | null
+  is_inclusive: boolean
+  expression: string | null
+  effective_from: string
+  effective_to: string | null
+  is_active: boolean
+  created_by: string | null
+  created_at: string
+}
+
+export type QcStandardChangeRow = {
+  id: string
+  standard_id: string
+  previous_values: Record<string, unknown> | null
+  new_values: Record<string, unknown>
+  reason: string
+  changed_by: string | null
+  created_at: string
+}
+
+export type QcRecordRow = {
+  id: string
+  record_reference: string
+  category: QcCategory
+  record_type: string
+  test_date: string
+  test_time: string
+  day_name: string | null
+  batch_no: string | null
+  product_name: string | null
+  supplier: string | null
+  origin: string | null
+  checked_by: string | null
+  record_status: QcStatus
+  parameters: Record<string, unknown>
+  submitted_by: string
+  user_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type QcRecordResultRow = {
+  id: string
+  qc_record_id: string
+  parameter_key: string
+  parameter_label: string
+  numeric_value: number | null
+  text_value: string | null
+  unit: string | null
+  standard_id: string | null
+  evaluated_status: QcStatus
+  evaluation_note: string | null
+  evaluated_at: string
+}
+
+export type QcRecordAmendmentRow = {
+  id: string
+  qc_record_id: string
+  field_name: string
+  old_value: string | null
+  new_value: string
+  reason: string
+  amended_by: string | null
+  amended_at: string
 }
 
 export type SupervisorStreakRow = {
@@ -435,6 +534,12 @@ export type Database = {
       dispatches: T<DispatchRow>
       dispatch_lines: T<DispatchLineRow>
       product_returns: T<ProductReturnRow>
+      donations: T<DonationRow>
+      qc_standards: T<QcStandardRow>
+      qc_standard_changes: T<QcStandardChangeRow>
+      qc_records: T<QcRecordRow>
+      qc_record_results: T<QcRecordResultRow>
+      qc_record_amendments: T<QcRecordAmendmentRow>
       supervisor_streaks: T<SupervisorStreakRow>
       supervisor_badges: T<SupervisorBadgeRow>
     }

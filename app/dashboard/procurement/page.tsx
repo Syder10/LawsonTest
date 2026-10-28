@@ -5,5 +5,5 @@ import { redirect } from "next/navigation"
 // and which nothing linked to. The canonical flows are the stock dashboard and
 // the receive/issue form, so this route now redirects to the dashboard.
 export default function ProcurementIndex() {
-  redirect("/dashboard/procurement/stock")
+  redirect("/dashboard/stock")
 }

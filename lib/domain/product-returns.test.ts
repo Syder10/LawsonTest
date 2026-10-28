@@ -58,3 +58,26 @@ it("accepts valid driver and car information", () => {
   expect(validateProductReturn({ ...good, driverName: 123 }).errors.driverName).toBeTruthy()
   expect(validateProductReturn({ ...good, vehicleReg: true }).errors.vehicleReg).toBeTruthy()
 })
+
+it("accepts separate repack and spoilage cartons and calculates total", () => {
+  const withSplit: ProductReturnInput = {
+    date: "2026-10-22",
+    shift: "Morning",
+    lines: [{ product: "Bitters", repackCartons: 36, spoilageCartons: 14 }],
+  }
+  expect(validateProductReturn(withSplit).ok).toBe(true)
+  const sent = productReturnLinesToSend(withSplit.lines)
+  expect(sent).toEqual([{ product: "Bitters", cartons: 50, repackCartons: 36, spoilageCartons: 14 }])
+})
+
+it("preserves repack and spoilage quantities when coercing from PostgREST", () => {
+  const detail = toProductReturnDetail({
+    id: "r2", date: "2026-10-22", shift: "Morning", product: "Bitters",
+    cartons: "50", repack_cartons: "36", spoilage_cartons: "14",
+    returned_from: "Takoradi", driver_name: "Anim", vehicle_reg: "GT-100",
+    received_by: "Stock Officer", remarks: null, user_id: "u1", created_at: "",
+  })
+  expect(detail.cartons).toBe(50)
+  expect(detail.repack_cartons).toBe(36)
+  expect(detail.spoilage_cartons).toBe(14)
+})

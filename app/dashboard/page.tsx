@@ -5,6 +5,7 @@ import { SupervisorDashboard }  from "@/components/features/dashboard/Supervisor
 import { AdminDashboard }       from "@/components/features/dashboard/AdminDashboard"
 import { ProcurementDashboard } from "@/components/features/dashboard/ProcurementDashboard"
 import { StockDashboard }       from "@/components/features/dashboard/StockDashboard"
+import { QcDashboardClient }    from "@/components/features/qc/qc-dashboard-client"
 import { getProfileForUser } from "@/lib/auth/profile"
 
 export default async function DashboardPage() {
@@ -23,5 +24,7 @@ export default async function DashboardPage() {
     if (role === "manager")      return <ManagerDashboard />
     if (role === "procurement")  return <ProcurementDashboard />
     if (role === "stock")        return <StockDashboard userName={profile.full_name} />
+    if (role === "qc_officer")   return <QcDashboardClient isManager={false} />
+    if (role === "qc_manager")   return <QcDashboardClient isManager={true} />
     return <SupervisorDashboard userId={user.id} />
 }

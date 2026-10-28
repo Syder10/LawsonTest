@@ -20,6 +20,7 @@ export interface RecordEnvelopeInput {
   date: string
   shift: Shift
   group_number: number | null
+  is_part_time?: boolean
   department: string
   supervisor_name: string | null
   user_id: string
@@ -63,6 +64,7 @@ export function buildRecordRow(
     date: env.date,
     shift: env.shift,
     group_number: env.group_number,
+    is_part_time: !!env.is_part_time,
     department: env.department,
     supervisor_name: env.supervisor_name,
     user_id: env.user_id,

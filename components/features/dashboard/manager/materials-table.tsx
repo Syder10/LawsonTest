@@ -202,7 +202,7 @@ export function MaterialsTable({
           rowKey={(m) => m.key}
           // Only the aggregated "Herbs" row drills down (to the per-variant hub);
           // every other material is a live status row with its own Count action.
-          rowHref={(m) => (m.key === "herb" ? "/dashboard/procurement/stock/herbs" : null)}
+          rowHref={(m) => (m.key === "herb" ? "/dashboard/stock/herbs" : null)}
         />
       </Card>
 

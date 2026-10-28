@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
     productType?: Product | null
     variant?: string | null
     department?: string
+    isPartTime?: boolean
     formData?: Record<string, unknown>
   }
   try {
@@ -88,6 +89,7 @@ export async function POST(request: NextRequest) {
       user_id: user.id,
       product: def.products.length > 0 ? (productType ?? null) : null,
       variant: variant ?? (formData?.["Type of Herb"] as string | undefined) ?? null,
+      is_part_time: !!body.isPartTime,
     },
     formData ?? {},
   )

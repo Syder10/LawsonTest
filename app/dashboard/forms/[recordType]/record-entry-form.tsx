@@ -98,6 +98,7 @@ export default function RecordEntryForm({
   const selectedDate = initialDate
 
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isPartTime, setIsPartTime] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [errors, setErrors] = useState<Errors>({})
@@ -388,7 +389,7 @@ export default function RecordEntryForm({
 
     // One shape for every layout: a list of scopes to validate and then post.
     type Scope = { scope: string; data: Record<string, string>; body: Record<string, unknown> }
-    const base = { recordType, department, group: groupNumber, shift, date: selectedDate }
+    const base = { recordType, department, group: groupNumber, shift, date: selectedDate, isPartTime }
     let scopes: Scope[] = []
 
     if (isExtraction) {
@@ -854,6 +855,22 @@ export default function RecordEntryForm({
       {/* noValidate: the browser's own bubbles were a second, competing error
           voice that fired before our validator ever ran. */}
       <form onSubmit={handleSubmit} noValidate className="space-y-5">
+        <div className="flex items-center gap-3 p-3.5 rounded-xl border border-hairline bg-surface-card">
+          <input
+            type="checkbox"
+            id="part-time-shift"
+            checked={isPartTime}
+            onChange={(e) => setIsPartTime(e.target.checked)}
+            className="w-4 h-4 rounded border-hairline text-brand focus:ring-brand cursor-pointer"
+          />
+          <label htmlFor="part-time-shift" className="text-xs font-bold text-ink-primary cursor-pointer select-none">
+            Part-time / Casual Shift
+            <span className="block text-[11px] font-normal text-ink-secondary mt-0.5">
+              Check if this shift was operated by part-time or casual workers (feeds the Part-Time column in stock reports).
+            </span>
+          </label>
+        </div>
+
         {hasDraft && (
           <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-surface-sunken border border-hairline">
             <p className="text-xs font-medium text-ink-secondary">Unsaved entries from earlier were restored.</p>

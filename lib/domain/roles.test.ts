@@ -112,8 +112,8 @@ describe("isActiveNav", () => {
 
   it("prefers the longest match when routes nest", () => {
     const procurement = navFor("procurement")
-    const path = "/dashboard/procurement/stock"
-    expect(isActiveNav("/dashboard/procurement/stock", path, procurement)).toBe(true)
+    const path = "/dashboard/stock"
+    expect(isActiveNav("/dashboard/stock", path, procurement)).toBe(true)
     expect(isActiveNav("/dashboard", path, procurement)).toBe(false)
   })
 
@@ -150,8 +150,8 @@ describe("isKnownRole", () => {
 })
 
 describe("ROLES", () => {
-  it("lists the five application roles in privilege order", () => {
-    expect(ROLES).toEqual(["supervisor", "manager", "admin", "procurement", "stock"])
+  it("lists the application roles in privilege order", () => {
+    expect(ROLES).toEqual(["supervisor", "manager", "admin", "procurement", "stock", "qc_officer", "qc_manager"])
   })
 
   it("contains no duplicates", () => {
@@ -167,6 +167,8 @@ describe("ROLE_LABELS", () => {
       admin: "Administrator",
       procurement: "Procurement",
       stock: "Stock Officer",
+      qc_officer: "QC Officer",
+      qc_manager: "QC Manager",
     })
   })
 
@@ -221,7 +223,15 @@ describe("ROLE_COLORS", () => {
 
 describe("roleLabel", () => {
   it("returns the label for each known role", () => {
-    expect(ROLES.map(roleLabel)).toEqual(["Supervisor", "Manager", "Administrator", "Procurement", "Stock Officer"])
+    expect(ROLES.map(roleLabel)).toEqual([
+      "Supervisor",
+      "Manager",
+      "Administrator",
+      "Procurement",
+      "Stock Officer",
+      "QC Officer",
+      "QC Manager",
+    ])
   })
 
   it("falls back to 'Supervisor' for an unknown role", () => {
