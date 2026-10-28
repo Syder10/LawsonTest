@@ -1,9 +1,22 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import dynamic from "next/dynamic"
+import { motion } from "framer-motion"
 import { CheckCircle2, Crown, Flame, Timer, X } from "lucide-react"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Chip } from "@/components/primitives"
+
+// Three.js 3D Golden MVP Trophy canvas, code-split so 0 bytes of Three.js
+// are loaded on normal dashboard visits. Only loaded when the MVP modal opens.
+const Mvp3DScene = dynamic(() => import("./mvp-3d-scene"), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-44 sm:h-48 flex items-center justify-center">
+      <Crown className="w-12 h-12 text-white/50 animate-pulse" />
+    </div>
+  ),
+})
 
 export interface OnTimeWindowInfo {
   shift: string; openIso: string; closeIso: string
@@ -185,8 +198,9 @@ export function MVPModal({ mvp, onClose }: { mvp: MVPData; onClose: () => void }
 
   useEffect(() => {
     const start = Date.now()
+    const duration = 8000 // 8s to enjoy and interact with the 3D trophy
     const iv = setInterval(() => {
-      const pct = Math.max(0, 100 - ((Date.now() - start) / 5000) * 100)
+      const pct = Math.max(0, 100 - ((Date.now() - start) / duration) * 100)
       setProgress(pct)
       if (pct <= 0) {
         clearInterval(iv)
@@ -198,15 +212,38 @@ export function MVPModal({ mvp, onClose }: { mvp: MVPData; onClose: () => void }
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-sm p-0 overflow-hidden gap-0">
-        <div className="bg-gradient-to-br from-warning to-warning/70 px-6 pt-8 pb-6 text-center">
-          <Crown className="w-12 h-12 mx-auto text-white drop-shadow" aria-hidden="true" />
-          <p className="text-white/80 text-xs font-bold uppercase tracking-widest mt-3">{mvp.month}</p>
-          <h2 className="text-white text-2xl font-bold tracking-tight mt-1">MVP of the month</h2>
+      <DialogContent className="sm:max-w-sm p-0 overflow-hidden gap-0 border-warning/30 shadow-2xl">
+        {/* 3D Gold Trophy Header with interactive Three.js canvas */}
+        <div className="relative bg-gradient-to-b from-warning to-warning/80 px-6 pt-5 pb-2 text-center overflow-hidden">
+          <div className="relative z-10">
+            <motion.p
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="text-white/85 text-xs font-bold uppercase tracking-widest"
+            >
+              ✦ {mvp.month} ✦
+            </motion.p>
+            <motion.h2
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="text-white text-xl sm:text-2xl font-bold tracking-tight mt-0.5"
+            >
+              MVP of the month
+            </motion.h2>
+          </div>
+
+          {/* Three.js 3D Trophy / Crown Canvas (lazy-loaded) */}
+          <Mvp3DScene isMe={mvp.isMe} />
         </div>
 
-        <div className="px-6 py-6 text-center space-y-4">
-          <div>
+        <div className="px-6 py-5 text-center space-y-3.5">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.2, type: "spring", stiffness: 300, damping: 25 }}
+          >
             <p className="text-xl sm:text-2xl font-bold text-ink-primary tracking-tight break-words">{mvp.fullName}</p>
             {mvp.department && (
               <p className="text-sm font-medium text-ink-secondary mt-1">
@@ -214,21 +251,31 @@ export function MVPModal({ mvp, onClose }: { mvp: MVPData; onClose: () => void }
                 {mvp.groupNumber ? ` · Group ${mvp.groupNumber}` : ""}
               </p>
             )}
-          </div>
+          </motion.div>
 
-          <div className="bg-brand-subtle border border-brand/25 rounded-2xl px-5 py-3 inline-block">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.3, type: "spring", stiffness: 280, damping: 22 }}
+            className="bg-brand-subtle border border-brand/25 rounded-2xl px-5 py-2.5 inline-block"
+          >
             <p className="text-3xl font-bold text-brand-subtle-ink tnum">{mvp.onTimeCount}</p>
             <p className="text-xs font-bold uppercase tracking-widest text-brand-subtle-ink/70">on-time shifts</p>
-          </div>
+          </motion.div>
 
-          <p className="text-sm text-ink-secondary">
-            {mvp.isMe ? "That’s you — nicely done." : "Keep going; next month is open."}
-          </p>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4 }}
+            className="text-sm text-ink-secondary"
+          >
+            {mvp.isMe ? "🏆 That’s you — magnificent work!" : "Keep going; next month is open."}
+          </motion.p>
         </div>
 
         <div className="px-6 pb-5 space-y-3">
           <div className="h-1 bg-surface-sunken rounded-full overflow-hidden" aria-hidden="true">
-            <div className="h-full bg-brand rounded-full" style={{ width: `${progress}%` }} />
+            <div className="h-full bg-brand rounded-full transition-all duration-75" style={{ width: `${progress}%` }} />
           </div>
           <button
             onClick={onClose}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, type ReactNode } from "react"
 import Link from "next/link"
+import { motion } from "framer-motion"
 import {
   Award, CalendarClock, CheckCircle2, ChevronRight, Clock, Crown, Download, FileText,
   Flame as FlameIcon, History, TrendingUp, Trophy, UserCircle,
@@ -272,10 +273,15 @@ export function SupervisorDashboard({ userId }: { userId: string }) {
         {/* MVP banner. Spans, not <p>, because a paragraph inside a button is
             invalid HTML — which is what this was. */}
         {!loading && mvp && (
-          <button
+          <motion.button
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
+            transition={{ type: "spring", stiffness: 350, damping: 25 }}
             onClick={() => setShowMvp(true)}
             className={cn(
-              "group flex w-full items-center gap-3.5 rounded-2xl px-5 py-4 text-left shadow-sm transition-colors active:scale-[0.99]",
+              "group flex w-full items-center gap-3.5 rounded-2xl px-5 py-4 text-left shadow-sm transition-colors",
               mvp.isMe
                 ? "bg-brand-solid hover:bg-brand-solid-hover text-brand-ink"
                 : "border border-warning/30 bg-surface-card hover:bg-warning-subtle",
@@ -306,7 +312,7 @@ export function SupervisorDashboard({ userId }: { userId: string }) {
               className={cn("h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5", mvp.isMe ? "text-brand-ink/70" : "text-ink-muted")}
               aria-hidden="true"
             />
-          </button>
+          </motion.button>
         )}
       </div>
     </>
