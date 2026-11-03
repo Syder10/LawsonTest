@@ -1,32 +1,38 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import Link from "next/link"
+import { motion, AnimatePresence } from "framer-motion"
 import {
-  RefreshCw, Loader2, AlertCircle, AlertTriangle, PackageCheck, Send, ClipboardList,
-  Truck, FileText, Warehouse, Factory, ChevronRight, ArrowUpRight, Boxes, History,
-  RotateCcw, Calendar, Gift,
+  RefreshCw,
+  Loader2,
+  AlertCircle,
+  AlertTriangle,
+  PackageCheck,
+  Send,
+  ClipboardList,
+  Truck,
+  FileText,
+  Warehouse,
+  Factory,
+  ChevronRight,
+  ArrowUpRight,
+  Boxes,
+  History,
+  RotateCcw,
+  Calendar,
+  Gift,
+  Search,
+  CheckCircle2,
+  SlidersHorizontal,
+  Layers,
 } from "lucide-react"
 import { fmt, fmt1 } from "@/components/features/dashboard/manager/viz"
 import { byUrgency } from "@/lib/domain/stock-status"
 import type { ProcurementMaterialStatus } from "@/lib/domain/stock-status"
 import type { DispatchTotal } from "@/lib/domain/dispatch"
 import { ALL_TIME_FROM } from "@/lib/domain/date-window"
-import { ActionBtn } from "@/components/features/shared/action-btn"
-import { Card, CardHeader, Eyebrow, EmptyState, StatTile } from "@/components/primitives"
-
-// ============================================================================
-// Stock Officer home — an operational command center, distinct from the supervisor
-// home (streaks/badges/leaderboard) and the read-only procurement home. The stock
-// office OWNS physical movement, so its landing page answers one question first:
-// what needs acting on right now. It reuses the endpoints the stock dashboard
-// already reads (/api/procurement/report + /api/dispatch, both open to `stock`
-// via requireStockRead) — no new route, no new figure, nothing recomputed here.
-//
-// The window is all-time, matching the app default: on-hand and finished-goods
-// balances are as-of-today regardless, and the days-left urgency the attention
-// list sorts on is measured over the recorded-usage span, not the raw window.
-// ============================================================================
+import { Card, CardHeader, EmptyState, StatTile } from "@/components/primitives"
 
 interface Report {
   materials: ProcurementMaterialStatus[]
@@ -34,15 +40,36 @@ interface Report {
   produced: { bitters: number; ginger: number; total: number }
   last_updated: string
 }
-interface DispatchSummary { totals: DispatchTotal[] }
+interface DispatchSummary {
+  totals: DispatchTotal[]
+}
 
 const iso = (d: Date) => d.toISOString().slice(0, 10)
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.08 },
+  },
+}
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 12 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.35, ease: "easeOut" as const },
+  },
+}
 
 export function StockDashboard({ userName }: { userName: string | null }) {
   const [report, setReport] = useState<Report | null>(null)
   const [dispatched, setDispatched] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [urgencyFilter, setUrgencyFilter] = useState<"all" | "critical" | "warning">("all")
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -52,15 +79,16 @@ export function StockDashboard({ userName }: { userName: string | null }) {
       const res = await fetch(`/api/procurement/report?from=${ALL_TIME_FROM}&to=${today}`)
       if (!res.ok) throw new Error()
       setReport(await res.json())
-      // Dispatched total, silent-fail like the stock dashboard: a dispatch error
-      // leaves that one tile blank rather than blanking the whole page.
+
       try {
         const dr = await fetch(`/api/dispatch?from=${ALL_TIME_FROM}&to=${today}`)
         if (dr.ok) {
           const d = (await dr.json()) as DispatchSummary
           setDispatched((d.totals ?? []).reduce((s, t) => s + t.cartons, 0))
         }
-      } catch { /* silent — the dispatched tile stays blank */ }
+      } catch {
+        /* silent — dispatched stays null */
+      }
     } catch {
       setError(true)
     } finally {
@@ -68,185 +96,516 @@ export function StockDashboard({ userName }: { userName: string | null }) {
     }
   }, [])
 
-  // Inner async keeps the setState calls off the effect's synchronous path
-  // (react-compiler's set-state-in-effect rule), like the app's other loaders.
   useEffect(() => {
-    const run = async () => { await load() }
-    void run()
+    void load()
   }, [load])
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"
 
-  const materials = report ? [...report.materials].sort(byUrgency) : []
+  const materials = useMemo(
+    () => (report ? [...report.materials].sort(byUrgency) : []),
+    [report],
+  )
   const critical = materials.filter((m) => m.level === "red").length
   const low = materials.filter((m) => m.level === "yellow").length
-  const attention = materials.filter((m) => m.level === "red" || m.level === "yellow")
+  const attention = useMemo(
+    () => materials.filter((m) => m.level === "red" || m.level === "yellow"),
+    [materials],
+  )
 
-  // Staggered entrance: each section fades up just after the one above it. Inline
-  // fill-mode "both" holds the hidden pre-animation state during the delay so a
-  // delayed card never flashes in before its turn. Reduced motion is handled
-  // globally (the .animate-fade-in-up override), which shows every card at rest.
-  const step = (i: number) => ({ animationDelay: `${i * 70}ms`, animationFillMode: "both" as const })
+  const filteredAttention = useMemo(() => {
+    return attention.filter((m) => {
+      const matchesSearch =
+        m.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        m.unit.toLowerCase().includes(searchQuery.toLowerCase())
+      if (!matchesSearch) return false
+      if (urgencyFilter === "critical") return m.level === "red"
+      if (urgencyFilter === "warning") return m.level === "yellow"
+      return true
+    })
+  }, [attention, searchQuery, urgencyFilter])
 
   return (
-    <div className="space-y-4">
-      {/* Hero — the app's one deliberately dark panel (see .hero-panel). Unlike the
-          procurement home it carries the keeper's name, so the person owning stock
-          movement lands on a page that is clearly theirs. */}
-      <div className="hero-panel rounded-3xl overflow-hidden shadow-sm animate-fade-in-up" style={step(0)}>
-        <div className="flex items-start justify-between gap-4 px-5 py-6 sm:px-6">
-          <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-widest text-white/60">{greeting}</p>
-            <h1 className="mt-0.5 break-words text-xl sm:text-2xl font-bold tracking-tight text-white">
-              {loading && !report
-                ? <span className="inline-block h-7 w-40 rounded-lg bg-white/10 animate-pulse" />
-                : (userName || "Stock Officer")}
-            </h1>
-            <p className="mt-0.5 text-sm font-medium text-white/60">Stock Office · command center</p>
+    <motion.div
+      className="space-y-6 pb-12"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
+      {/* Hero Banner */}
+      <motion.div
+        variants={itemVariants}
+        className="hero-panel relative overflow-hidden rounded-3xl p-6 shadow-md border border-white/10 sm:p-7"
+      >
+        <div className="relative z-10 flex flex-wrap items-center justify-between gap-4">
+          <div className="min-w-0 max-w-xl">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold tracking-wider uppercase text-white/80">
+                <Warehouse className="h-3.5 w-3.5" />
+                Stock Operations Hub
+              </span>
+              <span className="text-xs text-white/60 font-medium">·</span>
+              <span className="text-xs text-white/70">{greeting}</span>
+            </div>
 
-            <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+            <h1 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+              {loading && !report ? (
+                <span className="inline-block h-8 w-44 rounded-lg bg-white/15 animate-pulse" />
+              ) : (
+                userName || "Stock Officer"
+              )}
+            </h1>
+            <p className="mt-1 text-sm text-white/70">
+              Managing plant raw materials, finished stock inventory, and branch distribution.
+            </p>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
               {!loading && report && (
-                critical > 0 ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-xs font-bold text-white">
-                    <span className="relative flex h-2 w-2" aria-hidden="true">
-                      <span className="absolute inline-flex h-full w-full rounded-full bg-critical opacity-75 animate-ping" />
-                      <span className="relative inline-flex h-2 w-2 rounded-full bg-critical" />
+                <>
+                  {critical > 0 ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-critical/40 bg-critical/20 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm">
+                      <span className="relative flex h-2 w-2">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-critical opacity-75" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-critical" />
+                      </span>
+                      {critical} Material{critical === 1 ? "" : "s"} at Critical Level
                     </span>
-                    {critical} need{critical === 1 ? "s" : ""} restock now
-                  </span>
-                ) : low > 0 ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-bold text-white/85">
-                    <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />{low} to reorder soon
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-2.5 py-1 text-xs font-bold text-white/85">
-                    <PackageCheck className="h-3 w-3 shrink-0" aria-hidden="true" />All materials stocked
-                  </span>
-                )
+                  ) : null}
+
+                  {low > 0 ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-warning/40 bg-warning/20 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm">
+                      <AlertTriangle className="h-3 w-3" />
+                      {low} to Reorder Soon
+                    </span>
+                  ) : null}
+
+                  {critical === 0 && low === 0 ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-good/40 bg-good/20 px-3 py-1 text-xs font-bold text-white backdrop-blur-sm">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      All Materials Healthy
+                    </span>
+                  ) : null}
+                </>
               )}
             </div>
           </div>
-          <span className="hidden sm:flex w-14 h-14 rounded-2xl bg-white/10 border border-white/15 items-center justify-center shrink-0">
-            <Warehouse className="w-7 h-7 text-white" aria-hidden="true" />
-          </span>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={load}
+              disabled={loading}
+              className="flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-xs font-bold text-white backdrop-blur-sm transition-all hover:bg-white/20 active:scale-95 disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+              Sync Data
+            </button>
+          </div>
         </div>
-      </div>
+
+        {/* Decorative background glow */}
+        <div className="pointer-events-none absolute -right-12 -bottom-12 h-64 w-64 rounded-full bg-white/5 blur-3xl" />
+      </motion.div>
 
       {error && (
         <Card>
           <EmptyState
-            icon={<AlertCircle className="w-5 h-5 text-critical" />}
-            title="Couldn’t load the stock picture"
-            description="The request failed. Check your connection and try again."
+            icon={<AlertCircle className="h-6 w-6 text-critical" />}
+            title="Failed to load stock data"
+            description="The live stock report could not be retrieved. Please check your network and try again."
             action={
-              <button onClick={load} className="h-10 px-4 rounded-xl bg-brand-solid text-brand-ink text-sm font-bold active:scale-[0.97]">
-                Retry
+              <button
+                onClick={load}
+                className="h-10 rounded-xl bg-brand-solid px-5 text-sm font-bold text-brand-ink transition-transform active:scale-95"
+              >
+                Retry Connection
               </button>
             }
           />
         </Card>
       )}
 
-      {/* At-a-glance: what needs acting on, then what is on hand. */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 animate-fade-in-up" style={step(1)}>
-        <StatTile label="Restock now" value={report ? critical : "—"} unit="items" icon={<AlertCircle className="w-5 h-5" />} accent={critical > 0 ? "critical" : "neutral"} />
-        <StatTile label="Reorder soon" value={report ? low : "—"} unit="items" icon={<AlertTriangle className="w-5 h-5" />} accent={low > 0 ? "warning" : "neutral"} />
-        <StatTile label="Bitters — on hand" value={report?.finishedGoods.bitters ?? "—"} unit="ctn" icon={<Warehouse className="w-5 h-5" />} accent="bitters" />
-        <StatTile label="Ginger — on hand" value={report?.finishedGoods.ginger ?? "—"} unit="ctn" icon={<Warehouse className="w-5 h-5" />} accent="ginger" />
-      </div>
-
-      {/* Lifetime activity. Labelled all-time so the totals are never mistaken for a
-          recent window; the Stock levels page carries the full per-window detail. */}
-      <div className="grid grid-cols-3 gap-3 animate-fade-in-up" style={step(2)}>
-        <StatTile label="Produced" value={report?.produced.total ?? "—"} unit="ctn" sub="all-time" icon={<Factory className="w-5 h-5" />} accent="brand" />
-        <StatTile label="Dispatched" value={dispatched ?? "—"} unit="ctn" sub="all-time" icon={<Truck className="w-5 h-5" />} accent="neutral" />
-        <StatTile label="Tracked materials" value={report ? materials.length : "—"} unit="items" icon={<Boxes className="w-5 h-5" />} accent="neutral" />
-      </div>
-
-      <div className="animate-fade-in-up" style={step(3)}>
-      <Card>
-        <CardHeader
-          title="Needs attention"
-          hint={report
-            ? attention.length > 0
-              ? `${attention.length} material${attention.length > 1 ? "s" : ""} at or below reorder level`
-              : "sorted by urgency · nothing low"
-            : undefined}
-          actions={
-            <button
-              onClick={load}
-              disabled={loading}
-              className="h-9 px-3 flex items-center gap-1.5 rounded-lg border border-hairline bg-surface-card text-xs font-bold text-ink-secondary hover:border-brand transition-colors disabled:opacity-60"
-            >
-              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />}
-              Refresh
-            </button>
-          }
+      {/* Primary KPI Status Grid */}
+      <motion.div variants={itemVariants} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatTile
+          label="Restock Now"
+          value={report ? critical : "—"}
+          unit="items"
+          icon={<AlertCircle className="h-5 w-5" />}
+          accent={critical > 0 ? "critical" : "neutral"}
         />
-        {loading && !report ? (
-          <div className="p-4 space-y-2">
-            {[0, 1, 2].map((i) => <div key={i} className="h-14 rounded-2xl bg-surface-sunken animate-pulse" />)}
-          </div>
-        ) : attention.length === 0 ? (
-          <EmptyState
-            compact
-            icon={<PackageCheck className="w-5 h-5" aria-hidden="true" />}
-            title="Everything is stocked"
-            description="No material is at or below its reorder level."
-          />
-        ) : (
-          <ul className="divide-y divide-hairline">
-            {attention.map((m) => (
-              <li key={m.key}>
-                <Link
-                  href={`/dashboard/stock/material/${m.key}`}
-                  className="group flex items-center gap-3 px-4 sm:px-5 py-3 hover:bg-surface-sunken transition-colors"
-                >
-                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${m.level === "red" ? "bg-critical" : "bg-warning"}`} aria-hidden="true" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-bold text-ink-primary truncate">{m.label}</span>
-                    <span className="block text-xs font-medium text-ink-muted truncate">
-                      {fmt(m.remaining)} {m.unit} left{m.breakdown ? ` · ${m.breakdown}` : ""}
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-right">
-                    <span className={`block text-sm font-bold ${m.level === "red" ? "text-critical-ink" : "text-warning-ink"}`}>
-                      {m.operatingDaysLeft === null ? "—" : `${fmt1(m.operatingDaysLeft)}d`}
-                    </span>
-                    <span className="block text-[11px] font-medium text-ink-muted">left</span>
-                  </span>
-                  <ChevronRight className="w-4 h-4 shrink-0 text-ink-muted transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-        {report && (
-          <div className="px-5 py-3 border-t border-hairline">
-            <Link href="/dashboard/stock" className="inline-flex items-center gap-1 text-xs font-bold text-brand hover:underline">
-              View all stock levels <ArrowUpRight className="w-3.5 h-3.5" aria-hidden="true" />
-            </Link>
-          </div>
-        )}
-      </Card>
-      </div>
+        <StatTile
+          label="Reorder Soon"
+          value={report ? low : "—"}
+          unit="items"
+          icon={<AlertTriangle className="h-5 w-5" />}
+          accent={low > 0 ? "warning" : "neutral"}
+        />
+        <StatTile
+          label="Bitters Finished"
+          value={report?.finishedGoods.bitters ?? "—"}
+          unit="ctn"
+          icon={<Warehouse className="h-5 w-5" />}
+          accent="bitters"
+        />
+        <StatTile
+          label="Ginger Finished"
+          value={report?.finishedGoods.ginger ?? "—"}
+          unit="ctn"
+          icon={<Warehouse className="h-5 w-5" />}
+          accent="ginger"
+        />
+      </motion.div>
 
-      {/* Quick actions — the stock office's real jobs, one tap each. Log receipt is
-          the primary target; dispatch and invoices are stock responsibilities too. */}
-      <div className="animate-fade-in-up" style={step(4)}>
-        <Eyebrow className="mb-2 block">Quick actions</Eyebrow>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <ActionBtn href="/dashboard/stock/monthly-report" icon={Calendar} label="Monthly stock report" primary />
-          <ActionBtn href="/dashboard/stock/receipts" icon={Send} label="Log a receipt or issue" />
-          <ActionBtn href="/dashboard/stock" icon={ClipboardList} label="Stock levels & counts" />
-          <ActionBtn href="/dashboard/stock/dispatch" icon={Truck} label="Dispatch a load" />
-          <ActionBtn href="/dashboard/stock/returns" icon={RotateCcw} label="Product returns" />
-          <ActionBtn href="/dashboard/stock/donations" icon={Gift} label="Donations & samples" />
-          <ActionBtn href="/dashboard/stock/invoices" icon={FileText} label="Supplier invoices" />
-          <ActionBtn href="/dashboard/history" icon={History} label="Stock history" />
+      {/* Production & Activity Overview */}
+      <motion.div variants={itemVariants} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <StatTile
+          label="Total Produced"
+          value={report?.produced.total ?? "—"}
+          unit="cartons"
+          sub="all-time production"
+          icon={<Factory className="h-5 w-5" />}
+          accent="brand"
+        />
+        <StatTile
+          label="Total Dispatched"
+          value={dispatched ?? "—"}
+          unit="cartons"
+          sub="dispatched to branches"
+          icon={<Truck className="h-5 w-5" />}
+          accent="neutral"
+        />
+        <StatTile
+          label="Tracked Materials"
+          value={report ? materials.length : "—"}
+          unit="active items"
+          sub="monitored in ledger"
+          icon={<Boxes className="h-5 w-5" />}
+          accent="neutral"
+        />
+      </motion.div>
+
+      {/* Quick Actions Hub: Organized by Functional Areas */}
+      <motion.div variants={itemVariants} className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-bold text-ink-primary">Stock Workflow Center</h2>
+          <span className="text-xs text-ink-muted">Direct operational controls</span>
         </div>
-      </div>
-    </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {/* Movement & Floor Operations */}
+          <div className="rounded-2xl border border-border-subtle bg-surface-card p-5 shadow-sm">
+            <div className="mb-3.5 flex items-center justify-between border-b border-border-subtle pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-primary/10 text-brand-primary">
+                  <Send className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-ink-primary">Physical Stock Operations</h3>
+                  <p className="text-xs text-ink-muted">Inbound, outbound, returns & movements</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              <Link
+                href="/dashboard/stock/receipts"
+                className="group flex flex-col justify-between rounded-xl border border-border-subtle bg-surface-base p-3.5 transition-all hover:border-brand-primary hover:shadow-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-elevated text-ink-primary group-hover:bg-brand-primary group-hover:text-white transition-colors">
+                    <Send className="h-4 w-4" />
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-ink-muted group-hover:translate-x-0.5 transition-transform" />
+                </div>
+                <div className="mt-3">
+                  <span className="block text-sm font-bold text-ink-primary">Log Receipts & Issues</span>
+                  <span className="block text-xs text-ink-muted">Raw materials & PPE</span>
+                </div>
+              </Link>
+
+              <Link
+                href="/dashboard/stock/dispatch"
+                className="group flex flex-col justify-between rounded-xl border border-border-subtle bg-surface-base p-3.5 transition-all hover:border-brand-primary hover:shadow-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-elevated text-ink-primary group-hover:bg-brand-primary group-hover:text-white transition-colors">
+                    <Truck className="h-4 w-4" />
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-ink-muted group-hover:translate-x-0.5 transition-transform" />
+                </div>
+                <div className="mt-3">
+                  <span className="block text-sm font-bold text-ink-primary">Dispatch Loads</span>
+                  <span className="block text-xs text-ink-muted">Branch deliveries</span>
+                </div>
+              </Link>
+
+              <Link
+                href="/dashboard/stock/returns"
+                className="group flex flex-col justify-between rounded-xl border border-border-subtle bg-surface-base p-3.5 transition-all hover:border-brand-primary hover:shadow-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-elevated text-ink-primary group-hover:bg-brand-primary group-hover:text-white transition-colors">
+                    <RotateCcw className="h-4 w-4" />
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-ink-muted group-hover:translate-x-0.5 transition-transform" />
+                </div>
+                <div className="mt-3">
+                  <span className="block text-sm font-bold text-ink-primary">Product Returns</span>
+                  <span className="block text-xs text-ink-muted">Repack & spoilage logs</span>
+                </div>
+              </Link>
+
+              <Link
+                href="/dashboard/stock/donations"
+                className="group flex flex-col justify-between rounded-xl border border-border-subtle bg-surface-base p-3.5 transition-all hover:border-brand-primary hover:shadow-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-elevated text-ink-primary group-hover:bg-brand-primary group-hover:text-white transition-colors">
+                    <Gift className="h-4 w-4" />
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-ink-muted group-hover:translate-x-0.5 transition-transform" />
+                </div>
+                <div className="mt-3">
+                  <span className="block text-sm font-bold text-ink-primary">Donations & Samples</span>
+                  <span className="block text-xs text-ink-muted">Promotional outgoings</span>
+                </div>
+              </Link>
+            </div>
+          </div>
+
+          {/* Audit, Reports & Verification */}
+          <div className="rounded-2xl border border-border-subtle bg-surface-card p-5 shadow-sm">
+            <div className="mb-3.5 flex items-center justify-between border-b border-border-subtle pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  <Calendar className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-ink-primary">Audit, Reports & Governance</h3>
+                  <p className="text-xs text-ink-muted">Reconciliation, invoices & counts</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              <Link
+                href="/dashboard/stock/monthly-report"
+                className="group flex flex-col justify-between rounded-xl border-2 border-brand-primary/30 bg-brand-primary/[0.03] p-3.5 transition-all hover:border-brand-primary hover:shadow-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-primary text-white">
+                    <Calendar className="h-4 w-4" />
+                  </div>
+                  <span className="rounded-full bg-brand-primary/10 px-2 py-0.5 text-[10px] font-bold text-brand-primary">
+                    Core Report
+                  </span>
+                </div>
+                <div className="mt-3">
+                  <span className="block text-sm font-bold text-ink-primary">Monthly Stock Report</span>
+                  <span className="block text-xs text-ink-muted">Executive reconciliation</span>
+                </div>
+              </Link>
+
+              <Link
+                href="/dashboard/stock"
+                className="group flex flex-col justify-between rounded-xl border border-border-subtle bg-surface-base p-3.5 transition-all hover:border-brand-primary hover:shadow-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-elevated text-ink-primary group-hover:bg-brand-primary group-hover:text-white transition-colors">
+                    <ClipboardList className="h-4 w-4" />
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-ink-muted group-hover:translate-x-0.5 transition-transform" />
+                </div>
+                <div className="mt-3">
+                  <span className="block text-sm font-bold text-ink-primary">Stock Levels & Counts</span>
+                  <span className="block text-xs text-ink-muted">Balances & reconciliations</span>
+                </div>
+              </Link>
+
+              <Link
+                href="/dashboard/stock/invoices"
+                className="group flex flex-col justify-between rounded-xl border border-border-subtle bg-surface-base p-3.5 transition-all hover:border-brand-primary hover:shadow-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-elevated text-ink-primary group-hover:bg-brand-primary group-hover:text-white transition-colors">
+                    <FileText className="h-4 w-4" />
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-ink-muted group-hover:translate-x-0.5 transition-transform" />
+                </div>
+                <div className="mt-3">
+                  <span className="block text-sm font-bold text-ink-primary">Supplier Invoices</span>
+                  <span className="block text-xs text-ink-muted">GRN & matching</span>
+                </div>
+              </Link>
+
+              <Link
+                href="/dashboard/history"
+                className="group flex flex-col justify-between rounded-xl border border-border-subtle bg-surface-base p-3.5 transition-all hover:border-brand-primary hover:shadow-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-surface-elevated text-ink-primary group-hover:bg-brand-primary group-hover:text-white transition-colors">
+                    <History className="h-4 w-4" />
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-ink-muted group-hover:translate-x-0.5 transition-transform" />
+                </div>
+                <div className="mt-3">
+                  <span className="block text-sm font-bold text-ink-primary">Ledger History</span>
+                  <span className="block text-xs text-ink-muted">Audit trail of transactions</span>
+                </div>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Materials Needing Attention Section */}
+      <motion.div variants={itemVariants}>
+        <Card>
+          <div className="p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle pb-4">
+              <div>
+                <h3 className="text-base font-bold text-ink-primary">Stock Requiring Attention</h3>
+                <p className="text-xs text-ink-muted">
+                  Materials at or below reorder threshold based on recent daily burn
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Filter Pills */}
+                <div className="flex items-center rounded-xl border border-border-subtle bg-surface-base p-1 text-xs font-semibold">
+                  <button
+                    onClick={() => setUrgencyFilter("all")}
+                    className={`rounded-lg px-2.5 py-1 transition-colors ${
+                      urgencyFilter === "all"
+                        ? "bg-brand-solid text-brand-ink"
+                        : "text-ink-secondary hover:text-ink-primary"
+                    }`}
+                  >
+                    All ({attention.length})
+                  </button>
+                  <button
+                    onClick={() => setUrgencyFilter("critical")}
+                    className={`rounded-lg px-2.5 py-1 transition-colors ${
+                      urgencyFilter === "critical"
+                        ? "bg-critical text-white"
+                        : "text-ink-secondary hover:text-ink-primary"
+                    }`}
+                  >
+                    Critical ({critical})
+                  </button>
+                  <button
+                    onClick={() => setUrgencyFilter("warning")}
+                    className={`rounded-lg px-2.5 py-1 transition-colors ${
+                      urgencyFilter === "warning"
+                        ? "bg-warning text-ink-primary font-bold"
+                        : "text-ink-secondary hover:text-ink-primary"
+                    }`}
+                  >
+                    Reorder Soon ({low})
+                  </button>
+                </div>
+
+                {/* Search */}
+                <div className="relative w-44 sm:w-56">
+                  <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-ink-muted" />
+                  <input
+                    type="text"
+                    placeholder="Search material..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-8.5 w-full rounded-xl border border-border-subtle bg-surface-base pl-8 pr-3 text-xs text-ink-primary placeholder:text-ink-muted focus:border-brand-primary focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {loading && !report ? (
+              <div className="space-y-2 py-4">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="h-16 animate-pulse rounded-2xl bg-surface-sunken" />
+                ))}
+              </div>
+            ) : filteredAttention.length === 0 ? (
+              <EmptyState
+                compact
+                icon={<PackageCheck className="h-6 w-6 text-good" />}
+                title={searchQuery ? "No matching materials" : "Everything is stocked"}
+                description={
+                  searchQuery
+                    ? "Try a different search term or reset filter."
+                    : "No materials are currently at or below reorder level."
+                }
+              />
+            ) : (
+              <div className="mt-3 divide-y divide-border-subtle">
+                {filteredAttention.map((m) => {
+                  const isRed = m.level === "red"
+                  return (
+                    <motion.div
+                      key={m.key}
+                      whileHover={{ x: 2 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      <Link
+                        href={`/dashboard/stock/material/${m.key}`}
+                        className="group flex flex-wrap items-center justify-between gap-3 px-3 py-3.5 rounded-xl hover:bg-surface-sunken transition-colors"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span
+                            className={`flex h-3 w-3 shrink-0 rounded-full ${
+                              isRed ? "bg-critical ring-4 ring-critical/20" : "bg-warning ring-4 ring-warning/20"
+                            }`}
+                          />
+                          <div className="min-w-0">
+                            <span className="block text-sm font-bold text-ink-primary group-hover:text-brand-primary transition-colors">
+                              {m.label}
+                            </span>
+                            <span className="block text-xs text-ink-muted">
+                              {fmt(m.remaining)} {m.unit} on hand
+                              {m.breakdown ? ` · ${m.breakdown}` : ""}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-4 shrink-0">
+                          <div className="text-right">
+                            <span
+                              className={`block text-sm font-bold ${
+                                isRed ? "text-critical" : "text-amber-600 dark:text-amber-400"
+                              }`}
+                            >
+                              {m.operatingDaysLeft === null ? "—" : `${fmt1(m.operatingDaysLeft)} days`}
+                            </span>
+                            <span className="block text-[11px] font-medium text-ink-muted">
+                              operating cover left
+                            </span>
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-ink-muted group-hover:text-ink-primary transition-colors" />
+                        </div>
+                      </Link>
+                    </motion.div>
+                  )
+                })}
+              </div>
+            )}
+
+            {report && (
+              <div className="mt-4 flex items-center justify-between border-t border-border-subtle pt-3">
+                <span className="text-xs text-ink-muted">
+                  Showing {filteredAttention.length} of {attention.length} attention items
+                </span>
+                <Link
+                  href="/dashboard/stock"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-primary hover:underline"
+                >
+                  View full stock ledger <ArrowUpRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            )}
+          </div>
+        </Card>
+      </motion.div>
+    </motion.div>
   )
 }

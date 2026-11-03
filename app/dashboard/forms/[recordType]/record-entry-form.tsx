@@ -864,9 +864,9 @@ export default function RecordEntryForm({
             className="w-4 h-4 rounded border-hairline text-brand focus:ring-brand cursor-pointer"
           />
           <label htmlFor="part-time-shift" className="text-xs font-bold text-ink-primary cursor-pointer select-none">
-            Part-time / Casual Shift
+            Part-Time Shift
             <span className="block text-[11px] font-normal text-ink-secondary mt-0.5">
-              Check if this shift was operated by part-time or casual workers (feeds the Part-Time column in stock reports).
+              Check if this shift was operated by part-time workers (feeds the Part-Time column in stock reports).
             </span>
           </label>
         </div>

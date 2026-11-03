@@ -1,8 +1,30 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import Link from "next/link"
-import { RefreshCw, Loader2, AlertCircle, AlertTriangle, PackageCheck, Send, ClipboardCheck, Truck, FileText, Factory, RotateCcw, Calendar, Gift } from "lucide-react"
+import { motion, AnimatePresence } from "framer-motion"
+import {
+  RefreshCw,
+  Loader2,
+  AlertCircle,
+  AlertTriangle,
+  PackageCheck,
+  Send,
+  ClipboardCheck,
+  Truck,
+  FileText,
+  Factory,
+  RotateCcw,
+  Calendar,
+  Gift,
+  Boxes,
+  Search,
+  Filter,
+  CheckCircle2,
+  ArrowRight,
+  TrendingDown,
+  Warehouse,
+} from "lucide-react"
 import { fmt, fmt1, shortDay } from "@/components/features/dashboard/manager/viz"
 import { MIN_SAMPLE_DAYS, burnLooksImplausible, byUrgency } from "@/lib/domain/stock-status"
 import type { ProcurementMaterialStatus } from "@/lib/domain/stock-status"
@@ -23,15 +45,20 @@ import {
 } from "@/components/primitives"
 import { DispatchBreakdownCards } from "@/components/features/dispatch/breakdown-cards"
 import { ReconcileModal, ledgerTargetForKey, type ReconcileTarget } from "@/components/features/stock/reconcile-modal"
+import { Button } from "@/components/ui/button"
 
-// The row shape comes from lib/domain/stock-status, shared with the route that
-// produces it — this file used to re-declare it, which is how the two drifted.
 type MaterialRow = ProcurementMaterialStatus
 
 interface Receipt {
-  date: string; material_type: string; received_by: string | null
-  received_pcs: number; given_pcs: number; given_to: string | null; remarks: string | null
+  date: string
+  material_type: string
+  received_by: string | null
+  received_pcs: number
+  given_pcs: number
+  given_to: string | null
+  remarks: string | null
 }
+
 interface Report {
   filters: { from: string; to: string }
   materials: MaterialRow[]
@@ -42,42 +69,52 @@ interface Report {
   thresholds: { redDays: number; amberDays: number }
   last_updated: string
 }
-// The dispatched summary comes from /api/dispatch (FR-16, FR-19); the full
-// filterable log and export stay on the Dispatch page.
+
 interface DispatchSummary {
   totals: DispatchTotal[]
   byVehicle: DispatchBreakdownRow[]
   byDriver: DispatchBreakdownRow[]
   byDestination: DispatchBreakdownRow[]
 }
+
 interface StockCount {
-  id: string; date: string; shift: string | null; material: string
-  product: string | null; variant: string | null
-  counted_qty: number; computed_qty: number; variance: number
-  kind: "baseline" | "reconciliation"; note: string | null; counted_by: string | null; created_at: string
+  id: string
+  date: string
+  shift: string | null
+  material: string
+  product: string | null
+  variant: string | null
+  counted_qty: number
+  computed_qty: number
+  variance: number
+  kind: "baseline" | "reconciliation"
+  note: string | null
+  counted_by: string | null
+  created_at: string
 }
 
 const iso = (d: Date) => d.toISOString().slice(0, 10)
 const daysAgo = (n: number) => iso(new Date(Date.now() - n * 86_400_000))
+
 const PRESETS = [
-  { label: "All time", from: () => ALL_TIME },
-  { label: "7d", from: () => daysAgo(6) },
-  { label: "30d", from: () => daysAgo(29) },
-  { label: "90d", from: () => daysAgo(89) },
+  { label: "All Time", from: () => ALL_TIME },
+  { label: "Last 7 Days", from: () => daysAgo(6) },
+  { label: "Last 30 Days", from: () => daysAgo(29) },
+  { label: "Last 90 Days", from: () => daysAgo(89) },
 ]
+
 const MAT_LABEL: Record<string, string> = {
-  tax_stamp: "Tax Stamps", carton_bitters: "Cartons — Bitters", carton_ginger: "Cartons — Ginger",
-  seal_tape: "Seal Tape", hair_net: "Hair Nets", nose_mask: "Nose Masks", gloves: "Gloves",
+  tax_stamp: "Tax Stamps",
+  carton_bitters: "Cartons — Bitters",
+  carton_ginger: "Cartons — Ginger",
+  seal_tape: "Seal Tape",
+  hair_net: "Hair Nets",
+  nose_mask: "Nose Masks",
+  gloves: "Gloves",
 }
 
-// ============================================================================
-// Stock dashboard.
-//
-// Read for the whole stock-reading set; write affordances (New count, Log receipt,
-// the per-row Count action and the reconcile modal) are gated on canWrite, so the
-// read-only procurement office sees the figures without a path to record anything.
-// The RPCs enforce the same rule again, so this is presentation, not the boundary.
-// ============================================================================
+type StockTab = "materials" | "production" | "dispatch" | "receipts" | "counts"
+
 export function StockClient({ canWrite }: { canWrite: boolean }) {
   const [from, setFrom] = useState(ALL_TIME)
   const [to, setTo] = useState(iso(new Date()))
@@ -89,26 +126,29 @@ export function StockClient({ canWrite }: { canWrite: boolean }) {
   const [reconcile, setReconcile] = useState<ReconcileTarget | null>(null)
   const [showReconcile, setShowReconcile] = useState(false)
 
+  // Sub-tab & filter state
+  const [activeTab, setActiveTab] = useState<StockTab>("materials")
+  const [materialSearch, setMaterialSearch] = useState("")
+  const [materialUrgency, setMaterialUrgency] = useState<"all" | "critical" | "warning" | "ok">("all")
+
   const loadCounts = useCallback(async () => {
     try {
       const res = await fetch("/api/stock/reconcile?limit=50")
       if (res.ok) setCounts((await res.json()).counts ?? [])
-    } catch { /* silent — the panel simply stays empty */ }
+    } catch {
+      /* silent */
+    }
   }, [])
 
-  // Dispatched cartons for the same window. Silent-fail like the counts panel: a
-  // dispatch error leaves this section empty rather than blanking the whole page.
   const loadDispatch = useCallback(async () => {
     try {
       const res = await fetch(`/api/dispatch?from=${requestFrom(from)}&to=${to}`)
       if (res.ok) setDispatch(await res.json())
-    } catch { /* silent — the dispatched section stays empty */ }
+    } catch {
+      /* silent */
+    }
   }, [from, to])
 
-  // The date range is a dependency rather than a ref written during render (a
-  // render-phase ref write is unsafe under concurrent rendering). The 60s poll
-  // therefore restarts when the filter changes, which is what you want anyway:
-  // the next tick already refetches the range now on screen.
   const load = useCallback(async () => {
     setLoading(true)
     setError(false)
@@ -125,128 +165,154 @@ export function StockClient({ canWrite }: { canWrite: boolean }) {
     }
   }, [from, to, loadCounts, loadDispatch])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    load()
+  }, [load])
+
   useEffect(() => {
     const iv = setInterval(load, 60_000)
     return () => clearInterval(iv)
   }, [load])
 
-  const sorted = data ? [...data.materials].sort(byUrgency) : []
-  const critical = sorted.filter((m) => m.level === "red").length
-  const low = sorted.filter((m) => m.level === "yellow").length
+  const sortedMaterials = useMemo(
+    () => (data ? [...data.materials].sort(byUrgency) : []),
+    [data],
+  )
+  const criticalCount = sortedMaterials.filter((m) => m.level === "red").length
+  const lowCount = sortedMaterials.filter((m) => m.level === "yellow").length
 
-  // What window the figures cover, for the card hints. All-time shows the label
-  // rather than the floor date we send the server (which would read "Jan 1, 2000").
+  const filteredMaterials = useMemo(() => {
+    return sortedMaterials.filter((m) => {
+      const matchesSearch =
+        m.label.toLowerCase().includes(materialSearch.toLowerCase()) ||
+        m.unit.toLowerCase().includes(materialSearch.toLowerCase())
+      if (!matchesSearch) return false
+      if (materialUrgency === "critical") return m.level === "red"
+      if (materialUrgency === "warning") return m.level === "yellow"
+      if (materialUrgency === "ok") return m.level === "none"
+      return true
+    })
+  }, [sortedMaterials, materialSearch, materialUrgency])
+
   const windowLabel = isAllTime(from)
     ? ALL_TIME_LABEL
     : data
       ? `${shortDay(data.filters.from)} – ${shortDay(data.filters.to)}`
       : ""
 
-  // Produced (FR-18) newest day first, matching the receipts and counts logs.
-  const producedRows = data ? [...data.producedByDay].reverse() : []
-  const producedColumns: Column<ProducedDay>[] = [
-    { key: "date", header: "Date", primary: true, cell: (d) => <span className="font-semibold text-ink-primary whitespace-nowrap">{shortDay(d.date)}</span> },
-    { key: "bitters", header: "Bitters", align: "right", numeric: true, cell: (d) => fmt(d.bitters) },
-    { key: "ginger", header: "Ginger", align: "right", numeric: true, cell: (d) => fmt(d.ginger) },
-    { key: "total", header: "Total", align: "right", numeric: true, cell: (d) => <span className="font-bold text-ink-primary">{fmt(d.total)}</span> },
-  ]
+  const producedRows = useMemo(
+    () => (data ? [...data.producedByDay].reverse() : []),
+    [data],
+  )
 
-  // Dispatched (FR-16, FR-19). Totals count cartons out per product over the window.
   const dispatchedOf = (p: Product) => dispatch?.totals.find((t) => t.product === p)?.cartons ?? 0
   const dispatchedTotal = (dispatch?.totals ?? []).reduce((s, t) => s + t.cartons, 0)
 
+  // Table Columns
   const materialColumns: Column<MaterialRow>[] = [
-    { key: "label", header: "Material", primary: true, cell: (m) => <span className="font-bold text-ink-primary">{m.label}</span> },
     {
-      key: "group", header: "Type",
-      cell: (m) => <Chip tone={m.group === "procurement" ? "brand" : "neutral"}>{m.group === "procurement" ? "Procurement" : "Production"}</Chip>,
-    },
-    { key: "breakdown", header: "Breakdown", hideOnMobile: true, cell: (m) => <span className="text-ink-muted text-xs">{m.breakdown ?? "—"}</span> },
-    {
-      key: "remaining", header: "Remaining", align: "right", numeric: true,
+      key: "label",
+      header: "Material",
+      primary: true,
       cell: (m) => (
-        <span className="inline-flex flex-col items-start sm:items-end leading-tight">
-          <span className="font-semibold text-ink-primary">
-            {fmt(m.remaining)} <span className="text-ink-muted text-xs font-medium">{m.unit}</span>
-          </span>
-          {/* Containers are the unit procurement buys and counts in; the second line is
-              the same quantity in pieces or litres. Both, so neither can be mistaken
-              for the other. */}
-          {m.unitEach && m.remaining > 0 && (
-            <span className="text-xs font-medium text-ink-muted">
-              {fmt(m.remaining * m.unitEach.qty)} {m.unitEach.unit}
-            </span>
+        <div className="flex flex-col">
+          <span className="font-bold text-ink-primary">{m.label}</span>
+          {m.breakdown && (
+            <span className="text-[11px] font-medium text-ink-muted">{m.breakdown}</span>
           )}
-        </span>
+        </div>
       ),
     },
     {
-      key: "received", header: "Received", align: "right", numeric: true,
-      cell: (m) => (m.receivedInWindow > 0 ? <span className="text-good-ink font-semibold">+{fmt(m.receivedInWindow)}</span> : "—"),
-    },
-    { key: "used", header: "Used / issued", align: "right", numeric: true, cell: (m) => fmt(m.usedInWindow) },
-    {
-      key: "avg", header: "Avg/op-day", align: "right", numeric: true, hideOnMobile: true,
-      cell: (m) => {
-        if (m.avgPerDay <= 0) return "—"
-        return (
-          <span className="inline-flex flex-col items-start sm:items-end leading-tight">
-            <span className={burnLooksImplausible(m) ? "text-warning-ink font-semibold" : undefined}>
-              {fmt1(m.avgPerDay)}
-            </span>
-            {m.expectedPerDay !== null && burnLooksImplausible(m) && (
-              <span className="text-xs font-medium text-ink-muted">expect ~{fmt(m.expectedPerDay)}</span>
-            )}
-          </span>
-        )
-      },
+      key: "group",
+      header: "Classification",
+      hideOnMobile: true,
+      cell: (m) => (
+        <Chip tone={m.group === "procurement" ? "brand" : "neutral"}>
+          {m.group === "procurement" ? "Procurement" : "Production"}
+        </Chip>
+      ),
     },
     {
-      key: "days", header: "Days left", align: "right", numeric: true,
-      cell: (m) =>
-        m.operatingDaysLeft === null ? (
-          <span className="text-ink-muted font-medium">no usage</span>
-        ) : (
-          <span className="inline-flex flex-col items-start sm:items-end leading-tight">
-            <span className={`font-bold ${m.level === "red" ? "text-critical-ink" : m.level === "yellow" ? "text-warning-ink" : "text-ink-primary"}`}>
-              {fmt1(m.operatingDaysLeft)}d
-            </span>
-            {/* How much data is behind the number — a projection from one recorded
-                day should not look like a projection from a month of them. */}
-            {/* Where the figure came from. A projection from the known normal rate is
-                not the same claim as one measured from a month of records, and saying
-                which is the difference between a number you can act on and a guess. */}
-            {m.basis === "expected" ? (
-              <span className="text-xs font-medium text-ink-muted">
-                at ~{fmt(m.expectedPerDay ?? 0)}/day expected
-              </span>
-            ) : m.sampleDays > 0 && m.sampleDays < MIN_SAMPLE_DAYS ? (
-              <span className="text-xs font-medium text-ink-muted">
-                {m.sampleDays} day{m.sampleDays === 1 ? "" : "s"} of data
-              </span>
-            ) : null}
+      key: "remaining",
+      header: "Live On-Hand",
+      align: "right",
+      numeric: true,
+      cell: (m) => (
+        <div className="flex flex-col items-end">
+          <span className="font-bold text-ink-primary">
+            {fmt(m.remaining)} <span className="font-normal text-ink-muted text-xs">{m.unit}</span>
           </span>
-        ),
+          {m.unitEach && (
+            <span className="text-[11px] text-ink-muted">
+              ~{fmt(m.remaining * m.unitEach.qty)} {m.unitEach.unit}
+            </span>
+          )}
+        </div>
+      ),
     },
-    { key: "runout", header: "Runs out", align: "right", hideOnMobile: true, cell: (m) => (m.runOutDate ? shortDay(m.runOutDate) : "—") },
-    { key: "status", header: "Status", align: "right", cell: (m) => <StatusBadge level={m.level} /> },
+    {
+      key: "days",
+      header: "Operating Days Left",
+      align: "right",
+      numeric: true,
+      cell: (m) => (
+        <div className="flex flex-col items-end">
+          <span
+            className={`font-bold ${
+              m.level === "red"
+                ? "text-critical"
+                : m.level === "yellow"
+                  ? "text-amber-600 dark:text-amber-400"
+                  : "text-good-ink"
+            }`}
+          >
+            {m.operatingDaysLeft === null ? "—" : `${fmt1(m.operatingDaysLeft)} d`}
+          </span>
+          {m.basis === "expected" ? (
+            <span className="text-[11px] text-ink-muted">~{fmt(m.expectedPerDay ?? 0)}/d exp</span>
+          ) : m.sampleDays > 0 && m.sampleDays < MIN_SAMPLE_DAYS ? (
+            <span className="text-[11px] text-ink-muted">{m.sampleDays}d history</span>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      key: "runout",
+      header: "Est. Runout",
+      align: "right",
+      hideOnMobile: true,
+      cell: (m) => (m.runOutDate ? shortDay(m.runOutDate) : "—"),
+    },
+    {
+      key: "status",
+      header: "Stock Status",
+      align: "right",
+      cell: (m) => <StatusBadge level={m.level} />,
+    },
   ]
 
-  // The Count action is the only write on this table; readers do not see the column.
   if (canWrite) {
     materialColumns.push({
-      key: "action", header: "Action", align: "right", interactive: true,
+      key: "action",
+      header: "Action",
+      align: "right",
+      interactive: true,
       cell: (m) => {
         const target = ledgerTargetForKey(m.key)
         if (!target) return <span className="text-ink-muted text-xs">—</span>
         return (
           <button
             onClick={() => {
-              setReconcile({ ...target, label: m.label, unit: m.unit, currentRemaining: m.remaining })
+              setReconcile({
+                ...target,
+                label: m.label,
+                unit: m.unit,
+                currentRemaining: m.remaining,
+              })
               setShowReconcile(true)
             }}
-            className="h-9 px-2 text-xs font-bold text-brand hover:underline whitespace-nowrap"
+            className="rounded-lg border border-brand-primary/30 bg-brand-primary/10 px-2.5 py-1 text-xs font-bold text-brand-primary hover:bg-brand-primary hover:text-white transition-colors"
           >
             Count
           </button>
@@ -255,137 +321,237 @@ export function StockClient({ canWrite }: { canWrite: boolean }) {
     })
   }
 
-  const receiptColumns: Column<Receipt>[] = [
-    { key: "date", header: "Date", primary: true, cell: (r) => <span className="font-semibold text-ink-primary whitespace-nowrap">{shortDay(r.date)}</span> },
-    { key: "material", header: "Material", cell: (r) => MAT_LABEL[r.material_type] ?? r.material_type },
+  const producedColumns: Column<ProducedDay>[] = [
     {
-      key: "received", header: "Received", align: "right", numeric: true,
-      cell: (r) => (r.received_pcs > 0 ? <span className="text-good-ink font-semibold">+{fmt(r.received_pcs)}</span> : "—"),
+      key: "date",
+      header: "Production Date",
+      primary: true,
+      cell: (d) => <span className="font-semibold text-ink-primary whitespace-nowrap">{shortDay(d.date)}</span>,
     },
-    { key: "issued", header: "Issued", align: "right", numeric: true, cell: (r) => (r.given_pcs > 0 ? fmt(r.given_pcs) : "—") },
-    { key: "to", header: "Issued to", hideOnMobile: true, cell: (r) => r.given_to ?? "—" },
-    { key: "by", header: "By", hideOnMobile: true, cell: (r) => r.received_by ?? "—" },
+    {
+      key: "bitters",
+      header: "Bitters (ctn)",
+      align: "right",
+      numeric: true,
+      cell: (d) => fmt(d.bitters),
+    },
+    {
+      key: "ginger",
+      header: "Ginger (ctn)",
+      align: "right",
+      numeric: true,
+      cell: (d) => fmt(d.ginger),
+    },
+    {
+      key: "total",
+      header: "Total Cartons",
+      align: "right",
+      numeric: true,
+      cell: (d) => <span className="font-bold text-ink-primary">{fmt(d.total)}</span>,
+    },
+  ]
+
+  const receiptColumns: Column<Receipt>[] = [
+    {
+      key: "date",
+      header: "Date",
+      primary: true,
+      cell: (r) => <span className="font-semibold text-ink-primary whitespace-nowrap">{shortDay(r.date)}</span>,
+    },
+    {
+      key: "material",
+      header: "Material Item",
+      cell: (r) => MAT_LABEL[r.material_type] ?? r.material_type,
+    },
+    {
+      key: "received",
+      header: "Received",
+      align: "right",
+      numeric: true,
+      cell: (r) =>
+        r.received_pcs > 0 ? (
+          <span className="text-good-ink font-semibold">+{fmt(r.received_pcs)}</span>
+        ) : (
+          "—"
+        ),
+    },
+    {
+      key: "issued",
+      header: "Issued",
+      align: "right",
+      numeric: true,
+      cell: (r) => (r.given_pcs > 0 ? fmt(r.given_pcs) : "—"),
+    },
+    {
+      key: "to",
+      header: "Issued To",
+      hideOnMobile: true,
+      cell: (r) => r.given_to ?? "—",
+    },
+    {
+      key: "by",
+      header: "Recorded By",
+      hideOnMobile: true,
+      cell: (r) => r.received_by ?? "—",
+    },
   ]
 
   const countColumns: Column<StockCount>[] = [
     {
-      key: "date", header: "Date", primary: true,
-      cell: (c) => <span className="font-semibold text-ink-primary whitespace-nowrap">{shortDay(c.date)}{c.shift ? ` · ${c.shift}` : ""}</span>,
-    },
-    {
-      key: "material", header: "Material",
-      cell: (c) => `${c.material}${c.product ? ` — ${c.product}` : ""}${c.variant ? ` (${c.variant})` : ""}`,
-    },
-    { key: "counted", header: "Counted", align: "right", numeric: true, cell: (c) => fmt(c.counted_qty) },
-    { key: "system", header: "System", align: "right", numeric: true, cell: (c) => fmt(c.computed_qty) },
-    {
-      key: "variance", header: "Variance", align: "right", numeric: true,
+      key: "date",
+      header: "Audit Date",
+      primary: true,
       cell: (c) => (
-        <span className={`font-bold ${c.variance === 0 ? "text-ink-muted" : c.variance > 0 ? "text-good-ink" : "text-critical-ink"}`}>
-          {c.variance > 0 ? "+" : ""}{fmt(c.variance)}
+        <span className="font-semibold text-ink-primary whitespace-nowrap">
+          {shortDay(c.date)}
+          {c.shift ? ` (${c.shift})` : ""}
         </span>
       ),
     },
-    { key: "kind", header: "Type", cell: (c) => <Chip tone={c.kind === "baseline" ? "neutral" : "warning"}>{c.kind}</Chip> },
-    { key: "by", header: "By", hideOnMobile: true, cell: (c) => c.counted_by ?? "—" },
+    {
+      key: "material",
+      header: "Counted Material",
+      cell: (c) => (
+        <div className="flex flex-col">
+          <span className="font-semibold text-ink-primary">
+            {c.material.charAt(0).toUpperCase() + c.material.slice(1)}
+          </span>
+          <span className="text-xs text-ink-muted">
+            {c.variant ?? (c.product ? `(${c.product})` : "")}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: "counted",
+      header: "Physical Count",
+      align: "right",
+      numeric: true,
+      cell: (c) => <span className="font-bold text-ink-primary">{fmt(c.counted_qty)}</span>,
+    },
+    {
+      key: "variance",
+      header: "Audit Variance",
+      align: "right",
+      numeric: true,
+      cell: (c) =>
+        c.variance === 0 ? (
+          <span className="text-ink-muted font-medium">0 (match)</span>
+        ) : c.variance > 0 ? (
+          <span className="text-good-ink font-bold">+{fmt(c.variance)}</span>
+        ) : (
+          <span className="text-critical font-bold">{fmt(c.variance)}</span>
+        ),
+    },
+    {
+      key: "kind",
+      header: "Count Type",
+      hideOnMobile: true,
+      cell: (c) => (
+        <Chip tone={c.kind === "baseline" ? "brand" : "neutral"}>
+          {c.kind === "baseline" ? "Baseline" : "Reconciliation"}
+        </Chip>
+      ),
+    },
+    {
+      key: "auditor",
+      header: "Counted By",
+      hideOnMobile: true,
+      cell: (c) => c.counted_by ?? "—",
+    },
   ]
 
   return (
-    <div className="space-y-5 animate-fade-in-up">
-      <PageHeader
-        title="Stock levels"
-        description={
-          data
-            ? `Updated ${new Date(data.last_updated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${
-                critical > 0 ? ` · ${critical} material${critical > 1 ? "s" : ""} critical` : ""
-              }`
-            : "Procurement office"
-        }
-        actions={
-          <>
-            {canWrite && (
-              <button
-                onClick={() => { setReconcile(null); setShowReconcile(true) }}
-                className="h-9 px-3 flex items-center gap-1.5 rounded-lg border border-hairline bg-surface-card text-xs font-bold text-ink-secondary hover:border-brand transition-colors"
-              >
-                <ClipboardCheck className="w-3.5 h-3.5" aria-hidden="true" /> New count
-              </button>
-            )}
-            {canWrite && (
-              <Link
-                href="/dashboard/stock/receipts"
-                className="h-9 px-3 flex items-center gap-1.5 rounded-lg bg-brand-solid text-brand-ink text-xs font-bold hover:bg-brand-solid-hover transition-colors"
-              >
-                <Send className="w-3.5 h-3.5" aria-hidden="true" /> Log receipt
-              </Link>
-            )}
-            <button
-              onClick={load}
-              disabled={loading}
-              className="h-9 px-3 flex items-center gap-1.5 rounded-lg border border-hairline bg-surface-card text-xs font-bold text-ink-secondary hover:border-brand transition-colors disabled:opacity-60"
-            >
-              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" />}
-              Refresh
-            </button>
-          </>
-        }
-      />
+    <div className="space-y-6 pb-16">
+      {/* Top Page Header */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <PageHeader
+          title="Stock Management & Ledger"
+          description="Complete inventory, raw materials burn rates, daily production output, and physical reconciliations."
+        />
 
-      {/* Sibling stock surfaces. Both are read for the whole set; their own write
-          affordances are gated inside each page. */}
-      <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {canWrite && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setReconcile(null)
+                  setShowReconcile(true)
+                }}
+                className="gap-2 border-border-subtle hover:border-brand-primary"
+              >
+                <ClipboardCheck className="h-4 w-4 text-brand-primary" />
+                New Count
+              </Button>
+              <Link href="/dashboard/stock/receipts">
+                <Button size="sm" className="gap-2 bg-brand-primary text-white hover:bg-brand-secondary">
+                  <Send className="h-4 w-4" />
+                  Log Receipt
+                </Button>
+              </Link>
+            </>
+          )}
+
+          <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-1.5">
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </Button>
+        </div>
+      </div>
+
+      {/* Quick Navigation Strip to Sibling Stock Operations */}
+      <div className="flex flex-wrap items-center gap-2 border-y border-border-subtle py-3">
+        <span className="text-xs font-semibold text-ink-muted mr-1">Workflows:</span>
         <Link
           href="/dashboard/stock/monthly-report"
-          className="h-9 px-3 flex items-center gap-1.5 rounded-lg border border-hairline bg-surface-card text-xs font-bold text-ink-secondary hover:border-brand transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-brand-primary/40 bg-brand-primary/5 px-3 py-1.5 text-xs font-bold text-brand-primary hover:bg-brand-primary/10 transition-colors"
         >
-          <Calendar className="w-3.5 h-3.5" aria-hidden="true" /> Monthly report
-        </Link>
-        <Link
-          href="/dashboard/stock/receipts"
-          className="h-9 px-3 flex items-center gap-1.5 rounded-lg border border-hairline bg-surface-card text-xs font-bold text-ink-secondary hover:border-brand transition-colors"
-        >
-          <Send className="w-3.5 h-3.5" aria-hidden="true" /> Receipts & Issues
+          <Calendar className="h-3.5 w-3.5" /> Monthly Stock Report
         </Link>
         <Link
           href="/dashboard/stock/dispatch"
-          className="h-9 px-3 flex items-center gap-1.5 rounded-lg border border-hairline bg-surface-card text-xs font-bold text-ink-secondary hover:border-brand transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-card px-3 py-1.5 text-xs font-medium text-ink-secondary hover:border-brand-primary hover:text-ink-primary transition-colors"
         >
-          <Truck className="w-3.5 h-3.5" aria-hidden="true" /> Dispatch
+          <Truck className="h-3.5 w-3.5" /> Dispatch Outbound
         </Link>
         <Link
           href="/dashboard/stock/returns"
-          className="h-9 px-3 flex items-center gap-1.5 rounded-lg border border-hairline bg-surface-card text-xs font-bold text-ink-secondary hover:border-brand transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-card px-3 py-1.5 text-xs font-medium text-ink-secondary hover:border-brand-primary hover:text-ink-primary transition-colors"
         >
-          <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" /> Returns
+          <RotateCcw className="h-3.5 w-3.5" /> Returns (Repack/Spoilage)
         </Link>
         <Link
           href="/dashboard/stock/donations"
-          className="h-9 px-3 flex items-center gap-1.5 rounded-lg border border-hairline bg-surface-card text-xs font-bold text-ink-secondary hover:border-brand transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-card px-3 py-1.5 text-xs font-medium text-ink-secondary hover:border-brand-primary hover:text-ink-primary transition-colors"
         >
-          <Gift className="w-3.5 h-3.5" aria-hidden="true" /> Donations
+          <Gift className="h-3.5 w-3.5" /> Donations & Samples
         </Link>
         <Link
           href="/dashboard/stock/invoices"
-          className="h-9 px-3 flex items-center gap-1.5 rounded-lg border border-hairline bg-surface-card text-xs font-bold text-ink-secondary hover:border-brand transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface-card px-3 py-1.5 text-xs font-medium text-ink-secondary hover:border-brand-primary hover:text-ink-primary transition-colors"
         >
-          <FileText className="w-3.5 h-3.5" aria-hidden="true" /> Invoices
+          <FileText className="h-3.5 w-3.5" /> Supplier Invoices
         </Link>
       </div>
 
-      {/* One filter row above everything it scopes. */}
-      <div className="bg-surface-card rounded-2xl border border-hairline p-3 flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1 mr-1">
+      {/* Date Filter Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border-subtle bg-surface-card p-3 shadow-sm">
+        <div className="flex flex-wrap items-center gap-1.5">
           {PRESETS.map((p) => {
             const active = p.from() === from && to === iso(new Date())
             return (
               <button
                 key={p.label}
-                onClick={() => { setFrom(p.from()); setTo(iso(new Date())) }}
-                aria-pressed={active}
-                className={`h-9 px-3 text-xs font-bold rounded-lg border transition-colors ${
+                onClick={() => {
+                  setFrom(p.from())
+                  setTo(iso(new Date()))
+                }}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
                   active
-                    ? "bg-brand-solid text-brand-ink border-brand-solid"
-                    : "bg-surface-card text-ink-secondary border-hairline hover:border-brand"
+                    ? "bg-brand-solid text-brand-ink shadow-sm"
+                    : "bg-surface-base text-ink-secondary hover:text-ink-primary hover:border-brand-primary"
                 }`}
               >
                 {p.label}
@@ -393,125 +559,447 @@ export function StockClient({ canWrite }: { canWrite: boolean }) {
             )
           })}
         </div>
-        <input
-          type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} aria-label="From date"
-          className="h-9 min-w-0 flex-1 px-2 text-xs font-semibold rounded-lg border border-hairline bg-surface-card text-ink-secondary focus:border-brand focus:outline-none"
-        />
-        <span className="text-ink-muted text-xs" aria-hidden="true">→</span>
-        <input
-          type="date" value={to} min={from} max={iso(new Date())} onChange={(e) => setTo(e.target.value)} aria-label="To date"
-          className="h-9 min-w-0 flex-1 px-2 text-xs font-semibold rounded-lg border border-hairline bg-surface-card text-ink-secondary focus:border-brand focus:outline-none"
-        />
+
+        <div className="flex items-center gap-2 text-xs">
+          <input
+            type="date"
+            value={from}
+            max={to}
+            onChange={(e) => setFrom(e.target.value)}
+            className="h-9 rounded-lg border border-border-subtle bg-surface-base px-2.5 font-semibold text-ink-primary focus:border-brand-primary focus:outline-none"
+          />
+          <span className="text-ink-muted">→</span>
+          <input
+            type="date"
+            value={to}
+            min={from}
+            max={iso(new Date())}
+            onChange={(e) => setTo(e.target.value)}
+            className="h-9 rounded-lg border border-border-subtle bg-surface-base px-2.5 font-semibold text-ink-primary focus:border-brand-primary focus:outline-none"
+          />
+        </div>
       </div>
 
       {error && (
         <Card>
           <EmptyState
-            icon={<AlertCircle className="w-5 h-5 text-critical" />}
-            title="Couldn’t load stock data"
-            description="The request failed. Check your connection and try again."
+            icon={<AlertCircle className="h-6 w-6 text-critical" />}
+            title="Failed to load stock ledger"
+            description="The request failed. Please check your network connection."
             action={
-              <button onClick={load} className="h-11 px-4 rounded-xl bg-brand-solid text-brand-ink text-sm font-bold active:scale-[0.97]">
-                Retry
-              </button>
+              <Button onClick={load} className="bg-brand-primary text-white">
+                Retry Connection
+              </Button>
             }
           />
         </Card>
       )}
 
       {loading && !data && (
-        <div className="flex items-center justify-center py-20 text-ink-muted" aria-busy="true">
-          <Loader2 className="w-7 h-7 animate-spin" aria-hidden="true" />
-          <span className="sr-only">Loading stock levels</span>
+        <div className="flex items-center justify-center py-24 text-ink-muted">
+          <Loader2 className="h-8 w-8 animate-spin" />
         </div>
       )}
 
       {data && (
-        // Hold the previous render at reduced opacity while refetching (this page
-        // polls every 60s) — no skeleton flash, no layout jump.
-        <div className={loading ? "space-y-5 opacity-60 transition-opacity" : "space-y-5 transition-opacity"}>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatTile label="Bitters — finished" value={data.finishedGoods.bitters} unit="ctn" icon={<PackageCheck className="w-5 h-5" />} accent="bitters" />
-            <StatTile label="Ginger — finished" value={data.finishedGoods.ginger} unit="ctn" icon={<PackageCheck className="w-5 h-5" />} accent="ginger" />
-            <StatTile label="Restock now" value={critical} unit="items" icon={<AlertCircle className="w-5 h-5" />} accent={critical > 0 ? "critical" : "neutral"} />
-            <StatTile label="Reorder soon" value={low} unit="items" icon={<AlertTriangle className="w-5 h-5" />} accent={low > 0 ? "warning" : "neutral"} />
+        <div className="space-y-6">
+          {/* Key Metric Tiles */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatTile
+              label="Bitters — Finished"
+              value={data.finishedGoods.bitters}
+              unit="ctn"
+              icon={<PackageCheck className="h-5 w-5" />}
+              accent="bitters"
+            />
+            <StatTile
+              label="Ginger — Finished"
+              value={data.finishedGoods.ginger}
+              unit="ctn"
+              icon={<PackageCheck className="h-5 w-5" />}
+              accent="ginger"
+            />
+            <StatTile
+              label="Restock Now"
+              value={criticalCount}
+              unit="critical"
+              icon={<AlertCircle className="h-5 w-5" />}
+              accent={criticalCount > 0 ? "critical" : "neutral"}
+            />
+            <StatTile
+              label="Reorder Soon"
+              value={lowCount}
+              unit="items"
+              icon={<AlertTriangle className="h-5 w-5" />}
+              accent={lowCount > 0 ? "warning" : "neutral"}
+            />
           </div>
 
-          {/* Produced (FR-18): what the plant made in the window, per product and
-              per day, from the same packaging rows the finished-goods balance uses. */}
-          <div className="grid grid-cols-3 gap-3">
-            <StatTile label="Bitters produced" value={data.produced.bitters} unit="ctn" icon={<Factory className="w-5 h-5" />} accent="bitters" />
-            <StatTile label="Ginger produced" value={data.produced.ginger} unit="ctn" icon={<Factory className="w-5 h-5" />} accent="ginger" />
-            <StatTile label="Total produced" value={data.produced.total} unit="ctn" icon={<Factory className="w-5 h-5" />} accent="brand" />
+          {/* Tab Navigation with Animated Indicator */}
+          <div className="border-b border-border-subtle">
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setActiveTab("materials")}
+                className={`relative flex items-center gap-2 px-4 py-3 text-sm font-bold transition-colors ${
+                  activeTab === "materials"
+                    ? "text-brand-primary"
+                    : "text-ink-secondary hover:text-ink-primary"
+                }`}
+              >
+                <Boxes className="h-4 w-4" />
+                Raw Materials & Inventory
+                <span className="rounded-full bg-surface-elevated px-2 py-0.5 text-xs text-ink-muted">
+                  {sortedMaterials.length}
+                </span>
+                {activeTab === "materials" && (
+                  <motion.div
+                    layoutId="activeStockTab"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-primary"
+                  />
+                )}
+              </button>
+
+              <button
+                onClick={() => setActiveTab("production")}
+                className={`relative flex items-center gap-2 px-4 py-3 text-sm font-bold transition-colors ${
+                  activeTab === "production"
+                    ? "text-brand-primary"
+                    : "text-ink-secondary hover:text-ink-primary"
+                }`}
+              >
+                <Factory className="h-4 w-4" />
+                Finished Goods & Production
+                <span className="rounded-full bg-surface-elevated px-2 py-0.5 text-xs text-ink-muted">
+                  {fmt(data.produced.total)} ctn
+                </span>
+                {activeTab === "production" && (
+                  <motion.div
+                    layoutId="activeStockTab"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-primary"
+                  />
+                )}
+              </button>
+
+              <button
+                onClick={() => setActiveTab("dispatch")}
+                className={`relative flex items-center gap-2 px-4 py-3 text-sm font-bold transition-colors ${
+                  activeTab === "dispatch"
+                    ? "text-brand-primary"
+                    : "text-ink-secondary hover:text-ink-primary"
+                }`}
+              >
+                <Truck className="h-4 w-4" />
+                Outbound Dispatches
+                <span className="rounded-full bg-surface-elevated px-2 py-0.5 text-xs text-ink-muted">
+                  {fmt(dispatchedTotal)} ctn
+                </span>
+                {activeTab === "dispatch" && (
+                  <motion.div
+                    layoutId="activeStockTab"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-primary"
+                  />
+                )}
+              </button>
+
+              <button
+                onClick={() => setActiveTab("receipts")}
+                className={`relative flex items-center gap-2 px-4 py-3 text-sm font-bold transition-colors ${
+                  activeTab === "receipts"
+                    ? "text-brand-primary"
+                    : "text-ink-secondary hover:text-ink-primary"
+                }`}
+              >
+                <Send className="h-4 w-4" />
+                Receipts & Issues
+                <span className="rounded-full bg-surface-elevated px-2 py-0.5 text-xs text-ink-muted">
+                  {data.receipts.length}
+                </span>
+                {activeTab === "receipts" && (
+                  <motion.div
+                    layoutId="activeStockTab"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-primary"
+                  />
+                )}
+              </button>
+
+              <button
+                onClick={() => setActiveTab("counts")}
+                className={`relative flex items-center gap-2 px-4 py-3 text-sm font-bold transition-colors ${
+                  activeTab === "counts"
+                    ? "text-brand-primary"
+                    : "text-ink-secondary hover:text-ink-primary"
+                }`}
+              >
+                <ClipboardCheck className="h-4 w-4" />
+                Physical Counts & Audits
+                <span className="rounded-full bg-surface-elevated px-2 py-0.5 text-xs text-ink-muted">
+                  {counts.length}
+                </span>
+                {activeTab === "counts" && (
+                  <motion.div
+                    layoutId="activeStockTab"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-primary"
+                  />
+                )}
+              </button>
+            </div>
           </div>
 
-          <Card>
-            <CardHeader title="Produced per day" hint={windowLabel} />
-            <DataTable
-              columns={producedColumns}
-              rows={producedRows}
-              rowKey={(d) => d.date}
-              empty={<EmptyState compact title="No production in this range" />}
-            />
-          </Card>
+          {/* Tab Content Panels */}
+          <AnimatePresence mode="wait">
+            {activeTab === "materials" && (
+              <motion.div
+                key="materials"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-4"
+              >
+                <Card>
+                  <div className="p-4 sm:p-5">
+                    {/* Filter and Search Bar */}
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle pb-4">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          onClick={() => setMaterialUrgency("all")}
+                          className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
+                            materialUrgency === "all"
+                              ? "bg-brand-solid text-brand-ink"
+                              : "bg-surface-base text-ink-secondary hover:text-ink-primary"
+                          }`}
+                        >
+                          All ({sortedMaterials.length})
+                        </button>
+                        <button
+                          onClick={() => setMaterialUrgency("critical")}
+                          className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
+                            materialUrgency === "critical"
+                              ? "bg-critical text-white"
+                              : "bg-surface-base text-ink-secondary hover:text-ink-primary"
+                          }`}
+                        >
+                          Critical Restock ({criticalCount})
+                        </button>
+                        <button
+                          onClick={() => setMaterialUrgency("warning")}
+                          className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
+                            materialUrgency === "warning"
+                              ? "bg-warning text-ink-primary"
+                              : "bg-surface-base text-ink-secondary hover:text-ink-primary"
+                          }`}
+                        >
+                          Reorder Soon ({lowCount})
+                        </button>
+                        <button
+                          onClick={() => setMaterialUrgency("ok")}
+                          className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
+                            materialUrgency === "ok"
+                              ? "bg-good-subtle text-good-ink"
+                              : "bg-surface-base text-ink-secondary hover:text-ink-primary"
+                          }`}
+                        >
+                          Adequate ({sortedMaterials.filter((m) => m.level === "none").length})
+                        </button>
+                      </div>
 
-          <Card>
-            <CardHeader
-              title="Materials — stock & days left"
-              hint={`operating days (Mon–Sat) · critical ≤ ${data.thresholds.redDays} · low ≤ ${data.thresholds.amberDays}`}
-            />
-            <DataTable
-              columns={materialColumns}
-              rows={sorted}
-              rowKey={(m) => m.key}
-              rowHref={(m) => `/dashboard/stock/material/${m.key}`}
-            />
-          </Card>
+                      <div className="relative w-full sm:w-64">
+                        <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-ink-muted" />
+                        <input
+                          type="text"
+                          placeholder="Search material..."
+                          value={materialSearch}
+                          onChange={(e) => setMaterialSearch(e.target.value)}
+                          className="h-8.5 w-full rounded-xl border border-border-subtle bg-surface-base pl-8 pr-3 text-xs text-ink-primary placeholder:text-ink-muted focus:border-brand-primary focus:outline-none"
+                        />
+                      </div>
+                    </div>
 
-          {/* Dispatched (FR-16, FR-19): cartons out per product, with vehicle,
-              driver and destination breakdowns. The Dispatch page keeps the full
-              filterable log and export; this is the read on the same window. */}
-          <div className="grid grid-cols-3 gap-3">
-            <StatTile label="Bitters out" value={dispatchedOf("Bitters")} unit="ctn" icon={<Truck className="w-5 h-5" />} accent="bitters" />
-            <StatTile label="Ginger out" value={dispatchedOf("Ginger")} unit="ctn" icon={<Truck className="w-5 h-5" />} accent="ginger" />
-            <StatTile label="Total dispatched" value={dispatchedTotal} unit="ctn" icon={<Truck className="w-5 h-5" />} accent="brand" />
-          </div>
-          <DispatchBreakdownCards
-            byVehicle={dispatch?.byVehicle ?? []}
-            byDriver={dispatch?.byDriver ?? []}
-            byDestination={dispatch?.byDestination ?? []}
-          />
+                    <DataTable
+                      columns={materialColumns}
+                      rows={filteredMaterials}
+                      rowKey={(m) => m.key}
+                      rowHref={(m) =>
+                        m.key === "herb" || m.key.startsWith("herb")
+                          ? "/dashboard/stock/herbs"
+                          : `/dashboard/stock/material/${m.key}`
+                      }
+                      empty={
+                        <EmptyState
+                          compact
+                          title="No materials found"
+                          description="Try clearing your search query or filters."
+                        />
+                      }
+                    />
+                  </div>
+                </Card>
+              </motion.div>
+            )}
 
-          <Card>
-            <CardHeader title="Receipts & issuance" hint={windowLabel} />
-            <DataTable
-              columns={receiptColumns}
-              rows={data.receipts}
-              rowKey={(r) => `${r.date}-${r.material_type}-${r.received_pcs}-${r.given_pcs}`}
-              empty={<EmptyState compact title="No receipts or issues in this range" />}
-            />
-          </Card>
+            {activeTab === "production" && (
+              <motion.div
+                key="production"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-4"
+              >
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <StatTile
+                    label="Bitters Produced"
+                    value={data.produced.bitters}
+                    unit="ctn"
+                    icon={<Factory className="h-5 w-5" />}
+                    accent="bitters"
+                  />
+                  <StatTile
+                    label="Ginger Produced"
+                    value={data.produced.ginger}
+                    unit="ctn"
+                    icon={<Factory className="h-5 w-5" />}
+                    accent="ginger"
+                  />
+                  <StatTile
+                    label="Total Plant Production"
+                    value={data.produced.total}
+                    unit="ctn"
+                    icon={<Factory className="h-5 w-5" />}
+                    accent="brand"
+                  />
+                </div>
 
-          <Card>
-            <CardHeader title="Stock counts & variances" hint="baselines + reconciliations · latest 50" />
-            <DataTable
-              columns={countColumns}
-              rows={counts}
-              rowKey={(c) => c.id}
-              empty={
-                <EmptyState
-                  compact
-                  title="No counts recorded yet"
-                  description="Use “New count” to set a baseline or reconcile a material."
+                <Card>
+                  <CardHeader title="Daily Production Runs" hint={windowLabel} />
+                  <DataTable
+                    columns={producedColumns}
+                    rows={producedRows}
+                    rowKey={(d) => d.date}
+                    empty={<EmptyState compact title="No production logged in this date range" />}
+                  />
+                </Card>
+              </motion.div>
+            )}
+
+            {activeTab === "dispatch" && (
+              <motion.div
+                key="dispatch"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-4"
+              >
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <StatTile
+                    label="Bitters Dispatched"
+                    value={dispatchedOf("Bitters")}
+                    unit="ctn"
+                    icon={<Truck className="h-5 w-5" />}
+                    accent="bitters"
+                  />
+                  <StatTile
+                    label="Ginger Dispatched"
+                    value={dispatchedOf("Ginger")}
+                    unit="ctn"
+                    icon={<Truck className="h-5 w-5" />}
+                    accent="ginger"
+                  />
+                  <StatTile
+                    label="Total Dispatched"
+                    value={dispatchedTotal}
+                    unit="ctn"
+                    icon={<Truck className="h-5 w-5" />}
+                    accent="brand"
+                  />
+                </div>
+
+                <DispatchBreakdownCards
+                  byVehicle={dispatch?.byVehicle ?? []}
+                  byDriver={dispatch?.byDriver ?? []}
+                  byDestination={dispatch?.byDestination ?? []}
                 />
-              }
-            />
-          </Card>
+              </motion.div>
+            )}
+
+            {activeTab === "receipts" && (
+              <motion.div
+                key="receipts"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-4"
+              >
+                <Card>
+                  <CardHeader title="Raw Materials Inbound & Floor Issuance" hint={windowLabel} />
+                  <DataTable
+                    columns={receiptColumns}
+                    rows={data.receipts}
+                    rowKey={(r) => `${r.date}-${r.material_type}-${r.received_pcs}-${r.given_pcs}`}
+                    empty={<EmptyState compact title="No receipts or issues recorded in this range" />}
+                  />
+                </Card>
+              </motion.div>
+            )}
+
+            {activeTab === "counts" && (
+              <motion.div
+                key="counts"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-4"
+              >
+                <Card>
+                  <CardHeader
+                    title="Physical Stock Counts & Audit Reconciliations"
+                    hint="Audited ledger baseline count entries"
+                    actions={
+                      canWrite ? (
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setReconcile(null)
+                            setShowReconcile(true)
+                          }}
+                          className="bg-brand-primary text-white"
+                        >
+                          <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" />
+                          Record New Count
+                        </Button>
+                      ) : undefined
+                    }
+                  />
+                  <DataTable
+                    columns={countColumns}
+                    rows={counts}
+                    rowKey={(c) => c.id}
+                    empty={<EmptyState compact title="No physical stock counts recorded yet" />}
+                  />
+                </Card>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       )}
 
-      {canWrite && (
-        <ReconcileModal open={showReconcile} onClose={() => setShowReconcile(false)} onDone={load} target={reconcile} />
+      {/* Reconcile Modal for Physical Counts */}
+      {showReconcile && (
+        <ReconcileModal
+          open={showReconcile}
+          onClose={() => {
+            setShowReconcile(false)
+            setReconcile(null)
+          }}
+          target={reconcile}
+          onDone={() => {
+            load()
+            loadCounts()
+          }}
+        />
       )}
     </div>
   )

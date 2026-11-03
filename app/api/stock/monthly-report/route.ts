@@ -6,6 +6,7 @@ import {
   calculateMonthlyStockBalance,
   buildWeeklyProductionTable,
   buildBranchDistributionMatrix,
+  computeUnassignedSales,
   getMonthName,
   getMonthRange,
   type MonthlyReturnEvent,
@@ -21,6 +22,9 @@ export async function GET(request: NextRequest) {
   const now = new Date()
   const year = parseInt(url.searchParams.get("year") || String(now.getUTCFullYear()), 10)
   const month = parseInt(url.searchParams.get("month") || String(now.getUTCMonth() + 1), 10)
+  if (!Number.isInteger(year) || year < 2000 || year > 2100 || !Number.isInteger(month) || month < 1 || month > 12) {
+    return NextResponse.json({ error: "Choose a valid month and year." }, { status: 400 })
+  }
   const rawProduct = url.searchParams.get("product") || "Bitters"
   const product: Product = (PRODUCTS as readonly string[]).includes(rawProduct)
     ? (rawProduct as Product)
@@ -84,6 +88,16 @@ export async function GET(request: NextRequest) {
       .gte("date", startDate)
       .lte("date", endDate),
   ])
+
+  // A failed query used to read as "no rows", so the report printed zeros that looked
+  // real. A stock statement with silently missing figures is worse than an error.
+  const failed = [
+    priorProdRes, priorReturnsRes, priorDonationsRes,
+    monthProdRes, monthReturnsRes, monthDispatchesRes, monthDonationsRes,
+  ].find((r) => r.error)
+  if (failed?.error) {
+    return NextResponse.json({ error: "Could not load the figures for this report." }, { status: 500 })
+  }
 
   // Derive Opening Stock
   let priorProduced = 0
@@ -149,10 +163,13 @@ export async function GET(request: NextRequest) {
 
   const linesById = new Map<string, { product: Product; cartons: number }[]>()
   if (dispatchIds.length > 0) {
-    const { data: lineRows } = await supabase
+    const { data: lineRows, error: linesError } = await supabase
       .from("dispatch_lines")
       .select("dispatch_id, product, cartons")
       .in("dispatch_id", dispatchIds)
+    if (linesError) {
+      return NextResponse.json({ error: "Could not load the figures for this report." }, { status: 500 })
+    }
     for (const l of (lineRows ?? []) as Pick<DispatchLineRow, "dispatch_id" | "product" | "cartons">[]) {
       const list = linesById.get(l.dispatch_id) ?? []
       list.push({ product: l.product, cartons: Number(l.cartons) })
@@ -210,6 +227,7 @@ export async function GET(request: NextRequest) {
     totalProduced,
     goodsAvailable: balance.goodsAvailable,
     totalSales,
+    unassignedSales: computeUnassignedSales(totalSales, branchMatrix),
     repackReturns,
     spoilageReturns,
     totalReturns: balance.totalReturns,
