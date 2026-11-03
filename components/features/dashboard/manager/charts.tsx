@@ -9,6 +9,7 @@ import { BarChart3, Table2 } from "lucide-react"
 import { SERIES, GRID, AXIS, shortDay, fmt } from "./viz"
 import type { DaySeriesPoint, ShiftSeriesPoint } from "./types"
 import { Card, CardHeader, EmptyState } from "@/components/primitives"
+import { groupTrendData, type TrendGrouping } from "@/lib/domain/trend-grouping"
 
 // ============================================================================
 // Charts.
@@ -117,6 +118,9 @@ function SeriesTable({
  * Per-day trend. What is plotted depends on the department — cartons for
  * Packaging, bottles for Blowing, litres for Concentrate — so `label` and `unit`
  * are passed in rather than hardcoded to "cartons".
+ *
+ * Phase 6 display controls: Day / Week / Month grouping (via pure function)
+ * and optional metric toggle for Bitters / Ginger when split exists.
  */
 export function ProductionTrend({
   data,
@@ -132,34 +136,104 @@ export function ProductionTrend({
   productSplit?: boolean
 }) {
   const [view, setView] = useState<"chart" | "table">("chart")
-  const rows = data.map((d) => ({ ...d, label: shortDay(d.date) }))
+  const [grouping, setGrouping] = useState<TrendGrouping>("day")
+  const [metricFilter, setMetricFilter] = useState<"all" | "bitters" | "ginger">("all")
+
+  const grouped = groupTrendData(data, grouping)
 
   return (
     <Card>
       <CardHeader
         title={`${label} over time`}
-        hint={`${unit ?? ""}${unit ? " · " : ""}click a day to inspect`}
-        actions={<ViewToggle view={view} onChange={setView} />}
+        hint={`${unit ?? ""}${unit ? " · " : ""}${grouping === "day" ? "click a day to inspect" : "click a period to inspect"}`}
+        actions={
+          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+            {/* Metric toggle if productSplit is true */}
+            {productSplit && (
+              <div
+                role="radiogroup"
+                aria-label="Metric series"
+                className="inline-flex rounded-lg border border-hairline overflow-hidden text-[11px] font-bold"
+              >
+                {(
+                  [
+                    ["all", "All"],
+                    ["bitters", "Bitters"],
+                    ["ginger", "Ginger"],
+                  ] as const
+                ).map(([m, text]) => (
+                  <button
+                    key={m}
+                    role="radio"
+                    aria-checked={metricFilter === m}
+                    onClick={() => setMetricFilter(m)}
+                    className={`h-7 px-2 transition-colors ${
+                      metricFilter === m
+                        ? "bg-brand-subtle text-brand-subtle-ink"
+                        : "text-ink-muted hover:text-ink-secondary"
+                    }`}
+                  >
+                    {text}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Grouping toggle: Day / Week / Month */}
+            <div
+              role="radiogroup"
+              aria-label="Time grouping"
+              className="inline-flex rounded-lg border border-hairline overflow-hidden text-[11px] font-bold"
+            >
+              {(
+                [
+                  ["day", "Day"],
+                  ["week", "Wk"],
+                  ["month", "Mo"],
+                ] as const
+              ).map(([g, text]) => (
+                <button
+                  key={g}
+                  role="radio"
+                  aria-checked={grouping === g}
+                  onClick={() => setGrouping(g)}
+                  className={`h-7 px-2 transition-colors ${
+                    grouping === g
+                      ? "bg-brand-subtle text-brand-subtle-ink"
+                      : "text-ink-muted hover:text-ink-secondary"
+                  }`}
+                >
+                  {text}
+                </button>
+              ))}
+            </div>
+
+            <ViewToggle view={view} onChange={setView} />
+          </div>
+        }
       />
-      {rows.length === 0 ? (
+      {grouped.length === 0 ? (
         <EmptyState compact title="Nothing recorded in this range" description="Try a wider date range or a different filter." />
       ) : view === "table" ? (
         <SeriesTable
-          rows={rows.map((r) => ({ key: r.label, total: r.total, bitters: r.bitters, ginger: r.ginger }))}
-          firstHeader="Day"
-          productSplit={productSplit}
+          rows={grouped.map((r) => ({
+            key: r.label,
+            total: r.total,
+            bitters: r.bitters,
+            ginger: r.ginger,
+          }))}
+          firstHeader={grouping === "month" ? "Month" : grouping === "week" ? "Week" : "Day"}
+          productSplit={productSplit && metricFilter === "all"}
           label={label}
         />
       ) : (
-        // Height includes the x-axis band, so the axis labels are never cropped
-        // into a nested scrollbar.
         <div className="p-4 pt-2">
           <ResponsiveContainer width="100%" height={260}>
             <LineChart
-              data={rows}
+              data={grouped}
               margin={{ top: 8, right: 12, left: -8, bottom: 0 }}
               onClick={(e: any) => {
-                const d = e?.activePayload?.[0]?.payload?.date
+                const d = e?.activePayload?.[0]?.payload?.startDate
                 if (d) onSelectDay(d)
               }}
             >
@@ -167,21 +241,47 @@ export function ProductionTrend({
               <XAxis dataKey="label" {...axisProps} minTickGap={16} />
               <YAxis {...axisProps} width={44} allowDecimals={false} />
               <Tooltip content={<TooltipCard />} cursor={{ stroke: AXIS }} />
-              {productSplit && <Legend iconType="plainline" wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />}
-              <Line
-                type="monotone"
-                dataKey="total"
-                name={productSplit ? "Total" : label}
-                stroke={productSplit ? SERIES.total : SERIES.bitters}
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4 }}
-              />
-              {productSplit && (
-                <Line type="monotone" dataKey="bitters" name="Bitters" stroke={SERIES.bitters} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+              {productSplit && metricFilter === "all" && (
+                <Legend iconType="plainline" wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />
               )}
-              {productSplit && (
-                <Line type="monotone" dataKey="ginger" name="Ginger" stroke={SERIES.ginger} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+
+              {/* Show Total if all metrics chosen or no product split */}
+              {(!productSplit || metricFilter === "all") && (
+                <Line
+                  type="monotone"
+                  dataKey="total"
+                  name={productSplit ? "Total" : label}
+                  stroke={productSplit ? SERIES.total : SERIES.bitters}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+              )}
+
+              {/* Show Bitters if all or bitters chosen */}
+              {productSplit && (metricFilter === "all" || metricFilter === "bitters") && (
+                <Line
+                  type="monotone"
+                  dataKey="bitters"
+                  name="Bitters"
+                  stroke={SERIES.bitters}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+              )}
+
+              {/* Show Ginger if all or ginger chosen */}
+              {productSplit && (metricFilter === "all" || metricFilter === "ginger") && (
+                <Line
+                  type="monotone"
+                  dataKey="ginger"
+                  name="Ginger"
+                  stroke={SERIES.ginger}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
               )}
             </LineChart>
           </ResponsiveContainer>

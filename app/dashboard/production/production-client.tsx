@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import Link from "next/link"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   RefreshCw,
@@ -14,7 +14,7 @@ import {
   Warehouse,
   Factory,
 } from "lucide-react"
-import { FilterBar, DEFAULT_FILTERS, type Filters } from "@/components/features/dashboard/manager/filter-bar"
+import { FilterBar, type Filters } from "@/components/features/dashboard/manager/filter-bar"
 import { ProductionTrend, ShiftBreakdown } from "@/components/features/dashboard/manager/charts"
 import { MaterialsTable } from "@/components/features/dashboard/manager/materials-table"
 import { DayDetailDrawer } from "@/components/features/dashboard/manager/day-detail-drawer"
@@ -24,6 +24,11 @@ import { isDepartmentReport, type AnalyticsResponse } from "@/lib/domain/analyti
 import type { MaterialStatus } from "@/lib/domain/stock-status"
 import { isAllTime, requestFrom, ALL_TIME_LABEL } from "@/lib/domain/date-window"
 import { Card, Eyebrow, EmptyState, StatTile } from "@/components/primitives"
+import {
+  parseManagerFiltersFromParams,
+  filtersToSearchParams,
+  buildExportParams,
+} from "@/lib/domain/manager-filters"
 
 /** A value that may be uncomputable (rate with no production) — never NaN. */
 const kpiValue = (v: number | null) => (v === null ? "—" : v)
@@ -38,12 +43,45 @@ const alcoholEach = (materials: MaterialStatus[]): string | undefined => {
 }
 
 export function ProductionClient() {
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS)
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
+  // Phase 4: URL-saved state with validated query string values
+  const [filters, setFilters] = useState<Filters>(() => parseManagerFiltersFromParams(searchParams))
   const [report, setReport] = useState<AnalyticsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
   // Guards against a slow response for an old filter landing after a newer one.
   const requestRef = useRef(0)
+
+  // Sync state from URL when navigating back/forward
+  useEffect(() => {
+    const fromUrl = parseManagerFiltersFromParams(searchParams)
+    setFilters((current) => {
+      if (
+        current.from !== fromUrl.from ||
+        current.to !== fromUrl.to ||
+        current.shift !== fromUrl.shift ||
+        current.department !== fromUrl.department ||
+        current.product !== fromUrl.product
+      ) {
+        return fromUrl
+      }
+      return current
+    })
+  }, [searchParams])
+
+  // Synchronise state changes to the URL with router.replace
+  const handleFilterChange = useCallback(
+    (newFilters: Filters) => {
+      setFilters(newFilters)
+      const params = filtersToSearchParams(newFilters)
+      const qs = params.toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    },
+    [pathname, router],
+  )
 
   const load = useCallback(async () => {
     const seq = ++requestRef.current
@@ -71,14 +109,17 @@ export function ProductionClient() {
   const dept = report && isDepartmentReport(report) ? report : null
   const overview = report && !isDepartmentReport(report) ? report : null
 
+  // Phase 5: Dynamic Export link and label based on active scope
+  const exportInfo = buildExportParams(filters)
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Header */}
       <motion.header
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-hairline"
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-hairline"
       >
         <div>
           <Eyebrow>Lawson Limited Company</Eyebrow>
@@ -108,12 +149,15 @@ export function ProductionClient() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Link
-            href="/api/records/export"
-            className="h-9 px-3 flex items-center gap-1.5 rounded-lg border border-hairline bg-surface-card text-xs font-bold text-ink-secondary hover:border-brand transition-colors"
+          {/* Phase 5 dynamic export button */}
+          <a
+            href={exportInfo.url}
+            download
+            className="h-9 px-3 flex items-center gap-1.5 rounded-lg border border-hairline bg-surface-card text-xs font-bold text-ink-secondary hover:border-brand transition-colors whitespace-nowrap active:scale-[0.98]"
           >
-            <Download className="w-3.5 h-3.5" aria-hidden="true" /> Export
-          </Link>
+            <Download className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>{exportInfo.label}</span>
+          </a>
           <button
             onClick={load}
             disabled={loading}
@@ -129,22 +173,23 @@ export function ProductionClient() {
         </div>
       </motion.header>
 
-      <FilterBar filters={filters} onChange={setFilters} />
+      {/* Phase 3: Sticky filter bar with department tabs & phone collapse */}
+      <FilterBar filters={filters} onChange={handleFilterChange} />
 
-      {/* Main Content Area with Transitions */}
+      {/* Main Content Area with Framer Motion Transitions */}
       <div className={loading && report ? "opacity-60 transition-opacity" : "transition-opacity"}>
         <AnimatePresence mode="wait">
           {/* ── OVERVIEW ───────────────────────────────────────────────────── */}
           {overview && (
             <motion.div
-              key="overview-section"
-              initial={{ opacity: 0, y: 10 }}
+              key="overview-scope"
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
+              transition={{ duration: 0.25 }}
               className="space-y-5"
             >
-              {/* Finished goods: a cumulative warehouse balance */}
+              {/* Finished goods: cumulative warehouse balance */}
               <div className="grid grid-cols-2 gap-3">
                 <StatTile
                   label="Bitters — on hand"
@@ -214,11 +259,11 @@ export function ProductionClient() {
           {/* ── DEPARTMENT ─────────────────────────────────────────────────── */}
           {dept && (
             <motion.div
-              key={`dept-section-${dept.department}`}
-              initial={{ opacity: 0, y: 10 }}
+              key={`dept-scope-${dept.department}`}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
+              transition={{ duration: 0.25 }}
               className="space-y-5"
             >
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
