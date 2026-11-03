@@ -287,7 +287,9 @@ describe("BubbleField", () => {
     const f = field()
     f.update(1 / 60, 0, true)
     const before = f.pack(1, 874)[1]
-    for (let i = 0; i < 30; i++) f.update(1 / 60, 0.5, true)
+    // Stop emitting so newly spawned bubbles at the origin do not sort ahead
+    // of the rising bubbles in the radius-sorted packed array.
+    for (let i = 0; i < 30; i++) f.update(1 / 60, 0.5, false)
     // GL y counts up from the bottom, so rising means the packed y grows.
     expect(f.pack(1, 874)[1]).toBeGreaterThan(before)
 

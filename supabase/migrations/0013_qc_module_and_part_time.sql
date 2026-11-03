@@ -41,7 +41,7 @@ language sql
 stable
 security definer
 set search_path = public
-as $$ select coalesce(public.current_user_role() in ('qc_officer', 'qc_manager', 'admin'), false); $$;
+as $$ select coalesce(public.current_user_role()::text in ('qc_officer', 'qc_manager', 'admin'), false); $$;
 revoke execute on function public.can_access_qc() from public, anon;
 grant execute on function public.can_access_qc() to authenticated, service_role;
 
@@ -51,7 +51,7 @@ language sql
 stable
 security definer
 set search_path = public
-as $$ select coalesce(public.current_user_role() in ('qc_manager', 'admin'), false); $$;
+as $$ select coalesce(public.current_user_role()::text in ('qc_manager', 'admin'), false); $$;
 revoke execute on function public.can_manage_qc() from public, anon;
 grant execute on function public.can_manage_qc() to authenticated, service_role;
 
@@ -196,15 +196,15 @@ revoke all on table public.qc_record_amendments from public, anon, authenticated
 grant select, insert on table public.qc_record_amendments to authenticated;
 grant all on table public.qc_record_amendments to service_role;
 
--- 9. Seed the 8 Initial Approved Reference Ranges (§6 of Specification)
+-- 9. Seed the 8 Initial Approved Reference Ranges (S6 of Specification)
 insert into public.qc_standards (record_type, parameter_key, parameter_label, unit, lower_limit, upper_limit, is_inclusive, expression)
 values
-  ('raw_ethanol', 'alcohol_percentage', 'Alcohol percentage', '%', 95.0, 96.0, true, '95%–96%'),
-  ('raw_ethanol', 'ph', 'pH', null, 6.5, 7.5, true, '6.5–7.5'),
-  ('treated_water_ro', 'ph', 'pH', null, 5.0, 6.5, true, '5.0–6.5'),
-  ('treated_water_blending', 'ph', 'pH', null, 5.5, 7.5, true, '5.5–7.5'),
-  ('bitters', 'alcohol_percentage', 'Alcohol percentage', '%', 40.0, 44.0, true, '42% ± 2 (40%–44%)'),
-  ('bitters', 'ph', 'pH', null, 4.0, 6.0, true, '4.0–6.0'),
-  ('ginger_liquor', 'alcohol_percentage', 'Alcohol percentage', '%', 35.0, 40.0, true, '35%–40%'),
-  ('ginger_liquor', 'ph', 'pH', null, 4.0, 6.0, true, '4.0–6.0')
+  ('raw_ethanol', 'alcohol_percentage', 'Alcohol percentage', '%', 95.0, 96.0, true, '95%-96%'),
+  ('raw_ethanol', 'ph', 'pH', null, 6.5, 7.5, true, '6.5-7.5'),
+  ('treated_water_ro', 'ph', 'pH', null, 5.0, 6.5, true, '5.0-6.5'),
+  ('treated_water_blending', 'ph', 'pH', null, 5.5, 7.5, true, '5.5-7.5'),
+  ('bitters', 'alcohol_percentage', 'Alcohol percentage', '%', 40.0, 44.0, true, '42% +/- 2 (40%-44%)'),
+  ('bitters', 'ph', 'pH', null, 4.0, 6.0, true, '4.0-6.0'),
+  ('ginger_liquor', 'alcohol_percentage', 'Alcohol percentage', '%', 35.0, 40.0, true, '35%-40%'),
+  ('ginger_liquor', 'ph', 'pH', null, 4.0, 6.0, true, '4.0-6.0')
 on conflict do nothing;
