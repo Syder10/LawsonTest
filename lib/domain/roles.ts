@@ -90,13 +90,26 @@ export const isKnownRole = (role: string): role is UserRole =>
 // a "More" overflow. That cap is a real constraint, so each role gets the three to
 // five things it actually does rather than every route it may access.
 
-export type NavKey = "home" | "submit" | "receive" | "history" | "stock" | "users" | "settings" | "profile" | "qc"
+export type NavKey =
+  | "home"
+  | "submit"
+  | "receive"
+  | "history"
+  | "stock"
+  | "users"
+  | "settings"
+  | "profile"
+  | "qc"
+  | "production"
+  | "reports"
 
 export interface NavItem {
   key: NavKey
   href: string
   /** Short enough for a tab label under an icon. */
   label: string
+  /** Optional extra pathname prefixes that match this destination (e.g. nested or related routes). */
+  extraPrefixes?: string[]
 }
 
 const ITEM: Record<NavKey, NavItem> = {
@@ -105,6 +118,13 @@ const ITEM: Record<NavKey, NavItem> = {
   receive: { key: "receive", href: "/dashboard/stock/receipts", label: "Receive" },
   history: { key: "history", href: "/dashboard/history", label: "History" },
   stock: { key: "stock", href: "/dashboard/stock", label: "Stock" },
+  production: { key: "production", href: "/dashboard/production", label: "Production" },
+  reports: {
+    key: "reports",
+    href: "/dashboard/reports",
+    label: "Reports",
+    extraPrefixes: ["/dashboard/stock/monthly-report", "/dashboard/history"],
+  },
   users: { key: "users", href: "/dashboard/admin/users", label: "Users" },
   settings: { key: "settings", href: "/dashboard/admin/settings", label: "Settings" },
   profile: { key: "profile", href: "/dashboard/profile", label: "Profile" },
@@ -116,7 +136,7 @@ const ITEM: Record<NavKey, NavItem> = {
  */
 const NAV_BY_ROLE: Record<UserRole, NavKey[]> = {
   supervisor: ["home", "submit", "history", "profile"],
-  manager: ["home", "stock", "profile"],
+  manager: ["home", "production", "stock", "reports", "profile"],
   procurement: ["home", "stock", "history", "profile"],
   stock: ["home", "receive", "stock", "history", "profile"],
   admin: ["home", "users", "settings", "profile"],
@@ -143,10 +163,24 @@ export function navFor(role: string): NavItem[] {
  */
 export function isActiveNav(href: string, pathname: string, all: NavItem[]): boolean {
   const root = ITEM.home.href
-  const matches = all
-    .map((i) => i.href)
-    .filter((h) => pathname === h || (h !== root && pathname.startsWith(`${h}/`)))
-  if (matches.length === 0) return false
-  const best = matches.reduce((a, b) => (b.length > a.length ? b : a))
-  return href === best
+
+  let bestItem: NavItem | null = null
+  let longestMatchLength = -1
+
+  for (const item of all) {
+    const candidates = [item.href, ...(item.extraPrefixes ?? [])]
+    for (const prefix of candidates) {
+      const isMatch =
+        prefix === root
+          ? pathname === root
+          : pathname === prefix || pathname.startsWith(`${prefix}/`)
+
+      if (isMatch && prefix.length > longestMatchLength) {
+        longestMatchLength = prefix.length
+        bestItem = item
+      }
+    }
+  }
+
+  return bestItem !== null && bestItem.href === href
 }

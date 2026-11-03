@@ -118,10 +118,51 @@ describe("isActiveNav", () => {
   })
 
   it("marks nothing active on a route the role has no tab for", () => {
-    // A manager can still open /dashboard/history by URL. Home must NOT light up as
-    // a consolation prize: it would say "you are on the home screen" when you aren't.
+    // A manager can open /dashboard/forms by URL, but has no tab for it.
+    // Home must NOT light up as a consolation prize: it would say "you are on the home screen" when you aren't.
     const manager = navFor("manager")
-    expect(manager.some((i) => isActiveNav(i.href, "/dashboard/history", manager))).toBe(false)
+    expect(manager.some((i) => isActiveNav(i.href, "/dashboard/forms", manager))).toBe(false)
+  })
+
+  it("handles all manager navigation routes and extra prefixes correctly", () => {
+    const manager = navFor("manager")
+    expect(manager.map((i) => i.key)).toEqual(["home", "production", "stock", "reports", "profile"])
+
+    // Exact matches
+    expect(isActiveNav("/dashboard", "/dashboard", manager)).toBe(true)
+    expect(isActiveNav("/dashboard/production", "/dashboard/production", manager)).toBe(true)
+    expect(isActiveNav("/dashboard/stock", "/dashboard/stock", manager)).toBe(true)
+    expect(isActiveNav("/dashboard/reports", "/dashboard/reports", manager)).toBe(true)
+    expect(isActiveNav("/dashboard/profile", "/dashboard/profile", manager)).toBe(true)
+
+    // Stock sub-routes
+    expect(isActiveNav("/dashboard/stock", "/dashboard/stock/herbs", manager)).toBe(true)
+
+    // Reports extra prefixes: Monthly Stock Report and History
+    expect(isActiveNav("/dashboard/reports", "/dashboard/stock/monthly-report", manager)).toBe(true)
+    expect(isActiveNav("/dashboard/stock", "/dashboard/stock/monthly-report", manager)).toBe(false)
+    expect(isActiveNav("/dashboard/reports", "/dashboard/history", manager)).toBe(true)
+
+    // Off-tab routes light up nothing
+    expect(manager.some((i) => isActiveNav(i.href, "/dashboard/forms", manager))).toBe(false)
+    expect(manager.some((i) => isActiveNav(i.href, "/dashboard/admin/users", manager))).toBe(false)
+  })
+
+  it("confirms navigation for other roles remains unchanged", () => {
+    expect(navFor("supervisor").map((i) => i.key)).toEqual(["home", "submit", "history", "profile"])
+    expect(navFor("procurement").map((i) => i.key)).toEqual(["home", "stock", "history", "profile"])
+    expect(navFor("stock").map((i) => i.key)).toEqual(["home", "receive", "stock", "history", "profile"])
+    expect(navFor("admin").map((i) => i.key)).toEqual(["home", "users", "settings", "profile"])
+    expect(navFor("qc_officer").map((i) => i.key)).toEqual(["home", "qc", "profile"])
+    expect(navFor("qc_manager").map((i) => i.key)).toEqual(["home", "qc", "profile"])
+
+    // For stock role, /dashboard/stock/monthly-report lights up stock tab
+    const stock = navFor("stock")
+    expect(isActiveNav("/dashboard/stock", "/dashboard/stock/monthly-report", stock)).toBe(true)
+
+    // For supervisor, /dashboard/history lights up history tab
+    const supervisor = navFor("supervisor")
+    expect(isActiveNav("/dashboard/history", "/dashboard/history", supervisor)).toBe(true)
   })
 
   it("lights Home only on Home itself", () => {
