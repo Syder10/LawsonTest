@@ -8,7 +8,8 @@ import {
 import { BarChart3, Table2 } from "lucide-react"
 import { SERIES, GRID, AXIS, shortDay, fmt } from "./viz"
 import type { DaySeriesPoint, ShiftSeriesPoint } from "./types"
-import { Card, CardHeader, EmptyState } from "@/components/primitives"
+import { Card, CardHeader, Chip, EmptyState } from "@/components/primitives"
+import { shiftTone } from "@/lib/shift-config"
 import { groupTrendData, type TrendGrouping } from "@/lib/domain/trend-grouping"
 
 // ============================================================================
@@ -95,17 +96,19 @@ function SeriesTable({
           <tr>
             <th scope="col" className="text-left px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-ink-muted">{firstHeader}</th>
             <th scope="col" className="text-right px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-ink-muted">{label}</th>
-            {productSplit && <th scope="col" className="text-right px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-ink-muted">Bitters</th>}
-            {productSplit && <th scope="col" className="text-right px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-ink-muted">Ginger</th>}
+            {productSplit && <th scope="col" className="text-right px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-series-bitters">Bitters</th>}
+            {productSplit && <th scope="col" className="text-right px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-series-ginger">Ginger</th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-hairline">
           {rows.map((r) => (
             <tr key={r.key}>
-              <td className="px-3 py-1.5 font-semibold text-ink-secondary whitespace-nowrap">{r.key}</td>
+              <td className="px-3 py-1.5 font-semibold text-ink-secondary whitespace-nowrap">
+                {firstHeader === "Shift" ? <Chip tone={shiftTone(r.key)}>{r.key}</Chip> : r.key}
+              </td>
               <td className="px-3 py-1.5 text-right tnum text-ink-primary font-semibold">{fmt(r.total)}</td>
-              {productSplit && <td className="px-3 py-1.5 text-right tnum text-ink-secondary">{fmt(r.bitters)}</td>}
-              {productSplit && <td className="px-3 py-1.5 text-right tnum text-ink-secondary">{fmt(r.ginger)}</td>}
+              {productSplit && <td className="px-3 py-1.5 text-right tnum font-semibold text-series-bitters">{fmt(r.bitters)}</td>}
+              {productSplit && <td className="px-3 py-1.5 text-right tnum font-semibold text-series-ginger">{fmt(r.ginger)}</td>}
             </tr>
           ))}
         </tbody>

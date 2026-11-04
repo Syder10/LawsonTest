@@ -107,6 +107,9 @@ export function ReportsClient() {
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35, delay: idx * 0.1 }}
+              whileHover={{ y: -3, scale: 1.01 }}
+              whileTap={{ scale: 0.98 }}
+              className="h-full"
             >
               {sec.download ? (
                 <a href={sec.href} download className="block h-full">

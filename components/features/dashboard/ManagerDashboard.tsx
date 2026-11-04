@@ -94,13 +94,23 @@ export function ManagerDashboard() {
             Executive summary of 7-day plant throughput, warehouse balances, and inventory attention items.
           </p>
           {report && (
-            <p className="text-xs font-medium text-ink-muted mt-1 tnum">
-              Updated {new Date(report.last_updated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            <p className="text-xs font-medium text-ink-muted mt-1 tnum flex items-center flex-wrap">
+              <span>Updated {new Date(report.last_updated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
               <span className="mx-1.5 opacity-40">·</span>
-              Last 7 days
-              {criticalMaterials.length > 0 && (
-                <span className="ml-1.5 text-critical-ink font-bold">
-                  · {criticalMaterials.length} material{criticalMaterials.length > 1 ? "s" : ""} critical
+              <span>Last 7 days</span>
+              {criticalMaterials.length > 0 ? (
+                <motion.span
+                  animate={{ opacity: [1, 0.5, 1] }}
+                  transition={{ repeat: Infinity, duration: 2 }}
+                  className="ml-1.5 text-critical-ink font-bold inline-flex items-center gap-1"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-critical shrink-0" aria-hidden="true" />
+                  {criticalMaterials.length} material{criticalMaterials.length > 1 ? "s" : ""} critical
+                </motion.span>
+              ) : (
+                <span className="ml-1.5 text-good-ink font-semibold inline-flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-good shrink-0" aria-hidden="true" />
+                  All materials healthy
                 </span>
               )}
             </p>
@@ -164,65 +174,71 @@ export function ManagerDashboard() {
 
             {/* Quick Hub Navigation Cards */}
             <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <Link
-                href="/dashboard/production"
-                className="group rounded-2xl border border-hairline bg-surface-card p-4 hover:border-brand transition-all duration-200 hover:shadow-sm flex flex-col justify-between"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="w-9 h-9 rounded-xl bg-brand-subtle text-brand flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <Factory className="w-4 h-4" />
+              <motion.div whileHover={{ y: -3, scale: 1.01 }} whileTap={{ scale: 0.98 }} className="h-full">
+                <Link
+                  href="/dashboard/production"
+                  className="group h-full rounded-2xl border border-hairline bg-surface-card p-4 hover:border-brand transition-all duration-200 hover:shadow-md flex flex-col justify-between"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="w-10 h-10 rounded-xl bg-brand-subtle text-brand flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <Factory className="w-5 h-5" />
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-ink-muted group-hover:text-brand group-hover:translate-x-1.5 transition-all" />
                   </div>
-                  <ArrowRight className="w-4 h-4 text-ink-muted group-hover:text-brand group-hover:translate-x-1 transition-all" />
-                </div>
-                <div className="mt-3">
-                  <h3 className="text-sm font-bold text-ink-primary group-hover:text-brand transition-colors">
-                    Production Analysis
-                  </h3>
-                  <p className="text-xs text-ink-muted mt-0.5">
-                    Department tabs, shift breakdown, recipe BOM, and materials.
-                  </p>
-                </div>
-              </Link>
+                  <div className="mt-3">
+                    <h3 className="text-sm font-bold text-ink-primary group-hover:text-brand transition-colors">
+                      Production Analysis
+                    </h3>
+                    <p className="text-xs text-ink-muted mt-0.5">
+                      Department tabs, shift breakdown, recipe BOM, and materials.
+                    </p>
+                  </div>
+                </Link>
+              </motion.div>
 
-              <Link
-                href="/dashboard/stock"
-                className="group rounded-2xl border border-hairline bg-surface-card p-4 hover:border-brand transition-all duration-200 hover:shadow-sm flex flex-col justify-between"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="w-9 h-9 rounded-xl bg-brand-subtle text-brand flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <Boxes className="w-4 h-4" />
+              <motion.div whileHover={{ y: -3, scale: 1.01 }} whileTap={{ scale: 0.98 }} className="h-full">
+                <Link
+                  href="/dashboard/stock"
+                  className="group h-full rounded-2xl border border-hairline bg-surface-card p-4 hover:border-brand transition-all duration-200 hover:shadow-md flex flex-col justify-between"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="w-10 h-10 rounded-xl bg-brand-subtle text-brand flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <Boxes className="w-5 h-5" />
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-ink-muted group-hover:text-brand group-hover:translate-x-1.5 transition-all" />
                   </div>
-                  <ArrowRight className="w-4 h-4 text-ink-muted group-hover:text-brand group-hover:translate-x-1 transition-all" />
-                </div>
-                <div className="mt-3">
-                  <h3 className="text-sm font-bold text-ink-primary group-hover:text-brand transition-colors">
-                    Stock Office
-                  </h3>
-                  <p className="text-xs text-ink-muted mt-0.5">
-                    Warehouse inventory, material receipts, dispatches & counts.
-                  </p>
-                </div>
-              </Link>
+                  <div className="mt-3">
+                    <h3 className="text-sm font-bold text-ink-primary group-hover:text-brand transition-colors">
+                      Stock Office
+                    </h3>
+                    <p className="text-xs text-ink-muted mt-0.5">
+                      Warehouse inventory, material receipts, dispatches & counts.
+                    </p>
+                  </div>
+                </Link>
+              </motion.div>
 
-              <Link
-                href="/dashboard/reports"
-                className="group rounded-2xl border border-hairline bg-surface-card p-4 hover:border-brand transition-all duration-200 hover:shadow-sm flex flex-col justify-between"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="w-9 h-9 rounded-xl bg-brand-subtle text-brand flex items-center justify-center group-hover:scale-105 transition-transform">
-                    <FileSpreadsheet className="w-4 h-4" />
+              <motion.div whileHover={{ y: -3, scale: 1.01 }} whileTap={{ scale: 0.98 }} className="h-full">
+                <Link
+                  href="/dashboard/reports"
+                  className="group h-full rounded-2xl border border-hairline bg-surface-card p-4 hover:border-brand transition-all duration-200 hover:shadow-md flex flex-col justify-between"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="w-10 h-10 rounded-xl bg-brand-subtle text-brand flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <FileSpreadsheet className="w-5 h-5" />
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-ink-muted group-hover:text-brand group-hover:translate-x-1.5 transition-all" />
                   </div>
-                  <ArrowRight className="w-4 h-4 text-ink-muted group-hover:text-brand group-hover:translate-x-1 transition-all" />
-                </div>
-                <div className="mt-3">
-                  <h3 className="text-sm font-bold text-ink-primary group-hover:text-brand transition-colors">
-                    Reports & Audits
-                  </h3>
-                  <p className="text-xs text-ink-muted mt-0.5">
-                    Monthly reconciliation matrix, shift audit trail & raw export.
-                  </p>
-                </div>
-              </Link>
+                  <div className="mt-3">
+                    <h3 className="text-sm font-bold text-ink-primary group-hover:text-brand transition-colors">
+                      Reports & Audits
+                    </h3>
+                    <p className="text-xs text-ink-muted mt-0.5">
+                      Monthly reconciliation matrix, shift audit trail & raw export.
+                    </p>
+                  </div>
+                </Link>
+              </motion.div>
             </motion.div>
 
             {/* Middle Grid: Small Trend & Needs Attention */}
@@ -260,10 +276,14 @@ export function ManagerDashboard() {
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        {attentionMaterials.slice(0, 5).map((m) => (
-                          <div
+                        {attentionMaterials.slice(0, 5).map((m, idx) => (
+                          <motion.div
                             key={m.key}
-                            className="p-2.5 rounded-xl border border-hairline bg-surface-sunken flex items-center justify-between gap-3 text-xs"
+                            initial={{ opacity: 0, x: -8 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ duration: 0.25, delay: idx * 0.05 }}
+                            whileHover={{ x: 2 }}
+                            className="p-2.5 rounded-xl border border-hairline bg-surface-sunken flex items-center justify-between gap-3 text-xs transition-colors hover:border-brand/30"
                           >
                             <div className="min-w-0">
                               <p className="font-bold text-ink-primary truncate">{m.label}</p>
@@ -275,7 +295,7 @@ export function ManagerDashboard() {
                             <div className="shrink-0 flex items-center gap-1.5">
                               <StatusBadge level={m.level} />
                             </div>
-                          </div>
+                          </motion.div>
                         ))}
                       </div>
                     )}

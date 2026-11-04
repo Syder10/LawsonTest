@@ -7,7 +7,7 @@ import { ClipboardList, CheckCircle2, AlertTriangle, Clock, CalendarClock, X } f
 import { toast } from "sonner"
 import { DEPARTMENTS, RECORD_TYPES } from "@/lib/domain/record-types"
 import { Card, Chip, Choice, Field, PageHeader, Select, TextInput } from "@/components/primitives"
-import { SHIFT_ORDER } from "@/lib/shift-config"
+import { SHIFT_ORDER, shiftTone } from "@/lib/shift-config"
 import {
   ON_TIME_WINDOW_LABEL,
   currentGhanaShift,
@@ -215,13 +215,20 @@ export default function RecordSelectionPage() {
             required
             hint={!isManager && profile?.group_number && shift ? "Your rotation this week" : undefined}
           >
-            {(a11y) => (
-              <Select {...a11y} value={shift} onChange={(e) => handleShiftChange(e.target.value)}>
-                <option value="" disabled>Choose a shift…</option>
+            {() => (
+              <div className="flex flex-wrap gap-2 pt-0.5">
                 {SHIFT_ORDER.map((s) => (
-                  <option key={s} value={s}>{s}</option>
+                  <Choice
+                    key={s}
+                    type="radio"
+                    name="shift-selection"
+                    tone={s === "Morning" ? "morning" : s === "Afternoon" ? "afternoon" : "night"}
+                    checked={shift === s}
+                    onChange={() => handleShiftChange(s)}
+                    label={s}
+                  />
                 ))}
-              </Select>
+              </div>
             )}
           </Field>
         </div>
@@ -321,10 +328,11 @@ export default function RecordSelectionPage() {
               return (
                 <li key={`${g.date}|${g.shift}`} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-ink-primary">
-                      {label} · <span className="text-warning-ink">{g.shift}</span>
+                    <p className="text-sm font-bold text-ink-primary flex items-center gap-2 flex-wrap">
+                      <span>{label}</span>
+                      <Chip tone={shiftTone(g.shift)}>{g.shift}</Chip>
                     </p>
-                    <p className="text-xs text-ink-muted font-medium">Missing: {g.missingTypes.join(", ")}</p>
+                    <p className="text-xs text-ink-muted font-medium mt-0.5">Missing: {g.missingTypes.join(", ")}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <button

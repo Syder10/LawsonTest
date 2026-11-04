@@ -6,6 +6,7 @@ import {
   departmentAllows,
   departmentsWithCompulsory,
   getRecordType,
+  productTone,
   recordTypesForDepartment,
 } from "@/lib/domain/record-types"
 
@@ -353,5 +354,20 @@ describe("departmentAllows", () => {
         expect(departmentAllows(dept, r.label), `${dept} -> ${r.label}`).toBe(allowed.has(r.label))
       }
     }
+  })
+})
+
+describe("productTone", () => {
+  it("maps product names to their semantic Chip tone", () => {
+    expect(productTone("Bitters")).toBe("bitters")
+    expect(productTone("Ginger")).toBe("ginger")
+  })
+
+  it("handles case-insensitivity and falls back to neutral for unknown or null", () => {
+    expect(productTone("bitters bottle")).toBe("bitters")
+    expect(productTone("GINGER")).toBe("ginger")
+    expect(productTone("Water")).toBe("neutral")
+    expect(productTone(null)).toBe("neutral")
+    expect(productTone(undefined)).toBe("neutral")
   })
 })

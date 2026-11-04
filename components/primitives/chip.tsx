@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils"
 // and a word, which a bare chip does not.
 // ============================================================================
 
-type ChipTone = "neutral" | "brand" | "good" | "warning" | "critical" | "bitters" | "ginger"
+type ChipTone = "neutral" | "brand" | "good" | "warning" | "critical" | "bitters" | "ginger" | "morning" | "afternoon" | "night"
 
 const TONE: Record<ChipTone, string> = {
   neutral: "bg-surface-sunken text-ink-secondary border-hairline",
@@ -22,6 +22,10 @@ const TONE: Record<ChipTone, string> = {
   // Product identity, matching the chart series so a chip and a bar agree.
   bitters: "bg-series-bitters/10 text-series-bitters border-series-bitters/25",
   ginger: "bg-series-ginger/10 text-series-ginger border-series-ginger/25",
+  // Shift identity: Morning sunrise amber, Afternoon sky blue, Night violet
+  morning: "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/25",
+  afternoon: "bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/25",
+  night: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/25",
 }
 
 export function Chip({

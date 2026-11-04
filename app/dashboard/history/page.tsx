@@ -7,6 +7,7 @@ import { RECORD_TYPES, recordTypesForDepartment, type RecordTypeDef } from "@/li
 import { enrichWithBalances } from "@/lib/domain/stock-ledger"
 import { StockLedgerIndex } from "@/components/features/stock/ledger-index"
 import { Card, Chip, EmptyState, PageHeader } from "@/components/primitives"
+import { shiftTone } from "@/lib/shift-config"
 
 // Columns hidden from the per-record detail grid (envelope + internal + those
 // already shown as badges). Everything else — including generated values like
@@ -195,7 +196,7 @@ export default async function HistoryPage({
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
                       <span className="font-bold text-ink-primary">{formatDate(record.date)}</span>
-                      <Chip tone="neutral">{record.shift} shift</Chip>
+                      <Chip tone={shiftTone(record.shift)}>{record.shift} shift</Chip>
                       {record.product && (
                         <Chip tone={record.product === "Bitters" ? "bitters" : "ginger"}>{record.product}</Chip>
                       )}

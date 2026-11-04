@@ -6,6 +6,7 @@ import type { DayDetail } from "./types"
 import { shortDay } from "./viz"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Card, Chip, EmptyState } from "@/components/primitives"
+import { shiftTone } from "@/lib/shift-config"
 
 const HIDDEN = new Set(["id", "user_id", "created_at", "updated_at", "date", "shift", "department", "material"])
 const label = (k: string) => k.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
@@ -89,7 +90,7 @@ export function DayDetailDrawer({
                     return (
                       <li key={i} className="p-3.5 space-y-2">
                         <div className="flex flex-wrap items-center gap-2 text-xs">
-                          <Chip tone="neutral">{String(row.shift ?? "")}</Chip>
+                          <Chip tone={shiftTone(String(row.shift ?? ""))}>{String(row.shift ?? "")}</Chip>
                           {row.product != null && (
                             <Chip tone={row.product === "Bitters" ? "bitters" : "ginger"}>{String(row.product)}</Chip>
                           )}

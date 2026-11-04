@@ -2,9 +2,9 @@ import { createServerSupabase } from "@/lib/supabase/server"
 import { notFound } from "next/navigation"
 import RecordEntryForm from "./record-entry-form"
 import { getRecordType } from "@/lib/domain/record-types"
-import { currentGhanaShift, expectedShiftForGroup, shiftDateFor } from "@/lib/shift-config"
+import { currentGhanaShift, expectedShiftForGroup, shiftDateFor, shiftTone } from "@/lib/shift-config"
 import { settingsFromRow } from "@/lib/domain/settings"
-import { PageHeader } from "@/components/primitives"
+import { Chip, PageHeader } from "@/components/primitives"
 
 export const dynamic = "force-dynamic"
 
@@ -72,12 +72,19 @@ export default async function RecordTypePage(
                 backLabel="Back to record types"
                 title={recordType}
                 description={
-                    <>
-                        {department} · {supervisorName} · {initialShift} shift ·{" "}
-                        {new Date(initialDate + "T00:00:00Z").toLocaleDateString(undefined, {
-                            weekday: "short", month: "short", day: "numeric", timeZone: "UTC",
-                        })}
-                    </>
+                    <span className="inline-flex items-center gap-1.5 flex-wrap">
+                        <span>{department}</span>
+                        <span className="opacity-40">·</span>
+                        <span>{supervisorName}</span>
+                        <span className="opacity-40">·</span>
+                        <Chip tone={shiftTone(initialShift)}>{initialShift} shift</Chip>
+                        <span className="opacity-40">·</span>
+                        <span>
+                            {new Date(initialDate + "T00:00:00Z").toLocaleDateString(undefined, {
+                                weekday: "short", month: "short", day: "numeric", timeZone: "UTC",
+                            })}
+                        </span>
+                    </span>
                 }
             />
 

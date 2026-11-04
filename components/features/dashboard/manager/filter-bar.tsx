@@ -1,12 +1,14 @@
 "use client"
 
 import { useState } from "react"
+import { motion } from "framer-motion"
 import { ChevronDown, SlidersHorizontal, X } from "lucide-react"
 import { DEPARTMENTS, PRODUCTS } from "@/lib/domain/record-types"
 import { hasProductSplit } from "@/lib/domain/dept-metrics"
-import { SHIFT_ORDER } from "@/lib/shift-config"
+import { SHIFT_ORDER, shiftTone } from "@/lib/shift-config"
 import { ALL_TIME } from "@/lib/domain/date-window"
 import type { ManagerFilters } from "@/lib/domain/manager-filters"
+import { Chip } from "@/components/primitives"
 import {
   Sheet,
   SheetContent,
@@ -120,13 +122,20 @@ export function FilterBar({
       <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
         <button
           onClick={() => selectDepartment("")}
-          className={`h-8 px-3 text-xs font-bold rounded-lg transition-all shrink-0 ${
+          className={`relative h-8 px-3 text-xs font-bold rounded-lg transition-colors shrink-0 ${
             filters.department === ""
-              ? "bg-brand-solid text-brand-ink shadow-xs"
+              ? "text-brand-ink"
               : "bg-surface-card text-ink-secondary border border-hairline hover:border-brand hover:text-ink-primary"
           }`}
         >
-          Overview
+          {filters.department === "" && (
+            <motion.div
+              layoutId="activeDeptPill"
+              className="absolute inset-0 bg-brand-solid rounded-lg shadow-xs"
+              transition={{ type: "spring", stiffness: 400, damping: 32 }}
+            />
+          )}
+          <span className="relative z-10">Overview</span>
         </button>
         {DEPARTMENTS.map((dept) => {
           const isSelected = filters.department === dept
@@ -134,13 +143,20 @@ export function FilterBar({
             <button
               key={dept}
               onClick={() => selectDepartment(dept)}
-              className={`h-8 px-3 text-xs font-bold rounded-lg transition-all shrink-0 ${
+              className={`relative h-8 px-3 text-xs font-bold rounded-lg transition-colors shrink-0 ${
                 isSelected
-                  ? "bg-brand-solid text-brand-ink shadow-xs"
+                  ? "text-brand-ink"
                   : "bg-surface-card text-ink-secondary border border-hairline hover:border-brand hover:text-ink-primary"
               }`}
             >
-              {dept}
+              {isSelected && (
+                <motion.div
+                  layoutId="activeDeptPill"
+                  className="absolute inset-0 bg-brand-solid rounded-lg shadow-xs"
+                  transition={{ type: "spring", stiffness: 400, damping: 32 }}
+                />
+              )}
+              <span className="relative z-10">{dept}</span>
             </button>
           )
         })}
@@ -246,28 +262,32 @@ export function FilterBar({
         )}
 
         {isShiftFiltered && (
-          <span className="inline-flex items-center gap-1 h-7 pl-2 pr-1 rounded-lg bg-surface-sunken border border-hairline text-[11px] font-semibold text-ink-secondary shrink-0">
-            <span>Shift: {filters.shift}</span>
-            <button
-              onClick={() => set({ shift: "" })}
-              className="p-1 hover:text-critical-ink"
-              aria-label="Remove shift filter"
-            >
-              <X className="w-3 h-3" />
-            </button>
+          <span className="inline-flex items-center shrink-0">
+            <Chip tone={shiftTone(filters.shift)}>
+              <span>{filters.shift}</span>
+              <button
+                onClick={() => set({ shift: "" })}
+                className="p-0.5 ml-0.5 hover:text-critical-ink"
+                aria-label="Remove shift filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </Chip>
           </span>
         )}
 
         {isProductFiltered && (
-          <span className="inline-flex items-center gap-1 h-7 pl-2 pr-1 rounded-lg bg-surface-sunken border border-hairline text-[11px] font-semibold text-ink-secondary shrink-0">
-            <span>Product: {filters.product}</span>
-            <button
-              onClick={() => set({ product: "" })}
-              className="p-1 hover:text-critical-ink"
-              aria-label="Remove product filter"
-            >
-              <X className="w-3 h-3" />
-            </button>
+          <span className="inline-flex items-center shrink-0">
+            <Chip tone={filters.product === "Bitters" ? "bitters" : "ginger"}>
+              <span>{filters.product}</span>
+              <button
+                onClick={() => set({ product: "" })}
+                className="p-0.5 ml-0.5 hover:text-critical-ink"
+                aria-label="Remove product filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </Chip>
           </span>
         )}
 

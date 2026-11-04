@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation"
 import { AlertCircle, Lock, Minus, Plus, Sparkles, Trash2 } from "lucide-react"
 import { SuccessToast, type SuccessInfo } from "./success-toast"
 import { Card, Chip, Choice, Field, NumberInput, SectionTitle, TextArea, TextInput } from "@/components/primitives"
+import { cn } from "@/lib/utils"
 
 // ============================================================================
 // Record entry — the screen supervisors use many times a day, on a phone, often
@@ -892,18 +893,35 @@ export default function RecordEntryForm({
                 <span className="ml-1.5 font-medium normal-case tracking-normal text-ink-muted">select all that apply</span>
               </legend>
               <div className="flex flex-wrap gap-2">
-                {availableProducts.map((p) => (
-                  <Choice
-                    key={p}
-                    type="checkbox"
-                    checked={productionTypes.includes(p)}
-                    onChange={() => {
-                      setFormError(null)
-                      setProductionTypes((prev) => (prev.includes(p) ? prev.filter((t) => t !== p) : [...prev, p]))
-                    }}
-                    label={p}
-                  />
-                ))}
+                {availableProducts.map((p) => {
+                  const tone = p === "Bitters" ? "bitters" : p === "Ginger" ? "ginger" : "default"
+                  const isBitters = p === "Bitters"
+                  const isGinger = p === "Ginger"
+                  return (
+                    <Choice
+                      key={p}
+                      type="checkbox"
+                      tone={tone}
+                      checked={productionTypes.includes(p)}
+                      onChange={() => {
+                        setFormError(null)
+                        setProductionTypes((prev) => (prev.includes(p) ? prev.filter((t) => t !== p) : [...prev, p]))
+                      }}
+                      label={
+                        <span className="flex items-center gap-2">
+                          <span
+                            className={cn(
+                              "w-2.5 h-2.5 rounded-full shrink-0",
+                              isBitters ? "bg-series-bitters" : isGinger ? "bg-series-ginger" : "bg-brand"
+                            )}
+                            aria-hidden="true"
+                          />
+                          <span>{p}</span>
+                        </span>
+                      }
+                    />
+                  )
+                })}
               </div>
             </fieldset>
           </Card>
@@ -921,18 +939,46 @@ export default function RecordEntryForm({
             : isHerbs ? renderHerbs()
             : isConcentrate ? renderConcentrate()
             : supportsMultiProduct && productionTypes.length > 0 ? (
-              productionTypes.map((product) => (
-                <Card key={product} padded className={errors[product] ? "border-critical/40" : undefined}>
-                  <div className="flex items-center justify-between gap-3 mb-3">
-                    <SectionTitle>{product}</SectionTitle>
-                    {errors[product] && <Chip tone="critical" icon={<AlertCircle className="w-3 h-3" />}>Incomplete</Chip>}
-                  </div>
-                  {stockErrors[product] && (
-                    <p role="alert" className="mb-3 text-xs font-semibold text-critical-ink">{stockErrors[product]}</p>
-                  )}
-                  {fieldGrid(product)}
-                </Card>
-              ))
+              productionTypes.map((product) => {
+                const isBitters = product === "Bitters"
+                const isGinger = product === "Ginger"
+                return (
+                  <Card
+                    key={product}
+                    padded
+                    className={cn(
+                      errors[product]
+                        ? "border-critical/40"
+                        : isBitters
+                          ? "border-l-4 border-l-series-bitters"
+                          : isGinger
+                            ? "border-l-4 border-l-series-ginger"
+                            : undefined
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={cn(
+                            "w-2.5 h-2.5 rounded-full shrink-0",
+                            isBitters ? "bg-series-bitters" : isGinger ? "bg-series-ginger" : "bg-brand"
+                          )}
+                          aria-hidden="true"
+                        />
+                        <SectionTitle>{product}</SectionTitle>
+                        <Chip tone={isBitters ? "bitters" : isGinger ? "ginger" : "neutral"}>
+                          {product}
+                        </Chip>
+                      </div>
+                      {errors[product] && <Chip tone="critical" icon={<AlertCircle className="w-3 h-3" />}>Incomplete</Chip>}
+                    </div>
+                    {stockErrors[product] && (
+                      <p role="alert" className="mb-3 text-xs font-semibold text-critical-ink">{stockErrors[product]}</p>
+                    )}
+                    {fieldGrid(product)}
+                  </Card>
+                )
+              })
             ) : !supportsMultiProduct ? (
               <Card padded className={errors.default ? "border-critical/40" : undefined}>
                 {stockErrors.default && (

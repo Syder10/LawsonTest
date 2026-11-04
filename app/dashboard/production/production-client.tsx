@@ -42,6 +42,19 @@ const alcoholEach = (materials: MaterialStatus[]): string | undefined => {
   return each ? `${each.qty.toLocaleString()} ${each.unit} each` : undefined
 }
 
+const containerVariants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.06 },
+  },
+}
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 10 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.25 } },
+}
+
 export function ProductionClient() {
   const router = useRouter()
   const pathname = usePathname()
@@ -183,14 +196,14 @@ export function ProductionClient() {
           {overview && (
             <motion.div
               key="overview-scope"
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.25 }}
+              variants={containerVariants}
+              initial="hidden"
+              animate="show"
+              exit={{ opacity: 0, y: -4 }}
               className="space-y-5"
             >
               {/* Finished goods: cumulative warehouse balance */}
-              <div className="grid grid-cols-2 gap-3">
+              <motion.div variants={itemVariants} className="grid grid-cols-2 gap-3">
                 <StatTile
                   label="Bitters — on hand"
                   value={overview.finishedGoods.bitters}
@@ -207,9 +220,9 @@ export function ProductionClient() {
                   icon={<Warehouse className="w-5 h-5" />}
                   accent="ginger"
                 />
-              </div>
+              </motion.div>
 
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <motion.div variants={itemVariants} className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <StatTile
                   label="Total production"
                   value={overview.totals.production_cartons}
@@ -239,20 +252,22 @@ export function ProductionClient() {
                   unit="bags"
                   icon={<Layers className="w-5 h-5" />}
                 />
-              </div>
+              </motion.div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <div className="lg:col-span-2">
                   <ProductionTrend data={overview.byDay} onSelectDay={setSelectedDay} label="Cartons produced" />
                 </div>
                 <ShiftBreakdown data={overview.byShift} />
-              </div>
+              </motion.div>
 
-              <BomPanel
-                bitters={overview.totals.bitters_cartons}
-                ginger={overview.totals.ginger_cartons}
-                bom={overview.bom}
-              />
+              <motion.div variants={itemVariants}>
+                <BomPanel
+                  bitters={overview.totals.bitters_cartons}
+                  ginger={overview.totals.ginger_cartons}
+                  bom={overview.bom}
+                />
+              </motion.div>
             </motion.div>
           )}
 
@@ -260,13 +275,13 @@ export function ProductionClient() {
           {dept && (
             <motion.div
               key={`dept-scope-${dept.department}`}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.25 }}
+              variants={containerVariants}
+              initial="hidden"
+              animate="show"
+              exit={{ opacity: 0, y: -4 }}
               className="space-y-5"
             >
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <motion.div variants={itemVariants} className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 {dept.kpis.map((k) => (
                   <StatTile
                     key={k.key}
@@ -277,9 +292,9 @@ export function ProductionClient() {
                     accent={k.goodDirection === "down" ? "warning" : "brand"}
                   />
                 ))}
-              </div>
+              </motion.div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <div className="lg:col-span-2">
                   <ProductionTrend
                     data={dept.byDay}
@@ -290,17 +305,19 @@ export function ProductionClient() {
                   />
                 </div>
                 <ShiftBreakdown data={dept.byShift} productSplit={dept.productSplit} label={dept.trend.label} />
-              </div>
+              </motion.div>
 
               {dept.materials.length === 0 && (
-                <Card>
-                  <EmptyState
-                    compact
-                    icon={<Factory className="w-5 h-5" />}
-                    title="No tracked materials"
-                    description="This department does not hold a stock ledger of its own."
-                  />
-                </Card>
+                <motion.div variants={itemVariants}>
+                  <Card>
+                    <EmptyState
+                      compact
+                      icon={<Factory className="w-5 h-5" />}
+                      title="No tracked materials"
+                      description="This department does not hold a stock ledger of its own."
+                    />
+                  </Card>
+                </motion.div>
               )}
             </motion.div>
           )}

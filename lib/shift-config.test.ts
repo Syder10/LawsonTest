@@ -19,6 +19,7 @@ import {
   shiftDateFor,
   shiftOnTimeAndNotBackdated,
   shiftRank,
+  shiftTone,
   weekRotationOffset,
 } from "@/lib/shift-config"
 
@@ -40,6 +41,18 @@ describe("shift ordering", () => {
   it("keeps SHIFT_ORDER and SHIFT_RANK consistent with each other", () => {
     expect([...SHIFT_ORDER]).toEqual(["Morning", "Afternoon", "Night"])
     SHIFT_ORDER.forEach((shift, i) => expect(SHIFT_RANK[shift]).toBe(i + 1))
+  })
+
+  it("maps shifts to their semantic UI Chip tone", () => {
+    expect(shiftTone("Morning")).toBe("morning")
+    expect(shiftTone("Afternoon")).toBe("afternoon")
+    expect(shiftTone("Night")).toBe("night")
+    expect(shiftTone("morning shift")).toBe("morning")
+    expect(shiftTone("AFTERNOON")).toBe("afternoon")
+    expect(shiftTone("Night Shift")).toBe("night")
+    expect(shiftTone("Unknown")).toBe("neutral")
+    expect(shiftTone(null)).toBe("neutral")
+    expect(shiftTone(undefined)).toBe("neutral")
   })
 })
 

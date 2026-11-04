@@ -121,6 +121,35 @@ export function Select({ className, children, ...props }: SelectHTMLAttributes<H
   )
 }
 
+export type ChoiceTone = "default" | "bitters" | "ginger" | "morning" | "afternoon" | "night"
+
+const CHOICE_TONE_CHECKED: Record<ChoiceTone, { box: string; accent: string }> = {
+  default: {
+    box: "has-[:checked]:border-brand has-[:checked]:bg-brand-subtle",
+    accent: "accent-[var(--brand)]",
+  },
+  bitters: {
+    box: "has-[:checked]:border-series-bitters has-[:checked]:bg-series-bitters/10",
+    accent: "accent-[var(--series-bitters)]",
+  },
+  ginger: {
+    box: "has-[:checked]:border-series-ginger has-[:checked]:bg-series-ginger/10",
+    accent: "accent-[var(--series-ginger)]",
+  },
+  morning: {
+    box: "has-[:checked]:border-amber-500 has-[:checked]:bg-amber-500/10",
+    accent: "accent-amber-500",
+  },
+  afternoon: {
+    box: "has-[:checked]:border-sky-500 has-[:checked]:bg-sky-500/10",
+    accent: "accent-sky-500",
+  },
+  night: {
+    box: "has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-500/10",
+    accent: "accent-indigo-500",
+  },
+}
+
 /**
  * Checkbox or radio with a 44px hit area.
  *
@@ -131,20 +160,26 @@ export function Select({ className, children, ...props }: SelectHTMLAttributes<H
 export function Choice({
   label,
   type = "checkbox",
+  tone = "default",
   className,
   ...props
-}: InputHTMLAttributes<HTMLInputElement> & { label: ReactNode; type?: "checkbox" | "radio" }) {
+}: InputHTMLAttributes<HTMLInputElement> & {
+  label: ReactNode
+  type?: "checkbox" | "radio"
+  tone?: ChoiceTone
+}) {
+  const toneStyles = CHOICE_TONE_CHECKED[tone] ?? CHOICE_TONE_CHECKED.default
   return (
     <label
       className={cn(
         "flex items-center gap-2.5 min-h-11 px-3 rounded-xl border cursor-pointer select-none transition-colors",
         "border-hairline bg-surface-card hover:border-brand/40",
-        "has-[:checked]:border-brand has-[:checked]:bg-brand-subtle",
+        toneStyles.box,
         "has-[:disabled]:opacity-60 has-[:disabled]:cursor-not-allowed",
         className,
       )}
     >
-      <input type={type} {...props} className="w-4 h-4 accent-[var(--brand)] shrink-0" />
+      <input type={type} {...props} className={cn("w-4 h-4 shrink-0", toneStyles.accent)} />
       <span className="text-sm font-semibold text-ink-secondary">{label}</span>
     </label>
   )

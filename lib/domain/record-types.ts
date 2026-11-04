@@ -51,6 +51,16 @@ const BOTH: Product[] = ["Bitters", "Ginger"]
 // before, so every consumer wrote the literals out again.
 export const PRODUCTS: readonly Product[] = BOTH
 
+export type ProductTone = "bitters" | "ginger" | "neutral"
+
+/** Maps a product name to its semantic UI Chip tone. */
+export function productTone(product: string | null | undefined): ProductTone {
+  if (!product) return "neutral"
+  if (/bitters/i.test(product)) return "bitters"
+  if (/ginger/i.test(product)) return "ginger"
+  return "neutral"
+}
+
 // Canonical department names, in display order. Matches the departments seed
 // row in the DB. Use this instead of re-hardcoding the list in components.
 export const DEPARTMENTS = [

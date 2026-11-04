@@ -38,6 +38,17 @@ export function shiftRank(shift: string): number {
   return SHIFT_RANK[shift] ?? 0
 }
 
+export type ShiftTone = "morning" | "afternoon" | "night" | "neutral"
+
+/** Maps a shift name to its semantic UI Chip tone. */
+export function shiftTone(shift: string | null | undefined): ShiftTone {
+  if (!shift) return "neutral"
+  if (/morning/i.test(shift)) return "morning"
+  if (/afternoon/i.test(shift)) return "afternoon"
+  if (/night/i.test(shift)) return "night"
+  return "neutral"
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // On-time submission windows  (Ghana / UTC)
 //
