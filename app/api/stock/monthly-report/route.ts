@@ -33,9 +33,15 @@ export async function GET(request: NextRequest) {
   const { startDate, endDate } = getMonthRange(year, month)
 
   // 1. Fetch opening stock: prior history before startDate
-  // Opening stock = Produced(before) - Loaded(before) + RepackReturns(before) - Donations(before)
+  // Opening stock = Produced(before) - Dispatched(before) + RepackReturns(before) - Donations(before)
+  // "Loaded" is what the stock dispatch log recorded, never the packaging form's
+  // quantity_cartons_loaded (see migration 0014).
+  const dayBeforeStart = new Date(Date.parse(`${startDate}T00:00:00Z`) - 86_400_000)
+    .toISOString()
+    .slice(0, 10)
   const [
     priorProdRes,
+    priorDispatchRes,
     priorReturnsRes,
     priorDonationsRes,
     monthProdRes,
@@ -45,9 +51,12 @@ export async function GET(request: NextRequest) {
   ] = await Promise.all([
     supabase
       .from("packaging_daily_records")
-      .select("quantity_cartons_produced, quantity_cartons_loaded")
+      .select("quantity_cartons_produced")
       .eq("product", product)
       .lt("date", startDate),
+    // Everything dispatched before the month. dispatch_totals is inclusive on both
+    // ends, hence the day before the month starts.
+    supabase.rpc("dispatch_totals", { p_from: "1900-01-01", p_to: dayBeforeStart }),
     supabase
       .from("product_returns")
       .select("repack_cartons, cartons")
@@ -92,7 +101,7 @@ export async function GET(request: NextRequest) {
   // A failed query used to read as "no rows", so the report printed zeros that looked
   // real. A stock statement with silently missing figures is worse than an error.
   const failed = [
-    priorProdRes, priorReturnsRes, priorDonationsRes,
+    priorProdRes, priorDispatchRes, priorReturnsRes, priorDonationsRes,
     monthProdRes, monthReturnsRes, monthDispatchesRes, monthDonationsRes,
   ].find((r) => r.error)
   if (failed?.error) {
@@ -104,7 +113,9 @@ export async function GET(request: NextRequest) {
   let priorLoaded = 0
   for (const r of (priorProdRes.data ?? [])) {
     priorProduced += Number(r.quantity_cartons_produced) || 0
-    priorLoaded += Number(r.quantity_cartons_loaded) || 0
+  }
+  for (const r of (priorDispatchRes.data ?? [])) {
+    if (r.product === product) priorLoaded += Number(r.cartons) || 0
   }
   let priorRepack = 0
   for (const r of (priorReturnsRes.data ?? [])) {
