@@ -341,17 +341,33 @@ export async function GET(request: Request) {
     return q
   }
 
-  const [pkgRes, alcRes, preRes, nwOverviewRes] = await Promise.all([
+  // "Cartons loaded" is what the stock dispatch log recorded in the window — the same
+  // source finished_goods_stock() deducts — not the packaging form's loaded field.
+  // Two queries: the typed client cannot resolve the dispatch → dispatch_lines FK.
+  let dispatchQuery = supabase.from("dispatches").select("id").gte("date", from).lte("date", to)
+  if (shift) dispatchQuery = dispatchQuery.eq("shift", shift)
+
+  const [pkgRes, alcRes, preRes, nwOverviewRes, dispatchRes] = await Promise.all([
     scopeWindow(
       supabase
         .from("packaging_daily_records")
-        .select("date, shift, product, quantity_cartons_produced, quantity_cartons_loaded, group_number, is_part_time"),
+        .select("date, shift, product, quantity_cartons_produced, group_number, is_part_time"),
       { product: true },
     ),
     scopeWindow(supabase.from("stock_records").select("quantity_used").eq("material", "alcohol")),
     scopeWindow(supabase.from("blowing_daily_records").select("preforms_used_bags")),
     scopeWindow(supabase.from("no_work_records").select("date, shift, department, reason")),
+    dispatchQuery,
   ])
+
+  const dispatchIds = ((dispatchRes.data ?? []) as { id: string }[]).map((d) => d.id)
+  let cartonsLoaded = 0
+  if (dispatchIds.length > 0) {
+    let linesQuery = supabase.from("dispatch_lines").select("cartons").in("dispatch_id", dispatchIds)
+    if (product) linesQuery = linesQuery.eq("product", product)
+    const { data: lineRows } = await linesQuery
+    cartonsLoaded = ((lineRows ?? []) as { cartons: number | string }[]).reduce((s, l) => s + num(l.cartons), 0)
+  }
 
   const pkg = (pkgRes.data ?? []) as Row[]
   const ofProduct = (p: string) => pkg.filter((r) => r.product === p)
@@ -429,7 +445,7 @@ export async function GET(request: Request) {
       production_cartons: sumProduced(pkg),
       bitters_cartons: sumProduced(ofProduct("Bitters")),
       ginger_cartons: sumProduced(ofProduct("Ginger")),
-      cartons_loaded: pkg.reduce((s, r) => s + num(r.quantity_cartons_loaded), 0),
+      cartons_loaded: cartonsLoaded,
       alcohol_used: ((alcRes.data ?? []) as Row[]).reduce((s, r) => s + num(r.quantity_used), 0),
       preforms_used: ((preRes.data ?? []) as Row[]).reduce((s, r) => s + num(r.preforms_used_bags), 0),
     },
