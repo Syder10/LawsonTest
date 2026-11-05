@@ -5,11 +5,9 @@ import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend,
 } from "recharts"
-import { BarChart3, Table2 } from "lucide-react"
-import { SERIES, GRID, AXIS, shortDay, fmt } from "./viz"
+import { SERIES, GRID, AXIS, fmt } from "./viz"
 import type { DaySeriesPoint, ShiftSeriesPoint, GroupSeriesPoint } from "./types"
-import { Card, CardHeader, Chip, EmptyState } from "@/components/primitives"
-import { shiftTone } from "@/lib/shift-config"
+import { Card, CardHeader, EmptyState } from "@/components/primitives"
 import { groupTrendData, type TrendGrouping } from "@/lib/domain/trend-grouping"
 
 // ============================================================================
@@ -25,7 +23,8 @@ import { groupTrendData, type TrendGrouping } from "@/lib/domain/trend-grouping"
 //     neutral series instead.
 //   • Text never wears the series colour — values and labels use ink tokens; the
 //     coloured mark beside them carries identity.
-//   • Every chart has a TABLE VIEW twin, so no value is reachable only by hover.
+//   • The pivot table (PackagingPivotTable) serves as the accessible tabular
+//     equivalent; chart-only table toggles have been removed.
 // ============================================================================
 
 const axisProps = {
@@ -66,85 +65,6 @@ function TooltipCard({ active, payload, label }: any) {
   )
 }
 
-/** Chart / table toggle — the table view is the WCAG-clean equivalent. */
-function ViewToggle({ view, onChange }: { view: "chart" | "table"; onChange: (v: "chart" | "table") => void }) {
-  return (
-    <div role="radiogroup" aria-label="View as" className="inline-flex rounded-lg border border-hairline overflow-hidden">
-      {([["chart", BarChart3, "Chart"], ["table", Table2, "Table"]] as const).map(([v, Icon, label]) => (
-        <button
-          key={v}
-          role="radio"
-          aria-checked={view === v}
-          aria-label={label}
-          title={label}
-          onClick={() => onChange(v)}
-          className={`h-7 w-8 flex items-center justify-center transition-colors ${
-            view === v ? "bg-brand-subtle text-brand-subtle-ink" : "text-ink-muted hover:text-ink-secondary"
-          }`}
-        >
-          <Icon className="w-3.5 h-3.5" aria-hidden="true" />
-        </button>
-      ))}
-    </div>
-  )
-}
-
-function SeriesTable({
-  rows,
-  firstHeader,
-  productSplit,
-  label,
-}: {
-  rows: { key: string; total: number; bitters: number; ginger: number; noWorkReason?: string | null }[]
-  firstHeader: string
-  productSplit: boolean
-  label: string
-}) {
-  return (
-    // Both axes: four columns of figures do not fit a 360px phone, and clipping them
-    // would hide data the chart toggle exists to expose.
-    <div className="max-h-[260px] overflow-auto">
-      <table className="w-full text-sm">
-        <thead className="sticky top-0 bg-surface-sunken">
-          <tr>
-            <th scope="col" className="text-left px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-ink-muted">{firstHeader}</th>
-            <th scope="col" className="text-right px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-ink-muted">{label}</th>
-            {productSplit && <th scope="col" className="text-right px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-series-bitters">Bitters</th>}
-            {productSplit && <th scope="col" className="text-right px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-series-ginger">Ginger</th>}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-hairline">
-          {rows.map((r) => (
-            <tr key={r.key} className={r.noWorkReason ? "bg-amber-500/5" : ""}>
-              <td className="px-3 py-1.5 font-semibold text-ink-secondary whitespace-nowrap">
-                <div className="flex items-center gap-1.5">
-                  {firstHeader === "Shift" ? (
-                    <Chip tone={shiftTone(r.key)}>{r.key}</Chip>
-                  ) : firstHeader === "Group" ? (
-                    <span className="font-bold text-ink-primary">{r.key}</span>
-                  ) : (
-                    <span>{r.key}</span>
-                  )}
-                  {r.noWorkReason && (
-                    <span
-                      title={`No Work logged: ${r.noWorkReason}`}
-                      className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25"
-                    >
-                      No Work
-                    </span>
-                  )}
-                </div>
-              </td>
-              <td className="px-3 py-1.5 text-right tnum text-ink-primary font-semibold">{fmt(r.total)}</td>
-              {productSplit && <td className="px-3 py-1.5 text-right tnum font-semibold text-series-bitters">{fmt(r.bitters)}</td>}
-              {productSplit && <td className="px-3 py-1.5 text-right tnum font-semibold text-series-ginger">{fmt(r.ginger)}</td>}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
 
 /**
  * Per-day trend. What is plotted depends on the department — cartons for
@@ -167,8 +87,7 @@ export function ProductionTrend({
   unit?: string
   productSplit?: boolean
 }) {
-  const [view, setView] = useState<"chart" | "table">("chart")
-  const [grouping, setGrouping] = useState<TrendGrouping>("day")
+  const [grouping, setGrouping] = useState<TrendGrouping>("month")
   const [metricFilter, setMetricFilter] = useState<"all" | "bitters" | "ginger">("all")
 
   const grouped = groupTrendData(data, grouping)
@@ -177,7 +96,7 @@ export function ProductionTrend({
     <Card>
       <CardHeader
         title={`${label} over time`}
-        hint={`${unit ?? ""}${unit ? " · " : ""}${grouping === "day" ? "click a day to inspect" : "click a period to inspect"}`}
+        hint={`${unit ?? ""}${unit ? " · " : ""}click a period to inspect`}
         actions={
           <div className="flex items-center gap-1.5 flex-wrap justify-end">
             {/* Metric toggle if productSplit is true */}
@@ -211,7 +130,7 @@ export function ProductionTrend({
               </div>
             )}
 
-            {/* Grouping toggle: Day / Week / Month */}
+            {/* Grouping toggle: Month / All Time */}
             <div
               role="radiogroup"
               aria-label="Time grouping"
@@ -219,9 +138,8 @@ export function ProductionTrend({
             >
               {(
                 [
-                  ["day", "Day"],
-                  ["week", "Wk"],
-                  ["month", "Mo"],
+                  ["month", "Month"],
+                  ["year", "All Time"],
                 ] as const
               ).map(([g, text]) => (
                 <button
@@ -229,7 +147,7 @@ export function ProductionTrend({
                   role="radio"
                   aria-checked={grouping === g}
                   onClick={() => setGrouping(g)}
-                  className={`h-7 px-2 transition-colors ${
+                  className={`h-7 px-2.5 transition-colors ${
                     grouping === g
                       ? "bg-brand-subtle text-brand-subtle-ink"
                       : "text-ink-muted hover:text-ink-secondary"
@@ -239,25 +157,11 @@ export function ProductionTrend({
                 </button>
               ))}
             </div>
-
-            <ViewToggle view={view} onChange={setView} />
           </div>
         }
       />
       {grouped.length === 0 ? (
         <EmptyState compact title="Nothing recorded in this range" description="Try a wider date range or a different filter." />
-      ) : view === "table" ? (
-        <SeriesTable
-          rows={grouped.map((r) => ({
-            key: r.label,
-            total: r.total,
-            bitters: r.bitters,
-            ginger: r.ginger,
-          }))}
-          firstHeader={grouping === "month" ? "Month" : grouping === "week" ? "Week" : "Day"}
-          productSplit={productSplit && metricFilter === "all"}
-          label={label}
-        />
       ) : (
         <div className="p-4 pt-2">
           <ResponsiveContainer width="100%" height={260}>
@@ -338,7 +242,6 @@ export function GroupBreakdown({
   label?: string
 }) {
   const [viewMode, setViewMode] = useState<"group" | "shift">("group")
-  const [view, setView] = useState<"chart" | "table">("chart")
 
   // Resolve groups vs shifts
   // 1. If groupData is provided, use it
@@ -388,19 +291,11 @@ export function GroupBreakdown({
                 </button>
               </div>
             )}
-            <ViewToggle view={view} onChange={setView} />
           </div>
         }
       />
       {!hasData ? (
         <EmptyState compact title="Nothing recorded in this range" />
-      ) : view === "table" ? (
-        <SeriesTable
-          rows={activeRows}
-          firstHeader={isGroup ? "Group" : "Shift"}
-          productSplit={productSplit}
-          label={label}
-        />
       ) : (
         <div className="p-4 pt-2">
           <ResponsiveContainer width="100%" height={220}>

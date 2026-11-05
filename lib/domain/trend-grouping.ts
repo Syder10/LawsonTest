@@ -1,4 +1,4 @@
-export type TrendGrouping = "day" | "week" | "month"
+export type TrendGrouping = "month" | "year" | "all_time" | "day" | "week"
 
 export interface TrendDataPoint {
   date: string // YYYY-MM-DD
@@ -85,7 +85,30 @@ export function groupTrendData(
     return [...map.values()]
   }
 
-  // grouping === "month"
+  if (grouping === "year") {
+    const map = new Map<string, GroupedTrendPoint>()
+    for (const p of sorted) {
+      const year = p.date.slice(0, 4) // YYYY
+      const existing = map.get(year)
+      if (existing) {
+        existing.total += p.total
+        existing.bitters += p.bitters
+        existing.ginger += p.ginger
+      } else {
+        map.set(year, {
+          key: year,
+          label: year,
+          total: p.total,
+          bitters: p.bitters,
+          ginger: p.ginger,
+          startDate: `${year}-01-01`,
+        })
+      }
+    }
+    return [...map.values()]
+  }
+
+  // grouping === "month" or "all_time"
   const map = new Map<string, GroupedTrendPoint>()
   for (const p of sorted) {
     const ym = p.date.slice(0, 7) // YYYY-MM

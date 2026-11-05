@@ -85,5 +85,26 @@ describe("trend-grouping domain", () => {
       expect(grouped[1].total).toBe(300)
       expect(grouped[1].startDate).toBe("2026-11-01")
     })
+
+    it("groups by year, aggregating sums across all dates in each year", () => {
+      const multiYearPoints: TrendDataPoint[] = [
+        ...samplePoints,
+        { date: "2025-12-15", total: 500, bitters: 300, ginger: 200 },
+      ]
+      const grouped = groupTrendData(multiYearPoints, "year")
+      expect(grouped).toHaveLength(2)
+
+      // 2025: 500
+      expect(grouped[0].key).toBe("2025")
+      expect(grouped[0].label).toBe("2025")
+      expect(grouped[0].total).toBe(500)
+
+      // 2026: 100 + 150 + 200 + 300 = 750
+      expect(grouped[1].key).toBe("2026")
+      expect(grouped[1].label).toBe("2026")
+      expect(grouped[1].total).toBe(750)
+      expect(grouped[1].bitters).toBe(480)
+      expect(grouped[1].ginger).toBe(270)
+    })
   })
 })

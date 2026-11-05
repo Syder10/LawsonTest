@@ -17,8 +17,6 @@ import {
   CloudSun,
   Moon,
   Clock,
-  Sparkles,
-  AlertCircle,
 } from "lucide-react"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import {
@@ -543,30 +541,16 @@ export function PackagingPivotTable({
                         "transition-colors group",
                         onSelectDay ? "cursor-pointer hover:bg-brand-subtle/30" : "hover:bg-surface-sunken/40",
                         r.isWeekend && "bg-surface-sunken/30 text-ink-muted",
-                        noWork && !isPeak && "bg-amber-500/[0.04]",
+                        noWork && r.total === 0 && !isPeak && "bg-amber-500/[0.04]",
                         isPeak && "bg-good-subtle/20"
                       )}
                     >
                       {/* Date */}
                       <td className="py-2.5 px-3.5 whitespace-nowrap font-medium text-xs tnum">
-                        <div className="flex items-center gap-1.5 flex-wrap">
+                        <div className="flex items-center gap-1.5">
                           <span className={cn("font-bold", isPeak && "text-good-ink")}>
                             {r.date.slice(5)}
                           </span>
-                          {isPeak && (
-                            <span title="Monthly Peak" className="inline-flex">
-                              <Sparkles className="w-3 h-3 text-amber-500 inline-block" />
-                            </span>
-                          )}
-                          {noWork && (
-                            <span
-                              title={`No Work logged: ${noWork}`}
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30 whitespace-nowrap"
-                            >
-                              <AlertCircle className="w-2.5 h-2.5 shrink-0" />
-                              <span>No Work</span>
-                            </span>
-                          )}
                         </div>
                       </td>
 
@@ -590,22 +574,11 @@ export function PackagingPivotTable({
                           {/* Group 1 */}
                           <td className="py-2.5 px-3 text-right">
                             {r.group1.cartons > 0 ? (
-                              <div className="flex flex-col items-end">
+                              <div className="inline-flex items-center gap-1 justify-end">
+                                {r.group1.shifts[0] && getShiftIcon(r.group1.shifts[0].shift)}
                                 <span className="font-bold text-ink-primary tnum text-sm">
                                   {fmtNum(r.group1.cartons)}
                                 </span>
-                                <div className="flex flex-wrap justify-end gap-1 mt-0.5">
-                                  {r.group1.shifts.map((s, idx) => (
-                                    <span
-                                      key={idx}
-                                      className="inline-flex items-center gap-0.5 text-[10px] text-ink-muted"
-                                      title={`${s.shift}: ${fmtNum(s.cartons)} cartons`}
-                                    >
-                                      {getShiftIcon(s.shift)}
-                                      <span className="tnum font-medium">{fmtNum(s.cartons)}</span>
-                                    </span>
-                                  ))}
-                                </div>
                               </div>
                             ) : (
                               <span className="text-ink-muted/40 text-xs">—</span>
@@ -615,22 +588,11 @@ export function PackagingPivotTable({
                           {/* Group 2 */}
                           <td className="py-2.5 px-3 text-right">
                             {r.group2.cartons > 0 ? (
-                              <div className="flex flex-col items-end">
+                              <div className="inline-flex items-center gap-1 justify-end">
+                                {r.group2.shifts[0] && getShiftIcon(r.group2.shifts[0].shift)}
                                 <span className="font-bold text-ink-primary tnum text-sm">
                                   {fmtNum(r.group2.cartons)}
                                 </span>
-                                <div className="flex flex-wrap justify-end gap-1 mt-0.5">
-                                  {r.group2.shifts.map((s, idx) => (
-                                    <span
-                                      key={idx}
-                                      className="inline-flex items-center gap-0.5 text-[10px] text-ink-muted"
-                                      title={`${s.shift}: ${fmtNum(s.cartons)} cartons`}
-                                    >
-                                      {getShiftIcon(s.shift)}
-                                      <span className="tnum font-medium">{fmtNum(s.cartons)}</span>
-                                    </span>
-                                  ))}
-                                </div>
                               </div>
                             ) : (
                               <span className="text-ink-muted/40 text-xs">—</span>
@@ -640,22 +602,11 @@ export function PackagingPivotTable({
                           {/* Group 3 */}
                           <td className="py-2.5 px-3 text-right">
                             {r.group3.cartons > 0 ? (
-                              <div className="flex flex-col items-end">
+                              <div className="inline-flex items-center gap-1 justify-end">
+                                {r.group3.shifts[0] && getShiftIcon(r.group3.shifts[0].shift)}
                                 <span className="font-bold text-ink-primary tnum text-sm">
                                   {fmtNum(r.group3.cartons)}
                                 </span>
-                                <div className="flex flex-wrap justify-end gap-1 mt-0.5">
-                                  {r.group3.shifts.map((s, idx) => (
-                                    <span
-                                      key={idx}
-                                      className="inline-flex items-center gap-0.5 text-[10px] text-ink-muted"
-                                      title={`${s.shift}: ${fmtNum(s.cartons)} cartons`}
-                                    >
-                                      {getShiftIcon(s.shift)}
-                                      <span className="tnum font-medium">{fmtNum(s.cartons)}</span>
-                                    </span>
-                                  ))}
-                                </div>
                               </div>
                             ) : (
                               <span className="text-ink-muted/40 text-xs">—</span>
@@ -665,22 +616,11 @@ export function PackagingPivotTable({
                           {/* Part Time */}
                           <td className="py-2.5 px-3 text-right">
                             {r.partTime.cartons > 0 ? (
-                              <div className="flex flex-col items-end">
+                              <div className="inline-flex items-center gap-1 justify-end">
+                                {r.partTime.shifts[0] && getShiftIcon(r.partTime.shifts[0].shift)}
                                 <span className="font-bold text-amber-700 dark:text-amber-400 tnum text-sm">
                                   {fmtNum(r.partTime.cartons)}
                                 </span>
-                                <div className="flex flex-wrap justify-end gap-1 mt-0.5">
-                                  {r.partTime.shifts.map((s, idx) => (
-                                    <span
-                                      key={idx}
-                                      className="inline-flex items-center gap-0.5 text-[10px] text-ink-muted"
-                                      title={`Part Time (${s.shift}): ${fmtNum(s.cartons)} cartons`}
-                                    >
-                                      {getShiftIcon(s.shift)}
-                                      <span className="tnum font-medium">{fmtNum(s.cartons)}</span>
-                                    </span>
-                                  ))}
-                                </div>
                               </div>
                             ) : (
                               <span className="text-ink-muted/40 text-xs">—</span>
