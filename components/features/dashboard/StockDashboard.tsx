@@ -26,6 +26,7 @@ import {
   CheckCircle2,
   SlidersHorizontal,
   Layers,
+  Table2,
 } from "lucide-react"
 import { fmt, fmt1 } from "@/components/features/dashboard/manager/viz"
 import { byUrgency } from "@/lib/domain/stock-status"
@@ -452,6 +453,24 @@ export function StockDashboard({ userName }: { userName: string | null }) {
                 <div className="mt-3">
                   <span className="block text-sm font-bold text-ink-primary">Ledger History</span>
                   <span className="block text-xs text-ink-muted">Audit trail of transactions</span>
+                </div>
+              </Link>
+
+              <Link
+                href="/dashboard/stock/analysis"
+                className="group flex flex-col justify-between rounded-xl border-2 border-brand-primary/20 bg-surface-base p-3.5 transition-all hover:border-brand-primary hover:shadow-sm sm:col-span-2"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-primary/10 text-brand-primary group-hover:bg-brand-primary group-hover:text-white transition-colors">
+                    <Table2 className="h-4 w-4" />
+                  </div>
+                  <span className="rounded-full bg-brand-primary/10 px-2 py-0.5 text-[10px] font-bold text-brand-primary">
+                    Packaging & Stock Matrix
+                  </span>
+                </div>
+                <div className="mt-3">
+                  <span className="block text-sm font-bold text-ink-primary">Production & Stock Analysis</span>
+                  <span className="block text-xs text-ink-muted">Packaging production pivot matrix, material burn rates & inventory coverage</span>
                 </div>
               </Link>
             </div>

@@ -5,7 +5,7 @@ import { operatingDaysBetween } from "@/lib/domain/operating-days"
 import { settingsFromRow } from "@/lib/domain/settings"
 import { buildMaterialStatus, THRESHOLD_PAYLOAD, type MaterialStatus } from "@/lib/domain/stock-status"
 import { cartonsProducedByDay } from "@/lib/domain/production"
-import type { DepartmentReport, KpiValue, OverviewReport } from "@/lib/domain/analytics-contract"
+import type { DepartmentReport, KpiValue, OverviewReport, GroupSeriesPoint } from "@/lib/domain/analytics-contract"
 import {
   allMaterials,
   columnsFor,
@@ -199,7 +199,8 @@ export async function GET(request: Request) {
           perTable.set(table, [])
           return
         }
-        const select = ["date", "shift", ...cols].join(", ")
+        const baseCols = table === "stock_records" ? ["date", "shift"] : ["date", "shift", "group_number", "is_part_time"]
+        const select = [...new Set([...baseCols, ...cols])].join(", ")
         let q = (supabase.from(table) as any).select(select).gte("date", from).lte("date", to)
         // Every production table stamps `department`, so scoping by it is correct
         // HERE — unlike the old code, which applied it to unrelated tables too.
@@ -210,6 +211,23 @@ export async function GET(request: Request) {
         perTable.set(table, (data ?? []) as Row[])
       }),
     )
+
+    // Query no_work_records to reflect planned / logged no-work days on the analysis
+    let nwQ = supabase
+      .from("no_work_records")
+      .select("date, shift, department, reason")
+      .gte("date", from)
+      .lte("date", to)
+      .eq("department", def.department)
+    if (shift) nwQ = nwQ.eq("shift", shift)
+    const { data: nwRows } = await nwQ
+    const noWorkMap = new Map<string, string>()
+    for (const nw of nwRows ?? []) {
+      const d = String(nw.date)
+      const existing = noWorkMap.get(d)
+      const entry = nw.shift ? `${nw.shift}: ${nw.reason}` : String(nw.reason)
+      noWorkMap.set(d, existing ? `${existing}; ${entry}` : entry)
+    }
 
     const kpis: KpiValue[] = def.kpis.map((kpi) => {
       const rows = perTable.get(kpi.table) ?? []
@@ -230,7 +248,7 @@ export async function GET(request: Request) {
       }
     })
 
-    // Per-day / per-shift series from THIS department's own trend measure.
+    // Per-day / per-shift / per-group series from THIS department's own trend measure.
     const trend = trendSeries(def.department)
     const trendRows = trend ? (perTable.get(trend.table) ?? []) : []
     const dayMap = new Map<string, { total: number; bitters: number; ginger: number }>()
@@ -243,7 +261,24 @@ export async function GET(request: Request) {
       if (def.productSplit && r.product === "Ginger") d.ginger += v
       dayMap.set(date, d)
     }
-    const byDay = [...dayMap.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([date, v]) => ({ date, ...v }))
+    const byDay = [...dayMap.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([date, v]) => ({
+      date,
+      ...v,
+      noWorkReason: noWorkMap.get(date) ?? null,
+    }))
+    // Also include any no-work dates that had 0 production records
+    for (const [date, reason] of noWorkMap.entries()) {
+      if (!dayMap.has(date)) {
+        byDay.push({
+          date,
+          total: 0,
+          bitters: 0,
+          ginger: 0,
+          noWorkReason: reason,
+        })
+      }
+    }
+    byDay.sort((a, b) => a.date.localeCompare(b.date))
 
     const byShift = SHIFT_ORDER.map((s) => {
       const rows = trendRows.filter((r) => r.shift === s)
@@ -251,6 +286,27 @@ export async function GET(request: Request) {
         rows.filter(pred).reduce((x, r) => x + (trend ? num(r[trend.column]) : 0), 0)
       return {
         shift: s,
+        total: sum(() => true),
+        bitters: def.productSplit ? sum((r) => r.product === "Bitters") : 0,
+        ginger: def.productSplit ? sum((r) => r.product === "Ginger") : 0,
+      }
+    })
+
+    const GROUP_NAMES = ["Group 1", "Group 2", "Group 3", "Part Time"] as const
+    const byGroup: GroupSeriesPoint[] = GROUP_NAMES.map((g) => {
+      const isMatch = (r: Row) => {
+        if (g === "Part Time") return Boolean(r.is_part_time)
+        const grp = Number(r.group_number)
+        if (g === "Group 1") return grp === 1 && !r.is_part_time
+        if (g === "Group 2") return grp === 2 && !r.is_part_time
+        if (g === "Group 3") return grp === 3 && !r.is_part_time
+        return false
+      }
+      const rows = trendRows.filter(isMatch)
+      const sum = (pred: (r: Row) => boolean) =>
+        rows.filter(pred).reduce((x, r) => x + (trend ? num(r[trend.column]) : 0), 0)
+      return {
+        group: g,
         total: sum(() => true),
         bitters: def.productSplit ? sum((r) => r.product === "Bitters") : 0,
         ginger: def.productSplit ? sum((r) => r.product === "Ginger") : 0,
@@ -269,6 +325,7 @@ export async function GET(request: Request) {
       trend: { label: trend?.label ?? "Output", unit: trend?.unit },
       byDay,
       byShift,
+      byGroup,
       materials,
     }
     return NextResponse.json(payload)
@@ -284,29 +341,75 @@ export async function GET(request: Request) {
     return q
   }
 
-  const [pkgRes, alcRes, preRes] = await Promise.all([
+  const [pkgRes, alcRes, preRes, nwOverviewRes] = await Promise.all([
     scopeWindow(
       supabase
         .from("packaging_daily_records")
-        .select("date, shift, product, quantity_cartons_produced, quantity_cartons_loaded"),
+        .select("date, shift, product, quantity_cartons_produced, quantity_cartons_loaded, group_number, is_part_time"),
       { product: true },
     ),
     scopeWindow(supabase.from("stock_records").select("quantity_used").eq("material", "alcohol")),
     scopeWindow(supabase.from("blowing_daily_records").select("preforms_used_bags")),
+    scopeWindow(supabase.from("no_work_records").select("date, shift, department, reason")),
   ])
 
   const pkg = (pkgRes.data ?? []) as Row[]
   const ofProduct = (p: string) => pkg.filter((r) => r.product === p)
   const sumProduced = (rows: Row[]) => rows.reduce((s, r) => s + num(r.quantity_cartons_produced), 0)
 
+  // No-work overview map
+  const noWorkOverviewMap = new Map<string, string>()
+  for (const nw of (nwOverviewRes.data ?? []) as Row[]) {
+    const d = String(nw.date)
+    const existing = noWorkOverviewMap.get(d)
+    const entry = nw.shift ? `${nw.department} (${nw.shift}): ${nw.reason}` : `${nw.department}: ${nw.reason}`
+    noWorkOverviewMap.set(d, existing ? `${existing}; ${entry}` : entry)
+  }
+
   // Per-day produced series, shared with the stock dashboard via lib/domain/production
   // so the two cannot drift.
-  const byDay = cartonsProducedByDay(pkg)
+  const byDayRaw = cartonsProducedByDay(pkg)
+  const byDay = byDayRaw.map((d) => ({
+    ...d,
+    noWorkReason: noWorkOverviewMap.get(d.date) ?? null,
+  }))
+  const pkgDateSet = new Set(byDay.map((d) => d.date))
+  for (const [date, reason] of noWorkOverviewMap.entries()) {
+    if (!pkgDateSet.has(date)) {
+      byDay.push({
+        date,
+        total: 0,
+        bitters: 0,
+        ginger: 0,
+        noWorkReason: reason,
+      })
+    }
+  }
+  byDay.sort((a, b) => a.date.localeCompare(b.date))
 
   const byShift = SHIFT_ORDER.map((s) => {
     const rows = pkg.filter((r) => r.shift === s)
     return {
       shift: s,
+      total: sumProduced(rows),
+      bitters: sumProduced(rows.filter((r) => r.product === "Bitters")),
+      ginger: sumProduced(rows.filter((r) => r.product === "Ginger")),
+    }
+  })
+
+  const GROUP_NAMES = ["Group 1", "Group 2", "Group 3", "Part Time"] as const
+  const byGroup: GroupSeriesPoint[] = GROUP_NAMES.map((g) => {
+    const isMatch = (r: Row) => {
+      if (g === "Part Time") return Boolean(r.is_part_time)
+      const grp = Number(r.group_number)
+      if (g === "Group 1") return grp === 1 && !r.is_part_time
+      if (g === "Group 2") return grp === 2 && !r.is_part_time
+      if (g === "Group 3") return grp === 3 && !r.is_part_time
+      return false
+    }
+    const rows = pkg.filter(isMatch)
+    return {
+      group: g,
       total: sumProduced(rows),
       bitters: sumProduced(rows.filter((r) => r.product === "Bitters")),
       ginger: sumProduced(rows.filter((r) => r.product === "Ginger")),
@@ -338,6 +441,7 @@ export async function GET(request: Request) {
     bom: [configuredBom.Bitters, configuredBom.Ginger],
     byDay,
     byShift,
+    byGroup,
     materials,
   }
   return NextResponse.json(payload)

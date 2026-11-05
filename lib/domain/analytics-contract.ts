@@ -30,10 +30,19 @@ export interface DaySeriesPoint {
   /** 0 when the department has no product column — check `productSplit` first. */
   bitters: number
   ginger: number
+  /** Logged no-work reason if this date was an official no-work day. */
+  noWorkReason?: string | null
 }
 
 export interface ShiftSeriesPoint {
   shift: string
+  total: number
+  bitters: number
+  ginger: number
+}
+
+export interface GroupSeriesPoint {
+  group: string
   total: number
   bitters: number
   ginger: number
@@ -78,6 +87,7 @@ export interface OverviewReport extends ReportCommon {
   bom: ProductBom[]
   byDay: DaySeriesPoint[]
   byShift: ShiftSeriesPoint[]
+  byGroup?: GroupSeriesPoint[]
 }
 
 /** A department selected: that department's own metrics and materials only. */
@@ -97,6 +107,7 @@ export interface DepartmentReport extends ReportCommon {
   trend: { label: string; unit?: string }
   byDay: DaySeriesPoint[]
   byShift: ShiftSeriesPoint[]
+  byGroup?: GroupSeriesPoint[]
 }
 
 export type AnalyticsResponse = OverviewReport | DepartmentReport

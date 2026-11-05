@@ -7,7 +7,7 @@ import {
 } from "recharts"
 import { BarChart3, Table2 } from "lucide-react"
 import { SERIES, GRID, AXIS, shortDay, fmt } from "./viz"
-import type { DaySeriesPoint, ShiftSeriesPoint } from "./types"
+import type { DaySeriesPoint, ShiftSeriesPoint, GroupSeriesPoint } from "./types"
 import { Card, CardHeader, Chip, EmptyState } from "@/components/primitives"
 import { shiftTone } from "@/lib/shift-config"
 import { groupTrendData, type TrendGrouping } from "@/lib/domain/trend-grouping"
@@ -37,9 +37,22 @@ const axisProps = {
 
 function TooltipCard({ active, payload, label }: any) {
   if (!active || !payload?.length) return null
+  const point = payload[0]?.payload
   return (
     <div className="rounded-xl border border-hairline bg-surface-raised shadow-lg px-3 py-2 text-xs">
-      <p className="font-bold text-ink-primary mb-1">{label}</p>
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <p className="font-bold text-ink-primary">{label}</p>
+        {point?.noWorkReason && (
+          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+            No Work
+          </span>
+        )}
+      </div>
+      {point?.noWorkReason && (
+        <p className="text-[11px] text-amber-700 dark:text-amber-300 mb-1.5 font-medium">
+          {point.noWorkReason}
+        </p>
+      )}
       {payload.map((p: any) => (
         <div key={p.dataKey} className="flex items-center gap-2 tnum">
           {/* A short stroke keys the series; at tooltip density a filled box is
@@ -82,7 +95,7 @@ function SeriesTable({
   productSplit,
   label,
 }: {
-  rows: { key: string; total: number; bitters: number; ginger: number }[]
+  rows: { key: string; total: number; bitters: number; ginger: number; noWorkReason?: string | null }[]
   firstHeader: string
   productSplit: boolean
   label: string
@@ -102,9 +115,25 @@ function SeriesTable({
         </thead>
         <tbody className="divide-y divide-hairline">
           {rows.map((r) => (
-            <tr key={r.key}>
+            <tr key={r.key} className={r.noWorkReason ? "bg-amber-500/5" : ""}>
               <td className="px-3 py-1.5 font-semibold text-ink-secondary whitespace-nowrap">
-                {firstHeader === "Shift" ? <Chip tone={shiftTone(r.key)}>{r.key}</Chip> : r.key}
+                <div className="flex items-center gap-1.5">
+                  {firstHeader === "Shift" ? (
+                    <Chip tone={shiftTone(r.key)}>{r.key}</Chip>
+                  ) : firstHeader === "Group" ? (
+                    <span className="font-bold text-ink-primary">{r.key}</span>
+                  ) : (
+                    <span>{r.key}</span>
+                  )}
+                  {r.noWorkReason && (
+                    <span
+                      title={`No Work logged: ${r.noWorkReason}`}
+                      className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25"
+                    >
+                      No Work
+                    </span>
+                  )}
+                </div>
               </td>
               <td className="px-3 py-1.5 text-right tnum text-ink-primary font-semibold">{fmt(r.total)}</td>
               {productSplit && <td className="px-3 py-1.5 text-right tnum font-semibold text-series-bitters">{fmt(r.bitters)}</td>}
@@ -294,44 +323,95 @@ export function ProductionTrend({
   )
 }
 
-/** The same measure split across the three shifts. */
-export function ShiftBreakdown({
+/** Output measure split across groups (Group 1, Group 2, Group 3, Part Time) or shifts. */
+export function GroupBreakdown({
   data,
+  groupData,
+  shiftData,
   productSplit = true,
   label = "Output",
 }: {
-  data: ShiftSeriesPoint[]
+  data?: GroupSeriesPoint[] | ShiftSeriesPoint[]
+  groupData?: GroupSeriesPoint[]
+  shiftData?: ShiftSeriesPoint[]
   productSplit?: boolean
   label?: string
 }) {
+  const [viewMode, setViewMode] = useState<"group" | "shift">("group")
   const [view, setView] = useState<"chart" | "table">("chart")
-  const hasData = data.some((s) => s.total > 0)
+
+  // Resolve groups vs shifts
+  // 1. If groupData is provided, use it
+  // 2. If data has group objects, use it
+  // 3. Fall back to shiftData or data
+  const groups = groupData ?? (data && data.length > 0 && "group" in data[0] ? (data as GroupSeriesPoint[]) : undefined)
+  const shifts = shiftData ?? (data && data.length > 0 && "shift" in data[0] ? (data as ShiftSeriesPoint[]) : undefined)
+
+  const isGroup = viewMode === "group" || !shifts || shifts.length === 0
+  const activeRows = isGroup && groups && groups.length > 0
+    ? groups.map((g) => ({ key: g.group, total: g.total, bitters: g.bitters, ginger: g.ginger }))
+    : (shifts ?? []).map((s) => ({ key: s.shift, total: s.total, bitters: s.bitters, ginger: s.ginger }))
+
+  const hasData = activeRows.some((s) => s.total > 0)
+  const title = isGroup ? "By group" : "By shift"
 
   return (
     <Card>
-      <CardHeader title="By shift" hint={label} actions={<ViewToggle view={view} onChange={setView} />} />
+      <CardHeader
+        title={title}
+        hint={label}
+        actions={
+          <div className="flex items-center gap-1.5">
+            {shifts && shifts.length > 0 && groups && groups.length > 0 && (
+              <div role="radiogroup" aria-label="Split by" className="inline-flex rounded-lg border border-hairline overflow-hidden text-xs">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={isGroup}
+                  onClick={() => setViewMode("group")}
+                  className={`h-7 px-2 text-[11px] font-semibold transition-colors ${
+                    isGroup ? "bg-brand-subtle text-brand-subtle-ink" : "text-ink-muted hover:text-ink-secondary"
+                  }`}
+                >
+                  Group
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!isGroup}
+                  onClick={() => setViewMode("shift")}
+                  className={`h-7 px-2 text-[11px] font-semibold transition-colors ${
+                    !isGroup ? "bg-brand-subtle text-brand-subtle-ink" : "text-ink-muted hover:text-ink-secondary"
+                  }`}
+                >
+                  Shift
+                </button>
+              </div>
+            )}
+            <ViewToggle view={view} onChange={setView} />
+          </div>
+        }
+      />
       {!hasData ? (
         <EmptyState compact title="Nothing recorded in this range" />
       ) : view === "table" ? (
         <SeriesTable
-          rows={data.map((s) => ({ key: s.shift, total: s.total, bitters: s.bitters, ginger: s.ginger }))}
-          firstHeader="Shift"
+          rows={activeRows}
+          firstHeader={isGroup ? "Group" : "Shift"}
           productSplit={productSplit}
           label={label}
         />
       ) : (
         <div className="p-4 pt-2">
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={data} margin={{ top: 8, right: 12, left: -8, bottom: 0 }} barGap={2} barCategoryGap="28%">
+            <BarChart data={activeRows} margin={{ top: 8, right: 12, left: -8, bottom: 0 }} barGap={2} barCategoryGap="28%">
               <CartesianGrid stroke={GRID} vertical={false} />
-              <XAxis dataKey="shift" {...axisProps} />
+              <XAxis dataKey="key" {...axisProps} />
               <YAxis {...axisProps} width={44} allowDecimals={false} />
               <Tooltip content={<TooltipCard />} cursor={{ fill: "color-mix(in oklab, var(--ink-muted) 8%, transparent)" }} />
               {productSplit && <Legend iconType="square" wrapperStyle={{ fontSize: 11, fontWeight: 700 }} />}
               {productSplit ? (
                 <>
-                  {/* maxBarSize caps the mark so the band keeps some air rather
-                      than the bar filling its whole slot. */}
                   <Bar dataKey="bitters" name="Bitters" fill={SERIES.bitters} radius={[4, 4, 0, 0]} maxBarSize={24} />
                   <Bar dataKey="ginger" name="Ginger" fill={SERIES.ginger} radius={[4, 4, 0, 0]} maxBarSize={24} />
                 </>
@@ -345,3 +425,6 @@ export function ShiftBreakdown({
     </Card>
   )
 }
+
+/** Backwards-compatible alias for existing callers */
+export const ShiftBreakdown = GroupBreakdown

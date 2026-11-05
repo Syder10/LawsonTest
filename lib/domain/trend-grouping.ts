@@ -5,6 +5,7 @@ export interface TrendDataPoint {
   total: number
   bitters: number
   ginger: number
+  noWorkReason?: string | null
 }
 
 export interface GroupedTrendPoint {
@@ -14,6 +15,7 @@ export interface GroupedTrendPoint {
   bitters: number
   ginger: number
   startDate: string
+  noWorkReason?: string | null
 }
 
 /**
@@ -53,6 +55,7 @@ export function groupTrendData(
         bitters: p.bitters,
         ginger: p.ginger,
         startDate: p.date,
+        noWorkReason: p.noWorkReason,
       }
     })
   }

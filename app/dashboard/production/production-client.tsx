@@ -15,7 +15,7 @@ import {
   Factory,
 } from "lucide-react"
 import { FilterBar, type Filters } from "@/components/features/dashboard/manager/filter-bar"
-import { ProductionTrend, ShiftBreakdown } from "@/components/features/dashboard/manager/charts"
+import { ProductionTrend, GroupBreakdown } from "@/components/features/dashboard/manager/charts"
 import { MaterialsTable } from "@/components/features/dashboard/manager/materials-table"
 import { DayDetailDrawer } from "@/components/features/dashboard/manager/day-detail-drawer"
 import { BomPanel } from "@/components/features/dashboard/manager/bom-panel"
@@ -263,7 +263,7 @@ export function ProductionClient() {
                 <div className="lg:col-span-2">
                   <ProductionTrend data={overview.byDay} onSelectDay={setSelectedDay} label="Cartons produced" />
                 </div>
-                <ShiftBreakdown data={overview.byShift} />
+                <GroupBreakdown data={overview.byGroup} shiftData={overview.byShift} />
               </motion.div>
 
               <motion.div variants={itemVariants}>
@@ -309,7 +309,7 @@ export function ProductionClient() {
                     productSplit={dept.productSplit}
                   />
                 </div>
-                <ShiftBreakdown data={dept.byShift} productSplit={dept.productSplit} label={dept.trend.label} />
+                <GroupBreakdown data={dept.byGroup} shiftData={dept.byShift} productSplit={dept.productSplit} label={dept.trend.label} />
               </motion.div>
 
               {/* Packaging Production Matrix Pivot Table */}

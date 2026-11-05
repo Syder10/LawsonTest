@@ -18,6 +18,7 @@ import {
   Moon,
   Clock,
   Sparkles,
+  AlertCircle,
 } from "lucide-react"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 import {
@@ -79,10 +80,11 @@ export function PackagingPivotTable({
 
   // Raw rows fetched from Supabase for this month
   const [records, setRecords] = useState<PackagingDailyRow[]>([])
+  const [noWorkMap, setNoWorkMap] = useState<Map<string, string>>(new Map())
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
 
-  // Fetch packaging records for the selected month
+  // Fetch packaging records and no-work records for the selected month
   const fetchMonthRecords = useCallback(async () => {
     setLoading(true)
     setFetchError(null)
@@ -93,20 +95,28 @@ export function PackagingPivotTable({
     const toDate = `${year}-${padMonth}-${String(daysInMonth).padStart(2, "0")}`
 
     try {
-      const { data, error } = await supabase
-        .from("packaging_daily_records")
-        .select(
-          "date, shift, group_number, product, quantity_cartons_produced, number_cartons_wasted, quantity_cartons_loaded, is_part_time"
-        )
-        .gte("date", fromDate)
-        .lte("date", toDate)
-        .order("date", { ascending: true })
+      const [pkgRes, nwRes] = await Promise.all([
+        supabase
+          .from("packaging_daily_records")
+          .select(
+            "date, shift, group_number, product, quantity_cartons_produced, number_cartons_wasted, quantity_cartons_loaded, is_part_time"
+          )
+          .gte("date", fromDate)
+          .lte("date", toDate)
+          .order("date", { ascending: true }),
+        supabase
+          .from("no_work_records")
+          .select("date, shift, department, reason")
+          .eq("department", "Packaging")
+          .gte("date", fromDate)
+          .lte("date", toDate),
+      ])
 
-      if (error) {
-        setFetchError(error.message)
+      if (pkgRes.error) {
+        setFetchError(pkgRes.error.message)
         setRecords([])
       } else {
-        const rows: PackagingDailyRow[] = (data ?? []).map((r) => ({
+        const rows: PackagingDailyRow[] = (pkgRes.data ?? []).map((r) => ({
           date: String(r.date),
           shift: String(r.shift),
           group_number: r.group_number ? Number(r.group_number) : null,
@@ -118,6 +128,16 @@ export function PackagingPivotTable({
         }))
         setRecords(rows)
       }
+
+      // Map no-work records by date
+      const nwMap = new Map<string, string>()
+      for (const nw of nwRes.data ?? []) {
+        const d = String(nw.date)
+        const existing = nwMap.get(d)
+        const entry = nw.shift ? `${nw.shift}: ${nw.reason}` : String(nw.reason)
+        nwMap.set(d, existing ? `${existing}; ${entry}` : entry)
+      }
+      setNoWorkMap(nwMap)
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : "Failed to load packaging records")
       setRecords([])
@@ -514,6 +534,7 @@ export function PackagingPivotTable({
               <tbody className="divide-y divide-hairline text-sm text-ink-primary">
                 {matrix.rows.map((r) => {
                   const isPeak = matrix.summary.peakDate === r.date && r.total > 0
+                  const noWork = noWorkMap.get(r.date)
                   return (
                     <tr
                       key={r.date}
@@ -522,18 +543,28 @@ export function PackagingPivotTable({
                         "transition-colors group",
                         onSelectDay ? "cursor-pointer hover:bg-brand-subtle/30" : "hover:bg-surface-sunken/40",
                         r.isWeekend && "bg-surface-sunken/30 text-ink-muted",
+                        noWork && !isPeak && "bg-amber-500/[0.04]",
                         isPeak && "bg-good-subtle/20"
                       )}
                     >
                       {/* Date */}
                       <td className="py-2.5 px-3.5 whitespace-nowrap font-medium text-xs tnum">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span className={cn("font-bold", isPeak && "text-good-ink")}>
                             {r.date.slice(5)}
                           </span>
                           {isPeak && (
                             <span title="Monthly Peak" className="inline-flex">
                               <Sparkles className="w-3 h-3 text-amber-500 inline-block" />
+                            </span>
+                          )}
+                          {noWork && (
+                            <span
+                              title={`No Work logged: ${noWork}`}
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30 whitespace-nowrap"
+                            >
+                              <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+                              <span>No Work</span>
                             </span>
                           )}
                         </div>
@@ -720,6 +751,10 @@ export function PackagingPivotTable({
                         {r.total > 0 ? (
                           <span className={cn(isPeak ? "text-good-ink font-extrabold" : "text-ink-primary")}>
                             {fmtNum(r.total)}
+                          </span>
+                        ) : noWork ? (
+                          <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400" title={noWork}>
+                            No work
                           </span>
                         ) : (
                           <span className="text-ink-muted/30 text-xs">0</span>

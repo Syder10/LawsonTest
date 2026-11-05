@@ -117,7 +117,12 @@ const ITEM: Record<NavKey, NavItem> = {
   submit: { key: "submit", href: "/dashboard/forms", label: "Submit" },
   receive: { key: "receive", href: "/dashboard/stock/receipts", label: "Receive" },
   history: { key: "history", href: "/dashboard/history", label: "History" },
-  stock: { key: "stock", href: "/dashboard/stock", label: "Stock" },
+  stock: {
+    key: "stock",
+    href: "/dashboard/stock",
+    label: "Stock",
+    extraPrefixes: ["/dashboard/stock/analysis"],
+  },
   production: { key: "production", href: "/dashboard/production", label: "Production" },
   reports: {
     key: "reports",

@@ -16,6 +16,7 @@ export type {
   OverviewReport,
   ReportCommon,
   ShiftSeriesPoint,
+  GroupSeriesPoint,
 } from "@/lib/domain/analytics-contract"
 export { isDepartmentReport } from "@/lib/domain/analytics-contract"
 
