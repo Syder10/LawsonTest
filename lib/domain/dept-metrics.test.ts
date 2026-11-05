@@ -206,7 +206,7 @@ describe("columnsFor", () => {
     expect(cols).toContain("total_produced")
     expect(cols).toContain("waste_pcs")
     expect(cols).toContain("final_production")
-    expect(cols).toContain("bottles_given_out")
+    expect(cols).toContain("preforms_used_bags")
   })
 
   it("dedupes a column used by both a sum and a rate", () => {

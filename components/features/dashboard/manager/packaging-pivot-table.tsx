@@ -127,13 +127,20 @@ export function PackagingPivotTable({
         setRecords(rows)
       }
 
-      // Map no-work records by date
+      // Map no-work records by "date|shift" so we can look up per-shift.
+      // Records with no shift value are treated as whole-day no-work and
+      // stored under "date|all".  Lookups:
+      //   • per shift:  noWorkMap.get(`${date}|morning`)
+      //   • whole day:  noWorkMap.get(`${date}|all`)
+      //   • any on day: dateHasNoWork helper checks all keys
       const nwMap = new Map<string, string>()
       for (const nw of nwRes.data ?? []) {
         const d = String(nw.date)
-        const existing = nwMap.get(d)
-        const entry = nw.shift ? `${nw.shift}: ${nw.reason}` : String(nw.reason)
-        nwMap.set(d, existing ? `${existing}; ${entry}` : entry)
+        const shiftKey = nw.shift ? nw.shift.toLowerCase() : "all"
+        const key = `${d}|${shiftKey}`
+        const existing = nwMap.get(key)
+        const entry = String(nw.reason)
+        nwMap.set(key, existing ? `${existing}; ${entry}` : entry)
       }
       setNoWorkMap(nwMap)
     } catch (err) {
@@ -532,7 +539,21 @@ export function PackagingPivotTable({
               <tbody className="divide-y divide-hairline text-sm text-ink-primary">
                 {matrix.rows.map((r) => {
                   const isPeak = matrix.summary.peakDate === r.date && r.total > 0
-                  const noWork = noWorkMap.get(r.date)
+                  // Helper: does this date have ANY no-work record (any shift or whole-day)?
+                  const dateHasNoWork =
+                    noWorkMap.has(`${r.date}|morning`) ||
+                    noWorkMap.has(`${r.date}|afternoon`) ||
+                    noWorkMap.has(`${r.date}|night`) ||
+                    noWorkMap.has(`${r.date}|all`)
+                  // Per-shift no-work reasons — whole-day record (`|all`) also covers every shift
+                  const noWorkMorning = noWorkMap.get(`${r.date}|morning`) ?? noWorkMap.get(`${r.date}|all`)
+                  const noWorkAfternoon = noWorkMap.get(`${r.date}|afternoon`) ?? noWorkMap.get(`${r.date}|all`)
+                  const noWorkNight = noWorkMap.get(`${r.date}|night`) ?? noWorkMap.get(`${r.date}|all`)
+                  // Readable summary for the Daily Total tooltip
+                  const noWorkSummary = [noWorkMorning, noWorkAfternoon, noWorkNight]
+                    .filter(Boolean)
+                    .filter((v, i, a) => a.indexOf(v) === i)
+                    .join("; ")
                   return (
                     <tr
                       key={r.date}
@@ -541,7 +562,7 @@ export function PackagingPivotTable({
                         "transition-colors group",
                         onSelectDay ? "cursor-pointer hover:bg-brand-subtle/30" : "hover:bg-surface-sunken/40",
                         r.isWeekend && "bg-surface-sunken/30 text-ink-muted",
-                        noWork && r.total === 0 && !isPeak && "bg-amber-500/[0.04]",
+                        dateHasNoWork && r.total === 0 && !isPeak && "bg-amber-500/[0.04]",
                         isPeak && "bg-good-subtle/20"
                       )}
                     >
@@ -643,6 +664,13 @@ export function PackagingPivotTable({
                                   </span>
                                 )}
                               </div>
+                            ) : noWorkMorning ? (
+                              <span
+                                className="text-[10px] font-bold text-amber-700 dark:text-amber-400 whitespace-nowrap"
+                                title={noWorkMorning}
+                              >
+                                No work
+                              </span>
                             ) : (
                               <span className="text-ink-muted/40 text-xs">—</span>
                             )}
@@ -661,6 +689,13 @@ export function PackagingPivotTable({
                                   </span>
                                 )}
                               </div>
+                            ) : noWorkAfternoon ? (
+                              <span
+                                className="text-[10px] font-bold text-amber-700 dark:text-amber-400 whitespace-nowrap"
+                                title={noWorkAfternoon}
+                              >
+                                No work
+                              </span>
                             ) : (
                               <span className="text-ink-muted/40 text-xs">—</span>
                             )}
@@ -679,6 +714,13 @@ export function PackagingPivotTable({
                                   </span>
                                 )}
                               </div>
+                            ) : noWorkNight ? (
+                              <span
+                                className="text-[10px] font-bold text-amber-700 dark:text-amber-400 whitespace-nowrap"
+                                title={noWorkNight}
+                              >
+                                No work
+                              </span>
                             ) : (
                               <span className="text-ink-muted/40 text-xs">—</span>
                             )}
@@ -692,8 +734,8 @@ export function PackagingPivotTable({
                           <span className={cn(isPeak ? "text-good-ink font-extrabold" : "text-ink-primary")}>
                             {fmtNum(r.total)}
                           </span>
-                        ) : noWork ? (
-                          <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400" title={noWork}>
+                        ) : dateHasNoWork ? (
+                          <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400" title={noWorkSummary}>
                             No work
                           </span>
                         ) : (

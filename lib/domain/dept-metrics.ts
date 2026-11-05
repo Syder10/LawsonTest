@@ -124,11 +124,6 @@ export const DEPT_METRICS: Record<Department, DeptMetricsDef> = {
       { key: "net_output", label: "Net output", table: "blowing_daily_records", compute: { kind: "sum", column: "final_production" }, unit: "bottles", goodDirection: "up", hint: "Produced minus waste (computed by the database)." },
       { key: "waste", label: "Waste", table: "blowing_daily_records", compute: { kind: "sum", column: "waste_pcs" }, unit: "bottles", goodDirection: "down" },
       { key: "waste_rate", label: "Waste rate", table: "blowing_daily_records", compute: { kind: "rate", numerator: "waste_pcs", denominator: "total_produced" }, unit: "%", goodDirection: "down" },
-      {
-        key: "handed_over", label: "Handed to Filling", table: "blowing_daily_records",
-        compute: { kind: "sum", column: "bottles_given_out" }, unit: "bottles",
-        hint: "Compare with the Filling Line's bottles filled — a persistent gap is a real loss no dashboard showed before.",
-      },
       { key: "preforms_used", label: "Preforms used", table: "blowing_daily_records", compute: { kind: "sum", column: "preforms_used_bags" }, unit: "bags", goodDirection: "down" },
     ],
     materials: [M.preform],

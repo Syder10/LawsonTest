@@ -20,6 +20,9 @@ import { MaterialsTable } from "@/components/features/dashboard/manager/material
 import { DayDetailDrawer } from "@/components/features/dashboard/manager/day-detail-drawer"
 import { BomPanel } from "@/components/features/dashboard/manager/bom-panel"
 import { PackagingPivotTable } from "@/components/features/dashboard/manager/packaging-pivot-table"
+import { BlowingPivotTable } from "@/components/features/dashboard/manager/blowing-pivot-table"
+import { FillingPivotTable } from "@/components/features/dashboard/manager/filling-pivot-table"
+import { BlendingPivotTable } from "@/components/features/dashboard/manager/blending-pivot-table"
 import { fmt1 } from "@/components/features/dashboard/manager/viz"
 import { isDepartmentReport, type AnalyticsResponse } from "@/lib/domain/analytics-contract"
 import type { MaterialStatus } from "@/lib/domain/stock-status"
@@ -312,10 +315,40 @@ export function ProductionClient() {
                 <GroupBreakdown data={dept.byGroup} shiftData={dept.byShift} productSplit={dept.productSplit} label={dept.trend.label} />
               </motion.div>
 
-              {/* Packaging Production Matrix Pivot Table */}
+              {/* Department Pivot Analysis Tables */}
               {dept.department === "Packaging" && (
                 <motion.div variants={itemVariants} className="pt-2">
                   <PackagingPivotTable
+                    initialYear={pivotInitialYear}
+                    initialMonth={pivotInitialMonth}
+                    onSelectDay={setSelectedDay}
+                  />
+                </motion.div>
+              )}
+
+              {dept.department === "Blowing" && (
+                <motion.div variants={itemVariants} className="pt-2">
+                  <BlowingPivotTable
+                    initialYear={pivotInitialYear}
+                    initialMonth={pivotInitialMonth}
+                    onSelectDay={setSelectedDay}
+                  />
+                </motion.div>
+              )}
+
+              {dept.department === "Filling Line" && (
+                <motion.div variants={itemVariants} className="pt-2">
+                  <FillingPivotTable
+                    initialYear={pivotInitialYear}
+                    initialMonth={pivotInitialMonth}
+                    onSelectDay={setSelectedDay}
+                  />
+                </motion.div>
+              )}
+
+              {dept.department === "Alcohol and Blending" && (
+                <motion.div variants={itemVariants} className="pt-2">
+                  <BlendingPivotTable
                     initialYear={pivotInitialYear}
                     initialMonth={pivotInitialMonth}
                     onSelectDay={setSelectedDay}

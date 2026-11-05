@@ -17,6 +17,9 @@ import {
   Boxes,
 } from "lucide-react"
 import { PackagingPivotTable } from "@/components/features/dashboard/manager/packaging-pivot-table"
+import { BlowingPivotTable } from "@/components/features/dashboard/manager/blowing-pivot-table"
+import { FillingPivotTable } from "@/components/features/dashboard/manager/filling-pivot-table"
+import { BlendingPivotTable } from "@/components/features/dashboard/manager/blending-pivot-table"
 import { Card, Eyebrow, StatTile, Chip, EmptyState } from "@/components/primitives"
 import { fmt1 } from "@/components/features/dashboard/manager/viz"
 import type { MaterialStatus } from "@/lib/domain/stock-status"
@@ -35,7 +38,7 @@ interface OverviewData {
 }
 
 export function StockAnalysisClient() {
-  const [activeTab, setActiveTab] = useState<"packaging" | "stock">("packaging")
+  const [activeTab, setActiveTab] = useState<"packaging" | "blowing" | "filling" | "blending" | "stock">("packaging")
   const [overview, setOverview] = useState<OverviewData | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -99,26 +102,68 @@ export function StockAnalysisClient() {
       </motion.header>
 
       {/* ── TAB NAVIGATION ────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-2 border-b border-hairline pb-2">
+      <div className="flex items-center gap-2 border-b border-hairline pb-2 flex-wrap">
         <button
           type="button"
           onClick={() => setActiveTab("packaging")}
           className={cn(
-            "h-10 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all select-none active:scale-95",
+            "h-10 px-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all select-none active:scale-95",
             activeTab === "packaging"
               ? "bg-brand text-brand-ink shadow-sm"
               : "text-ink-secondary hover:text-ink-primary hover:bg-surface-sunken"
           )}
         >
           <Factory className="w-4 h-4" aria-hidden="true" />
-          <span>Packaging Production Matrix</span>
+          <span>Packaging</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("blowing")}
+          className={cn(
+            "h-10 px-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all select-none active:scale-95",
+            activeTab === "blowing"
+              ? "bg-brand text-brand-ink shadow-sm"
+              : "text-ink-secondary hover:text-ink-primary hover:bg-surface-sunken"
+          )}
+        >
+          <Layers className="w-4 h-4" aria-hidden="true" />
+          <span>Blowing</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("filling")}
+          className={cn(
+            "h-10 px-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all select-none active:scale-95",
+            activeTab === "filling"
+              ? "bg-brand text-brand-ink shadow-sm"
+              : "text-ink-secondary hover:text-ink-primary hover:bg-surface-sunken"
+          )}
+        >
+          <Boxes className="w-4 h-4" aria-hidden="true" />
+          <span>Filling Line</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("blending")}
+          className={cn(
+            "h-10 px-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all select-none active:scale-95",
+            activeTab === "blending"
+              ? "bg-brand text-brand-ink shadow-sm"
+              : "text-ink-secondary hover:text-ink-primary hover:bg-surface-sunken"
+          )}
+        >
+          <Factory className="w-4 h-4" aria-hidden="true" />
+          <span>Alcohol & Blending</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab("stock")}
           className={cn(
-            "h-10 px-4 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all select-none active:scale-95",
+            "h-10 px-3.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all select-none active:scale-95",
             activeTab === "stock"
               ? "bg-brand text-brand-ink shadow-sm"
               : "text-ink-secondary hover:text-ink-primary hover:bg-surface-sunken"
@@ -146,6 +191,39 @@ export function StockAnalysisClient() {
             className="space-y-4"
           >
             <PackagingPivotTable />
+          </motion.div>
+        ) : activeTab === "blowing" ? (
+          <motion.div
+            key="blowing-tab"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-4"
+          >
+            <BlowingPivotTable />
+          </motion.div>
+        ) : activeTab === "filling" ? (
+          <motion.div
+            key="filling-tab"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-4"
+          >
+            <FillingPivotTable />
+          </motion.div>
+        ) : activeTab === "blending" ? (
+          <motion.div
+            key="blending-tab"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-4"
+          >
+            <BlendingPivotTable />
           </motion.div>
         ) : (
           <motion.div
