@@ -19,6 +19,7 @@ import { ProductionTrend, ShiftBreakdown } from "@/components/features/dashboard
 import { MaterialsTable } from "@/components/features/dashboard/manager/materials-table"
 import { DayDetailDrawer } from "@/components/features/dashboard/manager/day-detail-drawer"
 import { BomPanel } from "@/components/features/dashboard/manager/bom-panel"
+import { PackagingPivotTable } from "@/components/features/dashboard/manager/packaging-pivot-table"
 import { fmt1 } from "@/components/features/dashboard/manager/viz"
 import { isDepartmentReport, type AnalyticsResponse } from "@/lib/domain/analytics-contract"
 import type { MaterialStatus } from "@/lib/domain/stock-status"
@@ -124,6 +125,10 @@ export function ProductionClient() {
 
   // Phase 5: Dynamic Export link and label based on active scope
   const exportInfo = buildExportParams(filters)
+
+  // Initial year/month for the Packaging Pivot matrix from active filter window
+  const pivotInitialYear = filters.to ? Number(filters.to.split("-")[0]) || undefined : undefined
+  const pivotInitialMonth = filters.to ? Number(filters.to.split("-")[1]) || undefined : undefined
 
   return (
     <div className="space-y-4">
@@ -306,6 +311,17 @@ export function ProductionClient() {
                 </div>
                 <ShiftBreakdown data={dept.byShift} productSplit={dept.productSplit} label={dept.trend.label} />
               </motion.div>
+
+              {/* Packaging Production Matrix Pivot Table */}
+              {dept.department === "Packaging" && (
+                <motion.div variants={itemVariants} className="pt-2">
+                  <PackagingPivotTable
+                    initialYear={pivotInitialYear}
+                    initialMonth={pivotInitialMonth}
+                    onSelectDay={setSelectedDay}
+                  />
+                </motion.div>
+              )}
 
               {dept.materials.length === 0 && (
                 <motion.div variants={itemVariants}>
