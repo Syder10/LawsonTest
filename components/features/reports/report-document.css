@@ -273,6 +273,18 @@
   color: #ffffff;
   font-weight: 700;
 }
+/* "No work" in a group cell. Inherits the cell colour, so it is white on a Night
+   cell and black on ash or plain — readable on all three. */
+.rd-no-work {
+  font-style: italic;
+  font-weight: 700;
+  font-size: 8.5pt;
+  white-space: nowrap;
+}
+.rd-no-work-note {
+  display: block;
+  font-weight: 400;
+}
 .rd-shift-initials {
   margin-left: 3pt;
   font-size: 8.5pt;

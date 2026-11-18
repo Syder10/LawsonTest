@@ -9,7 +9,9 @@ import {
   matrixMeasures,
   measureValue,
   monthBounds,
-  noWorkRemarksByDate,
+  noWorkCellKey,
+  placeNoWork,
+  type NoWorkRow,
   type DepartmentKey,
   type DepartmentMatrixDef,
   type MatrixMeasure,
@@ -50,6 +52,8 @@ interface Sheet {
   measure: MatrixMeasure
   matrix: ProductionPivotMatrix
   remarks: Map<string, string>
+  /** "date|group" → the shift that did not run (see placeNoWork). */
+  noWorkCells: Map<string, string>
 }
 
 const ALL = "all"
@@ -59,14 +63,35 @@ const monthValue = (y: number, m: number) => `${y}-${String(m).padStart(2, "0")}
 
 const cell = (n: number) => (n === 0 ? "–" : fmtQty(n))
 
-/** A group cell, shaded by the shift that produced it (see cellShift). */
-function GroupCell({ value, shifts }: { value: number; shifts: { shift: string; value: number }[] }) {
-  const { tone, initials } = cellShift(shifts)
+/**
+ * A group cell, shaded by the shift that produced it (see cellShift). A group whose
+ * shift did not run reads "No work" in its own cell, shaded for that shift, with the
+ * reason in Remarks. Should output also have been filed for it, both are shown.
+ */
+function GroupCell({
+  value,
+  shifts,
+  noWorkShift,
+}: {
+  value: number
+  shifts: { shift: string; value: number }[]
+  noWorkShift?: string
+}) {
+  const produced = cellShift(shifts)
+  const tone = produced.tone !== "none" || !noWorkShift ? produced.tone : cellShift([{ shift: noWorkShift, value: 1 }]).tone
   const shiftClass = tone === "afternoon" || tone === "night" ? ` rd-shift-${tone}` : ""
+  if (noWorkShift && value === 0) {
+    return (
+      <td className={`rd-num${shiftClass}`}>
+        <span className="rd-no-work">No work</span>
+      </td>
+    )
+  }
   return (
     <td className={`rd-num${shiftClass}`}>
       {cell(value)}
-      {initials && <span className="rd-shift-initials">({initials})</span>}
+      {produced.initials && <span className="rd-shift-initials">({produced.initials})</span>}
+      {noWorkShift && <span className="rd-no-work rd-no-work-note">no work filed</span>}
     </td>
   )
 }
@@ -76,10 +101,14 @@ const GROUP_TOTAL = { 1: "group1Total", 2: "group2Total", 3: "group3Total" } as 
 const GROUP_SHARE = { 1: "group1Share", 2: "group2Share", 3: "group3Share" } as const
 
 function MatrixSheet({ sheet, preparedBy }: { sheet: Sheet; preparedBy: string | null }) {
-  const { def, measure, matrix, remarks } = sheet
+  const { def, measure, matrix, remarks, noWorkCells } = sheet
   const s = matrix.summary
   // Only the groups this department rosters (plus any that actually filed output).
-  const groups = matrixGroupColumns(def.department, s)
+  const groups = matrixGroupColumns(
+    def.department,
+    s,
+    [...noWorkCells.keys()].map((k) => Number(k.split("|")[1])),
+  )
   const label = `${def.department} — ${measure.label}`
   return (
     <ReportPaper department={`${def.department} Department`} label={`${label}, ${matrix.monthName} ${matrix.year}`}>
@@ -116,10 +145,10 @@ function MatrixSheet({ sheet, preparedBy }: { sheet: Sheet; preparedBy: string |
           compact
           caption={
             <>
-              Figures in {measure.unit}. Cell shade shows the shift: <span className="rd-legend">Morning</span>
+              Figures in {measure.unit}. Shift: <span className="rd-legend">Morning</span>
               <span className="rd-legend rd-legend-afternoon">Afternoon</span>
-              <span className="rd-legend rd-legend-night">Night</span>; a cell two shifts worked is left plain and marked, e.g.
-              (M+N). Part Time includes records filed without a group.
+              <span className="rd-legend rd-legend-night">Night</span>. (M+N): two shifts in one cell. &ldquo;No work&rdquo;: that
+              group&rsquo;s shift did not run, reason in Remarks. Part Time includes records without a group.
             </>
           }
         >
@@ -143,7 +172,12 @@ function MatrixSheet({ sheet, preparedBy }: { sheet: Sheet; preparedBy: string |
                   {formatDayDate(r.date)}
                 </th>
                 {groups.map((g) => (
-                  <GroupCell key={g} value={r[GROUP_CELL[g]].value} shifts={r[GROUP_CELL[g]].shifts} />
+                  <GroupCell
+                    key={g}
+                    value={r[GROUP_CELL[g]].value}
+                    shifts={r[GROUP_CELL[g]].shifts}
+                    noWorkShift={noWorkCells.get(noWorkCellKey(r.date, g))}
+                  />
                 ))}
                 <GroupCell value={r.partTime.value} shifts={r.partTime.shifts} />
                 <td className="rd-num">
@@ -195,7 +229,7 @@ export function DepartmentMatrixClient({ preparedBy }: { preparedBy: string | nu
   const [department, setDepartment] = useState<DepartmentKey | typeof ALL>(ALL)
   const [measureKey, setMeasureKey] = useState<string>(ALL)
   const [records, setRecords] = useState<Map<DepartmentKey, MatrixRecord[]>>(new Map())
-  const [noWork, setNoWork] = useState<{ date: unknown; shift: unknown; reason: unknown; department: unknown }[]>([])
+  const [noWork, setNoWork] = useState<(NoWorkRow & { department: unknown })[]>([])
   const [phase, setPhase] = useState<Phase>("loading")
   const requestRef = useRef(0)
 
@@ -211,7 +245,7 @@ export function DepartmentMatrixClient({ preparedBy }: { preparedBy: string | nu
     const { from, to } = monthBounds(year, monthNumber)
     try {
       const [nwRes, ...results] = await Promise.all([
-        supabase.from("no_work_records").select("date, shift, department, reason").gte("date", from).lte("date", to),
+        supabase.from("no_work_records").select("date, shift, group_number, department, reason").gte("date", from).lte("date", to),
         ...selectedDefs.map((def) =>
           supabase.from(def.table).select(def.select).gte("date", from).lte("date", to).order("date", { ascending: true }),
         ),
@@ -247,13 +281,17 @@ export function DepartmentMatrixClient({ preparedBy }: { preparedBy: string | nu
     return selectedDefs.flatMap((def) => {
       const recs = records.get(def.key)
       if (!recs) return []
-      const remarks = noWorkRemarksByDate(noWork.filter((n) => n.department === def.department))
+      const { cells: noWorkCells, remarks } = placeNoWork(
+        def.department,
+        noWork.filter((n) => n.department === def.department),
+      )
       return matrixMeasures(def)
         .filter((m) => measureKey === ALL || department === ALL || m.key === measureKey)
         .map((measure) => ({
           def,
           measure,
           remarks,
+          noWorkCells,
           matrix: buildProductionPivotMatrix({
             year,
             month: monthNumber,

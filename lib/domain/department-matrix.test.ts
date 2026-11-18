@@ -7,7 +7,9 @@ import {
   measureValue,
   cellShift,
   monthBounds,
-  noWorkRemarksByDate,
+  noWorkCellKey,
+  placeNoWork,
+  rosteredGroupFor,
   readBlendingRow,
   readBlowingRow,
   readFillingRow,
@@ -130,17 +132,46 @@ describe("monthBounds", () => {
   })
 })
 
-describe("noWorkRemarksByDate", () => {
-  it("lists whole-day reasons first, then shifts in order, without duplicates", () => {
-    const remarks = noWorkRemarksByDate([
-      { date: "2026-11-04", shift: "Night", reason: "Power outage" },
-      { date: "2026-11-04", shift: "Morning", reason: "No preforms" },
-      { date: "2026-11-04", shift: null, reason: "Public holiday" },
-      { date: "2026-11-04", shift: "Night", reason: "Power outage" },
-      { date: "2026-11-05", shift: "Afternoon", reason: "  " },
+describe("placeNoWork", () => {
+  // The rotation's own anchor week (Monday 13 April 2026): Group 1 Afternoon,
+  // Group 2 Night, Group 3 Morning. Blending's anchor (5 May 2025): Group 1
+  // Morning, Group 2 Afternoon, no Night.
+  it("knows which group the rotation put on a shift", () => {
+    expect(rosteredGroupFor("Packaging", "Night", "2026-04-15")).toBe(2)
+    expect(rosteredGroupFor("Packaging", "Morning", "2026-04-15")).toBe(3)
+    expect(rosteredGroupFor("Alcohol and Blending", "Afternoon", "2025-05-06")).toBe(2)
+    expect(rosteredGroupFor("Alcohol and Blending", "Night", "2025-05-06")).toBeNull()
+    expect(rosteredGroupFor("Packaging", "Night", "not-a-date")).toBeNull()
+  })
+
+  it("marks the group the record names, else the rostered group, in that cell", () => {
+    const { cells } = placeNoWork("Packaging", [
+      { date: "2026-04-15", shift: "Night", group_number: null, reason: "Power outage" },
+      { date: "2026-04-16", shift: "Morning", group_number: 1, reason: "Covering another line" },
     ])
-    expect(remarks.get("2026-11-04")).toBe("Public holiday; Morning: No preforms; Night: Power outage")
-    expect(remarks.has("2026-11-05")).toBe(false)
+    expect([...cells]).toEqual([
+      [noWorkCellKey("2026-04-15", 2), "Night"],
+      [noWorkCellKey("2026-04-16", 1), "Morning"],
+    ])
+  })
+
+  it("leaves a no-work it cannot place in Remarks only", () => {
+    const { cells, remarks } = placeNoWork("Alcohol and Blending", [
+      { date: "2025-05-06", shift: "Night", group_number: null, reason: "No night line" },
+    ])
+    expect(cells.size).toBe(0)
+    expect(remarks.get("2025-05-06")).toBe("Night: No night line")
+  })
+
+  it("names the group in Remarks, in shift order, without duplicates", () => {
+    const { remarks } = placeNoWork("Packaging", [
+      { date: "2026-04-15", shift: "Night", reason: "Power outage" },
+      { date: "2026-04-15", shift: "Morning", reason: "No preforms" },
+      { date: "2026-04-15", shift: "Night", reason: "Power outage" },
+      { date: "2026-04-16", shift: "Afternoon", reason: "  " },
+    ])
+    expect(remarks.get("2026-04-15")).toBe("Morning (Group 3): No preforms; Night (Group 2): Power outage")
+    expect(remarks.has("2026-04-16")).toBe(false)
   })
 })
 
@@ -154,6 +185,11 @@ describe("matrixGroupColumns", () => {
 
   it("adds Group 3 to Alcohol and Blending the moment anything is filed against it", () => {
     expect(matrixGroupColumns("Alcohol and Blending", { ...none, group3Total: 4 })).toEqual([1, 2, 3])
+  })
+
+  it("also adds Group 3 when only a no-work was filed against it", () => {
+    expect(matrixGroupColumns("Alcohol and Blending", none, [3])).toEqual([1, 2, 3])
+    expect(matrixGroupColumns("Alcohol and Blending", none, [])).toEqual([1, 2])
   })
 
   it("matches every department the matrices cover", () => {

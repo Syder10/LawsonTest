@@ -1,5 +1,5 @@
 import type { GenericProductionRecord } from "@/lib/domain/production-pivot"
-import { groupsForDepartment, shiftRank } from "@/lib/shift-config"
+import { expectedShiftForGroup, groupsForDepartment, shiftRank } from "@/lib/shift-config"
 import { hasProductSplit } from "@/lib/domain/dept-metrics"
 import type { Product } from "@/lib/db/types"
 
@@ -241,28 +241,64 @@ export function monthBounds(year: number, month: number): { from: string; to: st
   return { from: `${year}-${mm}-01`, to: `${year}-${mm}-${String(days).padStart(2, "0")}` }
 }
 
-/**
- * No-work reasons per date, for the matrix's Remarks column: "Night: power outage".
- * A reason with no shift applies to the whole day and is listed first. Duplicates
- * (the same shift and reason filed twice) are shown once.
- */
-export function noWorkRemarksByDate(rows: { date: unknown; shift: unknown; reason: unknown }[]): Map<string, string> {
+// ── No work ─────────────────────────────────────────────────────────────────
+// A no-work record belongs to ONE group's shift, so the matrix marks it in that
+// group's cell ("No work") instead of only noting it against the day. The record
+// carries its shift and, usually, its group. When the group was not filled in, it
+// is the group the rotation rostered on that shift that week. If even the rotation
+// cannot say (a shift nobody was rostered on), it stays in Remarks only — the
+// matrix never guesses a group.
+
+export interface NoWorkRow {
+  date: unknown
+  shift: unknown
+  group_number?: unknown
+  reason: unknown
+}
+
+export interface NoWorkPlacement {
+  /** "date|group" → the shift that did not run, for the cells to mark. */
+  cells: Map<string, string>
+  /** date → "Night (Group 2): Power outage; …", in shift order, for the Remarks column. */
+  remarks: Map<string, string>
+}
+
+export const noWorkCellKey = (date: string, group: number) => `${date}|${group}`
+
+/** The group the rotation rostered on `shift` in the week of `dateISO`, or null. */
+export function rosteredGroupFor(department: string, shift: string, dateISO: string): MatrixGroup | null {
+  const day = new Date(`${dateISO}T00:00:00Z`)
+  if (Number.isNaN(day.getTime())) return null
+  for (const g of groupsForDepartment(department)) {
+    if ((g === 1 || g === 2 || g === 3) && expectedShiftForGroup(department, g, day) === shift) return g
+  }
+  return null
+}
+
+export function placeNoWork(department: string, rows: NoWorkRow[]): NoWorkPlacement {
+  const cells = new Map<string, string>()
   const byDate = new Map<string, { rank: number; text: string }[]>()
   for (const r of rows) {
     const date = String(r.date)
+    const shift = r.shift ? String(r.shift) : ""
+    const filed = Number(r.group_number)
+    const group: MatrixGroup | null =
+      filed === 1 || filed === 2 || filed === 3 ? filed : shift ? rosteredGroupFor(department, shift, date) : null
+    if (group !== null && shift) cells.set(noWorkCellKey(date, group), shift)
+
     const reason = String(r.reason ?? "").trim()
     if (!reason) continue
-    const shift = r.shift ? String(r.shift) : ""
-    const text = shift ? `${shift}: ${reason}` : reason
+    const who = [shift, group !== null ? `(Group ${group})` : ""].filter(Boolean).join(" ")
+    const text = who ? `${who}: ${reason}` : reason
     const list = byDate.get(date) ?? []
     if (!list.some((e) => e.text === text)) list.push({ rank: shift ? shiftRank(shift) : -1, text })
     byDate.set(date, list)
   }
-  const out = new Map<string, string>()
+  const remarks = new Map<string, string>()
   for (const [date, list] of byDate) {
-    out.set(date, list.sort((a, b) => a.rank - b.rank).map((e) => e.text).join("; "))
+    remarks.set(date, list.sort((x, y) => x.rank - y.rank).map((e) => e.text).join("; "))
   }
-  return out
+  return { cells, remarks }
 }
 
 // ── Group columns ───────────────────────────────────────────────────────────
@@ -282,8 +318,10 @@ export type MatrixGroup = 1 | 2 | 3
 export function matrixGroupColumns(
   department: string,
   totals: { group1Total: number; group2Total: number; group3Total: number },
+  /** Groups with something else to show this month, e.g. a no-work filed against them. */
+  alsoShow: Iterable<number> = [],
 ): MatrixGroup[] {
-  const rostered = new Set(groupsForDepartment(department).filter((g): g is MatrixGroup => g === 1 || g === 2 || g === 3))
+  const rostered = new Set<number>([...groupsForDepartment(department), ...alsoShow])
   const filed: Record<MatrixGroup, number> = { 1: totals.group1Total, 2: totals.group2Total, 3: totals.group3Total }
   return ([1, 2, 3] as const).filter((g) => rostered.has(g) || filed[g] !== 0)
 }
