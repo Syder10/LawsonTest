@@ -1,0 +1,1126 @@
+/* ============================================================================
+   Glass dashboard shell — styles for components/ui/glass-dashboard.tsx.
+
+   Ported from the "adjustable glass dashboard" design and adapted to this app:
+
+     • Every colour reads the SEMANTIC tokens in app/globals.css (--surface-*,
+       --ink-*, --brand*, --status-*), so the shell follows light/dark via the
+       `.dark` class exactly like every other screen. Nothing here is hard-coded
+       except the white highlight that gives glass its edge.
+     • The design's 8–11px type is raised to the app's 12px floor and every
+       control is at least 44px tall (AGENTS.md). Hover styles only apply where a
+       real pointer exists, as the rest of the app does.
+     • The design's hand-drawn SVG chart, transaction, savings and category
+       styles are NOT carried over — the dashboard keeps its recharts/DataTable
+       components and embeds them in glass via `.gw-embed`.
+     • A plain stylesheet rather than an inline <style> tag: the previous
+       hand-rolled drawer injected its CSS on every mount and that was called out
+       as a defect.
+
+   Class prefix `gw-` is kept from the design so the two can be compared.
+   ============================================================================ */
+
+.gw-root {
+  --gw-ink: var(--ink-primary);
+  --gw-secondary: var(--ink-secondary);
+  --gw-muted: var(--ink-muted);
+  --gw-accent: var(--brand);
+  --gw-line: var(--line-hairline);
+  --gw-surface: var(--surface-card);
+  --gw-panel: var(--surface-card);
+  --gw-sunken: var(--surface-sunken);
+  --gw-brand: var(--brand-solid);
+  --gw-brand-ink: var(--brand-ink);
+  --gw-button: var(--brand-solid);
+  --gw-button-hover: var(--brand-solid-hover);
+  --gw-button-ink: var(--brand-ink);
+  --gw-popover: color-mix(in srgb, var(--surface-raised) 94%, transparent);
+  --gw-fallback: var(--surface-card);
+  --gw-active: color-mix(in srgb, var(--surface-sunken) 80%, transparent);
+  --gw-hover: color-mix(in srgb, var(--surface-sunken) 60%, transparent);
+  --gw-dock: color-mix(in srgb, var(--surface-card) 70%, transparent);
+  --gw-dock-active: var(--surface-card);
+  --gw-dock-hover: color-mix(in srgb, var(--surface-sunken) 70%, transparent);
+  --gw-shadow: color-mix(in srgb, var(--ink-primary) 18%, transparent);
+  --gw-panel-shadow: color-mix(in srgb, var(--ink-primary) 14%, transparent);
+  --gw-soft-shadow: color-mix(in srgb, var(--ink-primary) 7%, transparent);
+  --gw-popover-shadow: color-mix(in srgb, var(--ink-primary) 22%, transparent);
+  --gw-highlight: #ffffff;
+  --gw-stat-accent: var(--line-strong);
+
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 28px;
+  padding: 22px;
+  background: var(--surface-page);
+  color: var(--gw-ink);
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: -0.012em;
+}
+
+/* A white edge-light on a dark surface glares, so the highlight is stepped down
+   towards the card colour instead of flipped. */
+.dark .gw-root {
+  --gw-highlight: color-mix(in srgb, #ffffff 30%, var(--surface-card));
+}
+
+.gw-root *,
+.gw-root *::before,
+.gw-root *::after {
+  box-sizing: border-box;
+}
+.gw-root ::selection {
+  background: color-mix(in srgb, var(--gw-accent) 35%, transparent);
+}
+.gw-root button,
+.gw-root input {
+  font: inherit;
+  color: inherit;
+}
+.gw-root button {
+  cursor: pointer;
+  border: 0;
+  background: none;
+}
+.gw-root button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.gw-root :focus-visible {
+  outline: 2px solid var(--gw-accent);
+  outline-offset: 3px;
+}
+.gw-root h1,
+.gw-root h2,
+.gw-root h3,
+.gw-root p {
+  margin: 0;
+}
+
+/* ── Backdrop ─────────────────────────────────────────────────────────────────
+   Glass needs something behind it to blur. Brand-tinted gradient orbs rather
+   than a hot-linked photo: the plant runs on patchy mobile data, and a decorative
+   image from a third-party CDN is a request the dashboard should not depend on.
+   `contain: paint` and no filter — see .gradient-orb in globals.css for why. */
+.gw-room,
+.gw-room-image,
+.gw-room-shade {
+  position: absolute;
+  inset: 0;
+}
+.gw-room {
+  z-index: -3;
+  contain: paint;
+  background:
+    radial-gradient(at 10% 6%, color-mix(in oklab, var(--brand) 42%, transparent) 0, transparent 46%),
+    radial-gradient(at 92% 14%, color-mix(in oklab, var(--brand-solid) 26%, transparent) 0, transparent 44%),
+    radial-gradient(at 72% 94%, color-mix(in oklab, var(--hero-to) 36%, transparent) 0, transparent 52%),
+    radial-gradient(at 18% 92%, color-mix(in oklab, var(--brand) 20%, transparent) 0, transparent 50%),
+    linear-gradient(160deg, var(--surface-sunken) 0%, var(--surface-page) 100%);
+}
+.gw-room-image {
+  z-index: -3;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 56%;
+}
+.gw-room-shade {
+  z-index: -2;
+  background: color-mix(in srgb, var(--surface-page) 22%, transparent);
+}
+.gw-workspace {
+  position: relative;
+}
+
+/* ── The material ─────────────────────────────────────────────────────────────
+   --gw-blur / --gw-opacity / --gw-saturation / --gw-edge / --gw-tint are set
+   inline by the component from the user's glass settings. */
+.gw-glass {
+  position: relative;
+  isolation: isolate;
+  background: color-mix(in srgb, var(--gw-surface) calc(var(--gw-opacity) * 100%), transparent);
+  backdrop-filter: blur(var(--gw-blur)) saturate(var(--gw-saturation));
+  -webkit-backdrop-filter: blur(var(--gw-blur)) saturate(var(--gw-saturation));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--gw-highlight) calc(var(--gw-edge) * 100%), transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--gw-highlight) calc(var(--gw-edge) * 34%), transparent),
+    0 20px 52px -25px var(--gw-shadow);
+}
+/* The tint sits BELOW the content (z-index -1 inside the isolated context) —
+   in the original it painted over the text. */
+.gw-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--gw-tint);
+  opacity: 0.12;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* ── Top bar ─────────────────────────────────────────────────────────────── */
+.gw-topbar {
+  min-height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  border-radius: 20px;
+  margin-bottom: 18px;
+  padding: 8px 18px;
+}
+.gw-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.gw-brand strong {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.gw-brand-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  background: var(--gw-brand);
+  color: var(--gw-brand-ink);
+  border-radius: 10px;
+}
+.gw-brand-divider {
+  height: 16px;
+  width: 1px;
+  background: var(--gw-line);
+  margin: 0 4px;
+}
+.gw-personal {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gw-muted);
+}
+.gw-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.gw-adjust {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gw-secondary);
+}
+.gw-icon-button {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  flex: none;
+  color: var(--gw-secondary);
+}
+.gw-bell i {
+  position: absolute;
+  right: 11px;
+  top: 10px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--status-critical);
+  box-shadow: 0 0 0 2px var(--gw-surface);
+}
+.gw-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: none;
+  background: var(--brand-subtle);
+  color: var(--brand-subtle-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* ── Stage: rail + main ──────────────────────────────────────────────────── */
+.gw-stage {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.gw-rail {
+  border-radius: 28px;
+  width: 56px;
+  padding: 8px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 50px;
+  flex: none;
+}
+.gw-rail button {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--gw-muted);
+}
+.gw-rail button span {
+  display: none;
+}
+.gw-rail button[aria-current] {
+  background: var(--gw-active);
+  color: var(--gw-ink);
+  box-shadow: 0 3px 8px var(--gw-soft-shadow);
+}
+.gw-main {
+  border-radius: 27px;
+  padding: 28px 28px 100px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── View heading ────────────────────────────────────────────────────────── */
+.gw-view-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-bottom: 24px;
+}
+.gw-view-heading > div:first-child {
+  min-width: 0;
+}
+.gw-greeting {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gw-muted);
+  margin-bottom: 4px;
+}
+.gw-view-heading h1 {
+  font-size: clamp(24px, 2.3vw, 31px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.18;
+  overflow-wrap: break-word;
+}
+.gw-heading-action {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.gw-date {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gw-muted);
+}
+
+/* ── Panels ──────────────────────────────────────────────────────────────── */
+.gw-panel {
+  position: relative;
+  min-width: 0;
+  padding: 20px;
+  border-radius: 17px;
+  background: color-mix(in srgb, var(--gw-panel) calc((0.16 + var(--gw-opacity) * 0.5) * 100%), transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--gw-highlight) calc(var(--gw-edge) * 75%), transparent),
+    0 8px 22px -20px var(--gw-panel-shadow);
+}
+.gw-panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 18px;
+  color: var(--gw-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.gw-panel-title h2 {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--gw-ink);
+  overflow-wrap: break-word;
+}
+.gw-panel-title > svg {
+  opacity: 0.7;
+  flex: none;
+}
+.gw-panel-aside {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Reveal wrappers (animated by framer-motion) must not break grid sizing. */
+.gw-reveal {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.gw-reveal > * {
+  flex: 1;
+}
+
+/* ── Existing components (recharts cards, DataTable cards) inside glass ─────
+   Card renders `bg-surface-card border-hairline shadow-sm`; these unlayered rules
+   beat Tailwind's `@layer utilities` and turn the card into a glass panel without
+   touching the primitive. `.gw-embed` when the child IS the card;
+   `.gw-embed-deep` when the child is a stack whose children are cards. */
+.gw-embed > *,
+.gw-embed-deep > * > * {
+  background: color-mix(in srgb, var(--gw-panel) calc((0.16 + var(--gw-opacity) * 0.5) * 100%), transparent);
+  border-color: color-mix(in srgb, var(--gw-highlight) calc(var(--gw-edge) * 40%), var(--gw-line));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--gw-highlight) calc(var(--gw-edge) * 75%), transparent),
+    0 8px 22px -20px var(--gw-panel-shadow);
+}
+
+/* ── Overview layouts ────────────────────────────────────────────────────── */
+.gw-overview-grid {
+  display: grid;
+  grid-template-columns: 0.82fr 1.5fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.gw-hero {
+  display: flex;
+  flex-direction: column;
+}
+.gw-hero-value {
+  font-size: clamp(30px, 3.15vw, 44px);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.2;
+  overflow-wrap: break-word;
+}
+.gw-hero-value small {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--gw-muted);
+  margin-left: 6px;
+  letter-spacing: 0;
+}
+.gw-hero-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gw-muted);
+  margin-top: 10px;
+}
+.gw-pill {
+  display: inline-block;
+  background: var(--brand-subtle);
+  color: var(--brand-subtle-ink);
+  border-radius: 6px;
+  padding: 3px 7px;
+  font-weight: 700;
+}
+.gw-hero-link {
+  margin-top: auto;
+  padding-top: 28px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  color: inherit;
+  text-decoration: none;
+}
+.gw-hero-link-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--gw-sunken) 80%, transparent);
+  color: var(--gw-accent);
+}
+.gw-hero-link > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.gw-hero-link strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.gw-hero-link > div > span {
+  font-size: 12px;
+  color: var(--gw-muted);
+}
+.gw-hero-link-arrow {
+  margin-left: auto;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--gw-sunken) 80%, transparent);
+}
+
+.gw-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+/* The accent is a rule at the left edge, never the figure itself — the same
+   contract as StatTile. */
+.gw-stat::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 16px;
+  bottom: 16px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--gw-stat-accent);
+}
+.gw-panel[data-accent="brand"] {
+  --gw-stat-accent: var(--brand);
+}
+.gw-panel[data-accent="critical"] {
+  --gw-stat-accent: var(--status-critical);
+}
+.gw-panel[data-accent="bitters"] {
+  --gw-stat-accent: var(--series-bitters);
+}
+.gw-panel[data-accent="ginger"] {
+  --gw-stat-accent: var(--series-ginger);
+}
+.gw-stat .gw-panel-title {
+  margin-bottom: 14px;
+}
+.gw-stat-value {
+  display: block;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  overflow-wrap: break-word;
+}
+.gw-stat-value small {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gw-muted);
+  margin-left: 5px;
+  letter-spacing: 0;
+}
+.gw-stat-sub {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gw-muted);
+}
+
+.gw-lower-grid {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 16px;
+}
+.gw-output-grid {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 16px;
+}
+
+.gw-text-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gw-secondary);
+  text-decoration: none;
+}
+
+/* ── Rows (attention items, hub links, alerts) ───────────────────────────── */
+.gw-list {
+  display: flex;
+  flex-direction: column;
+}
+.gw-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  min-height: 44px;
+  min-width: 0;
+  border-top: 1px solid var(--gw-line);
+  color: inherit;
+  text-decoration: none;
+}
+.gw-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.gw-row:last-child {
+  padding-bottom: 0;
+}
+.gw-row-icon {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--gw-sunken) 80%, transparent);
+  color: var(--gw-secondary);
+  transition: background var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out);
+}
+.gw-row-icon.is-brand {
+  color: var(--gw-accent);
+}
+.gw-row-icon.is-critical {
+  background: var(--status-critical-subtle);
+  color: var(--status-critical-ink);
+}
+.gw-row-icon.is-warning {
+  background: var(--status-warning-subtle);
+  color: var(--status-warning-ink);
+}
+.gw-row-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.gw-row-body strong {
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: break-word;
+}
+.gw-row-body span {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gw-muted);
+  margin-top: 2px;
+  overflow-wrap: break-word;
+}
+.gw-row-end {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--gw-muted);
+}
+.gw-row-end svg {
+  transition: transform var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out);
+}
+
+/* ── Empty / loading wells ───────────────────────────────────────────────── */
+.gw-empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--gw-muted);
+  font-size: 13px;
+}
+.gw-empty-orb {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 10px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--brand-subtle);
+  color: var(--brand-subtle-ink);
+}
+.gw-empty h3 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--gw-ink);
+  margin-bottom: 4px;
+}
+.gw-empty p {
+  max-width: 320px;
+  margin: 0 auto;
+}
+.gw-empty .gw-button {
+  display: inline-flex;
+  margin-top: 16px;
+}
+.gw-empty-tall {
+  padding: 72px 16px;
+}
+.gw-spin {
+  animation: gw-spin 1s linear infinite;
+}
+@keyframes gw-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Footer + dock ───────────────────────────────────────────────────────── */
+.gw-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  color: var(--gw-muted);
+  font-size: 12px;
+  font-weight: 500;
+  margin-top: 22px;
+}
+.gw-footer > span {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.gw-footer i {
+  height: 5px;
+  width: 5px;
+  flex: none;
+  background: var(--gw-accent);
+  border-radius: 50%;
+}
+.gw-desktop-dock {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 40px);
+}
+.gw-dock {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  border-radius: 32px;
+  padding: 5px;
+  white-space: nowrap;
+  background: var(--gw-dock);
+}
+.gw-dock button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 26px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gw-secondary);
+  transition: background var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out);
+}
+.gw-dock button[aria-current] {
+  background: var(--gw-dock-active);
+  color: var(--gw-ink);
+  box-shadow: 0 3px 7px var(--gw-soft-shadow);
+}
+.gw-mobile-nav {
+  display: none;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+.gw-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: var(--gw-button);
+  color: var(--gw-button-ink);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: background var(--dur-base) var(--ease-out), transform var(--dur-press) var(--ease-out);
+}
+.gw-button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* ── Glass appearance panel ──────────────────────────────────────────────── */
+.gw-material {
+  position: absolute;
+  z-index: 20;
+  right: 10px;
+  top: 78px;
+  width: 300px;
+  max-width: calc(100% - 20px);
+  max-height: calc(100svh - 160px);
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gw-muted) transparent;
+  border-radius: 22px;
+  padding: 22px;
+  background: var(--gw-popover);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--gw-highlight) 53%, transparent),
+    0 24px 80px var(--gw-popover-shadow);
+}
+.gw-material-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.gw-material-title > div {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.gw-material h2 {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+.gw-material > p {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gw-muted);
+  margin: 6px 0 16px;
+}
+.gw-material-sample {
+  height: 86px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border-radius: 13px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gw-secondary);
+  background: color-mix(in srgb, var(--gw-tint) calc(var(--gw-opacity) * 100%), transparent);
+  backdrop-filter: blur(var(--gw-blur));
+  -webkit-backdrop-filter: blur(var(--gw-blur));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--gw-highlight) calc(var(--gw-edge) * 100%), transparent),
+    0 12px 20px -18px var(--gw-shadow);
+}
+.gw-presets {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.gw-presets button {
+  flex: 1;
+  min-height: 44px;
+  border: 1px solid var(--gw-line);
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.gw-presets button[aria-pressed="true"] {
+  border-color: var(--gw-accent);
+  color: var(--gw-accent);
+}
+.gw-range {
+  display: block;
+  margin: 14px 0;
+}
+.gw-range > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.gw-range output {
+  font-size: 12px;
+  color: var(--gw-muted);
+  font-variant-numeric: tabular-nums;
+}
+.gw-range input {
+  width: 100%;
+  height: 28px;
+  margin: 6px 0 0;
+  accent-color: var(--gw-accent);
+  cursor: pointer;
+}
+.gw-tint {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 14px;
+}
+.gw-tint input {
+  height: 44px;
+  width: 56px;
+  padding: 3px;
+  background: none;
+  border: 1px solid var(--gw-line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.gw-reset {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--gw-line);
+  border-radius: 12px;
+  margin-top: 18px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ── Notifications ───────────────────────────────────────────────────────── */
+.gw-notifications {
+  position: absolute;
+  right: 24px;
+  top: 78px;
+  z-index: 21;
+  width: 340px;
+  max-width: calc(100% - 20px);
+  max-height: calc(100svh - 160px);
+  overflow: auto;
+  border-radius: 18px;
+  padding: 20px;
+  background: var(--gw-popover);
+}
+.gw-notifications > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.gw-notifications h2 {
+  font-size: 15px;
+  font-weight: 700;
+  overflow-wrap: break-word;
+}
+.gw-notifications p {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gw-muted);
+}
+.gw-notifications .gw-list {
+  margin-top: 12px;
+}
+
+/* ── Hover: pointer devices only (touch synthesises hover on tap) ─────────── */
+@media (hover: hover) and (pointer: fine) {
+  .gw-adjust:hover,
+  .gw-icon-button:hover {
+    background: var(--gw-hover);
+  }
+  .gw-dock button:not([aria-current]):hover {
+    background: var(--gw-dock-hover);
+  }
+  .gw-button:hover:not(:disabled) {
+    background: var(--gw-button-hover);
+  }
+  .gw-text-button:hover {
+    color: var(--gw-accent);
+  }
+  .gw-presets button:hover,
+  .gw-reset:hover {
+    background: var(--gw-hover);
+  }
+  a.gw-row:hover .gw-row-icon,
+  a.gw-hero-link:hover .gw-hero-link-icon {
+    background: var(--brand-subtle);
+    color: var(--brand-subtle-ink);
+  }
+  a.gw-row:hover .gw-row-end svg {
+    transform: translateX(3px);
+    color: var(--gw-accent);
+  }
+}
+
+/* No backdrop-filter support: fall back to opaque surfaces. */
+@supports not (backdrop-filter: blur(1px)) {
+  .gw-glass,
+  .gw-panel,
+  .gw-embed > *,
+  .gw-embed-deep > * > *,
+  .gw-material,
+  .gw-notifications {
+    background: var(--gw-fallback);
+  }
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (min-width: 1550px) {
+  .gw-main {
+    padding-top: 36px;
+  }
+  .gw-panel {
+    padding: 24px;
+  }
+}
+
+@media (max-width: 1050px) {
+  .gw-root {
+    padding: 16px;
+  }
+  .gw-main {
+    padding: 24px 22px 96px;
+  }
+  .gw-rail,
+  .gw-personal,
+  .gw-brand-divider {
+    display: none;
+  }
+  .gw-hero-value {
+    font-size: 32px;
+  }
+  .gw-panel {
+    padding: 18px;
+  }
+  .gw-stat-value {
+    font-size: 26px;
+  }
+}
+
+@media (max-width: 700px) {
+  .gw-root {
+    padding: 10px 10px 16px;
+    border-radius: 20px;
+  }
+  .gw-topbar {
+    min-height: 56px;
+    padding: 6px 10px;
+    border-radius: 17px;
+    margin-bottom: 12px;
+  }
+  .gw-toolbar {
+    gap: 2px;
+  }
+  .gw-brand {
+    gap: 7px;
+  }
+  .gw-brand strong {
+    font-size: 13px;
+  }
+  .gw-brand-icon {
+    width: 28px;
+    height: 28px;
+  }
+  .gw-avatar {
+    display: none;
+  }
+  /* Icon-only at phone width; the label remains for assistive tech via aria-label. */
+  .gw-adjust {
+    width: 44px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 50%;
+  }
+  .gw-adjust span {
+    display: none;
+  }
+  .gw-main {
+    border-radius: 20px;
+    padding: 20px 14px 22px;
+  }
+  .gw-view-heading {
+    margin-bottom: 18px;
+  }
+  .gw-view-heading h1 {
+    font-size: 24px;
+    line-height: 1.12;
+  }
+  .gw-mobile-nav {
+    display: block;
+    margin-bottom: 18px;
+  }
+  .gw-mobile-nav .gw-dock {
+    width: 100%;
+    padding: 4px;
+    border-radius: 14px;
+    justify-content: space-between;
+    background: color-mix(in srgb, var(--surface-card) 55%, transparent);
+    box-shadow: none;
+  }
+  .gw-dock button {
+    flex: 1;
+    min-width: 0;
+    padding: 0 8px;
+    gap: 5px;
+    border-radius: 10px;
+    font-size: 12px;
+  }
+  .gw-dock button svg {
+    width: 15px;
+    height: 15px;
+  }
+  .gw-desktop-dock {
+    display: none;
+  }
+  .gw-overview-grid,
+  .gw-lower-grid,
+  .gw-output-grid,
+  .gw-stat-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .gw-overview-grid,
+  .gw-stat-grid {
+    margin-bottom: 12px;
+  }
+  .gw-hero-value {
+    font-size: 36px;
+  }
+  .gw-hero-link {
+    padding-top: 20px;
+  }
+  .gw-panel {
+    border-radius: 15px;
+    padding: 16px;
+  }
+  .gw-panel-title {
+    margin-bottom: 14px;
+  }
+  .gw-footer {
+    margin-top: 20px;
+  }
+  .gw-material {
+    right: 4px;
+    top: 66px;
+    width: min(320px, calc(100% - 8px));
+    padding: 18px;
+    max-height: calc(100svh - 130px);
+  }
+  .gw-notifications {
+    right: 4px;
+    top: 66px;
+    max-height: calc(100svh - 130px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gw-root * {
+    transition: none !important;
+  }
+  .gw-spin {
+    animation-duration: 1.5s;
+  }
+}

@@ -1,0 +1,550 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================================================
+   DESIGN TOKENS
+   ============================================================================
+   Two layers, in this order:
+
+   1. SEMANTIC tokens (--surface-*, --ink-*, --brand-*, --status-*, --series-*).
+      These are the source of truth. Views should only ever use these.
+   2. A shadcn COMPATIBILITY layer (--background, --card, --primary…) mapped onto
+      layer 1 with var(). Custom properties resolve at use time, so `.dark` only
+      needs to override layer 1 — layer 2 follows automatically and the two
+      systems can never disagree.
+
+   Why this exists: the previous file declared 40 tokens and a full `.dark` block
+   that NOTHING user-facing read (`dark:` appeared zero times outside
+   components/ui). Feature code used literal Tailwind classes — 21 colour
+   families, 3 competing card identities, 2 neutral ramps. Its `.dark` values were
+   also semantically wrong (brand green standing in for `--muted`, `--secondary`
+   and `--border`), and had never rendered once.
+   ============================================================================ */
+
+:root {
+  color-scheme: light;
+
+  /* ── Surfaces ───────────────────────────────────────────────────────────── */
+  --surface-page: #f4f6f5;
+  --surface-card: #ffffff;
+  --surface-raised: #ffffff;   /* popovers, modals, drawers */
+  --surface-sunken: #edf1ef;   /* table headers, inset wells */
+
+  /* ── Ink ────────────────────────────────────────────────────────────────── */
+  --ink-primary: #0b1512;
+  --ink-secondary: #47534e;
+  --ink-muted: #6d7a75;        /* 4.7:1 on card — fine at 12px+, never below */
+  --ink-inverse: #ffffff;
+
+  /* ── Lines ──────────────────────────────────────────────────────────────── */
+  --line-hairline: #e3e9e6;
+  --line-strong: #cdd6d2;
+
+  /* ── Brand ──────────────────────────────────────────────────────────────────
+     Emerald is the identity, and it is UI chrome ONLY — never a chart series.
+     Two steps because contrast differs by use:
+       --brand        the hue: rings, accents, small marks, active nav, borders
+       --brand-solid  filled surfaces carrying white text. emerald-700 gives
+                      4.8:1 with white; emerald-600 is only ~3.3:1, which fails
+                      AA for normal-weight label text.
+     ------------------------------------------------------------------------- */
+  --brand: #059669;
+  --brand-solid: #047857;
+  --brand-solid-hover: #036b50;
+  --brand-ink: #ffffff;
+  --brand-subtle: #ecfdf5;
+  --brand-subtle-ink: #065f46;
+
+  /* ── Status — RESERVED ──────────────────────────────────────────────────────
+     Never reused for a chart series, and never colour-alone: every status ships
+     an icon + word (see StatusBadge). `base` is the mark fill, `subtle` the chip
+     background, `ink` the chip text (contrast-safe on `subtle`).
+
+     The old viz.ts used #d97706 for BOTH the Ginger series and the warning
+     status, so a warning and a product read as the same colour. Fixed by keeping
+     status here and moving series to teal/orange below.
+     ------------------------------------------------------------------------- */
+  --status-good: #0ca30c;
+  --status-good-subtle: #eaf7ea;
+  --status-good-ink: #05691f;
+
+  --status-warning: #fab219;
+  --status-warning-subtle: #fdf5e3;
+  --status-warning-ink: #8a5a00;
+
+  --status-critical: #d03b3b;
+  --status-critical-subtle: #fdeceb;
+  --status-critical-ink: #9b1c1c;
+
+  /* ── Chart series ───────────────────────────────────────────────────────────
+     Bitters teal / Ginger orange. Chosen by running the dataviz validator, not
+     by eye: the previous emerald+amber pair sat in the 6–8 CVD warn band
+     (protan ΔE 7.9 — green vs orange is the classic protanope confusion) and was
+     therefore only legal with secondary encoding. Teal+orange clears both axes
+     outright (protan ΔE 13.8, tritan 34.5) while keeping the cool/warm product
+     distinction the existing dashboard trained people on.
+
+     `total` is a neutral aggregate, deliberately not a categorical hue — it is a
+     sum of the other two, not a third category.
+     ------------------------------------------------------------------------- */
+  --series-bitters: #0d9488;
+  --series-ginger: #ea580c;
+  --series-total: #475569;
+
+  /* Chart chrome — recessive, hairline, never dashed. */
+  --chart-surface: var(--surface-card);
+  --chart-grid: #e6ebe8;
+  --chart-axis: #7d8a85;
+
+  /* ── Hero panel ─────────────────────────────────────────────────────────────
+     The one deliberately dark surface in the app (supervisor home). It stays dark
+     in BOTH modes because it is an identity panel rather than a page surface, so
+     the white text on it is safe either way — which is also why the widgets that
+     live on it use white rather than the ink tokens. Tokens, not a JSX gradient,
+     so the two stops are spelled once.
+     ------------------------------------------------------------------------- */
+  --hero-from: #0e1a17;
+  --hero-to: #064e3b;
+
+  /* ── Motion ─────────────────────────────────────────────────────────────────
+     Custom curves because the built-in CSS easings are too weak to read as
+     intentional. Never ease-in on UI: it delays the initial movement, which is
+     the exact moment the user is watching, so it feels sluggish at any duration.
+     ------------------------------------------------------------------------- */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer-curve: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --dur-press: 120ms;   /* button/press feedback */
+  --dur-fast: 160ms;    /* tooltips, chips */
+  --dur-base: 200ms;    /* dropdowns, selects */
+  --dur-slow: 240ms;    /* cards, panels */
+  --dur-drawer: 320ms;  /* sheets, drawers */
+
+  --radius: 1rem;
+
+  /* ── shadcn compatibility (mapped onto the semantic layer above) ─────────── */
+  --background: var(--surface-page);
+  --foreground: var(--ink-primary);
+  --card: var(--surface-card);
+  --card-foreground: var(--ink-primary);
+  --popover: var(--surface-raised);
+  --popover-foreground: var(--ink-primary);
+  --primary: var(--brand-solid);
+  --primary-foreground: var(--brand-ink);
+  --secondary: var(--surface-sunken);
+  --secondary-foreground: var(--ink-primary);
+  --muted: var(--surface-sunken);
+  --muted-foreground: var(--ink-muted);
+  --accent: var(--brand-subtle);
+  --accent-foreground: var(--brand-subtle-ink);
+  --destructive: var(--status-critical);
+  --destructive-foreground: #ffffff;
+  --border: var(--line-hairline);
+  --input: var(--line-hairline);
+  --ring: var(--brand);
+  --chart-1: var(--series-bitters);
+  --chart-2: var(--series-ginger);
+  --chart-3: var(--series-total);
+  --chart-4: var(--status-warning);
+  --chart-5: var(--status-critical);
+  --sidebar: var(--surface-card);
+  --sidebar-foreground: var(--ink-primary);
+  --sidebar-primary: var(--brand-solid);
+  --sidebar-primary-foreground: var(--brand-ink);
+  --sidebar-accent: var(--brand-subtle);
+  --sidebar-accent-foreground: var(--brand-subtle-ink);
+  --sidebar-border: var(--line-hairline);
+  --sidebar-ring: var(--brand);
+}
+
+/* ============================================================================
+   DARK
+   Selected, not flipped — each value is chosen for the dark surface. Only the
+   semantic layer is overridden; the shadcn layer follows through var().
+   ============================================================================ */
+.dark {
+  color-scheme: dark;
+
+  --surface-page: #0a0f0d;
+  --surface-card: #131a17;
+  --surface-raised: #1a2320;
+  --surface-sunken: #0f1614;
+
+  --ink-primary: #f2f6f4;
+  --ink-secondary: #b6c2bd;
+  --ink-muted: #8b9995;
+  --ink-inverse: #0b1512;
+
+  --line-hairline: #232e2a;
+  --line-strong: #33403b;
+
+  /* Brighter brand steps for the dark surface; brand-ink flips to dark because
+     white on a light green fill is unreadable. */
+  --brand: #34d399;
+  --brand-solid: #10b981;
+  --brand-solid-hover: #34d399;
+  --brand-ink: #04231a;
+  --brand-subtle: #06251d;
+  --brand-subtle-ink: #6ee7b7;
+
+  /* Status marks are mode-invariant (all clear 3:1 on this surface); only the
+     chip background and text re-step. */
+  --status-good: #0ca30c;
+  --status-good-subtle: #0d2413;
+  --status-good-ink: #6ee7a5;
+
+  --status-warning: #fab219;
+  --status-warning-subtle: #2a2110;
+  --status-warning-ink: #fcd34d;
+
+  --status-critical: #d03b3b;
+  --status-critical-subtle: #2c1414;
+  --status-critical-ink: #fca5a5;
+
+  /* Series hexes are UNCHANGED between modes — not a flip, a selection. Both were
+     validated against the dark surface (#131a17) as well as the light one:
+     lightness band, chroma, CVD, normal-vision and contrast all pass in both.
+     Lifting them to teal-500/orange-400 was tried first and FAILED the dark
+     lightness band (L 0.704 / 0.758 vs the 0.48–0.67 window), which is exactly
+     the check that keeps a mark readable on a dark surface. */
+  --series-bitters: #0d9488;
+  --series-ginger: #ea580c;
+  --series-total: #94a3b8;
+
+  --chart-grid: #222d29;
+  --chart-axis: #7d8a85;
+
+  /* Deeper than the light-mode hero so the panel recedes into the darker page
+     instead of glowing against it. */
+  --hero-from: #0b1412;
+  --hero-to: #04382b;
+}
+
+/* Honour the OS preference too, but let an explicit `.light` stamp win over it. */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light):not(.dark) {
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  /* Fonts — these were MISSING, which silently disabled Geist across the whole
+     authenticated app: `font-sans` on the dashboard layout resolved to Tailwind's
+     default ui-sans-serif stack and overrode the font set on <body>. */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Semantic utilities — bg-surface-card, text-ink-muted, border-hairline, … */
+  --color-surface-page: var(--surface-page);
+  --color-surface-card: var(--surface-card);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+
+  --color-ink-primary: var(--ink-primary);
+  --color-ink-secondary: var(--ink-secondary);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-inverse: var(--ink-inverse);
+
+  --color-hairline: var(--line-hairline);
+  --color-line-strong: var(--line-strong);
+
+  --color-brand: var(--brand);
+  --color-brand-solid: var(--brand-solid);
+  --color-brand-solid-hover: var(--brand-solid-hover);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-subtle: var(--brand-subtle);
+  --color-brand-subtle-ink: var(--brand-subtle-ink);
+
+  --color-good: var(--status-good);
+  --color-good-subtle: var(--status-good-subtle);
+  --color-good-ink: var(--status-good-ink);
+  --color-warning: var(--status-warning);
+  --color-warning-subtle: var(--status-warning-subtle);
+  --color-warning-ink: var(--status-warning-ink);
+  --color-critical: var(--status-critical);
+  --color-critical-subtle: var(--status-critical-subtle);
+  --color-critical-ink: var(--status-critical-ink);
+
+  --color-series-bitters: var(--series-bitters);
+  --color-series-ginger: var(--series-ginger);
+  --color-series-total: var(--series-total);
+  --color-chart-grid: var(--chart-grid);
+  --color-chart-axis: var(--chart-axis);
+
+  /* shadcn */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Motion curves, exposed as Tailwind ease utilities. Named distinctly from the
+     raw :root values so the mapping is not self-referential. */
+  --ease-out-strong: var(--ease-out);
+  --ease-in-out-strong: var(--ease-in-out);
+  --ease-drawer: var(--ease-drawer-curve);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    /* Mobile is the primary target: supervisors work on 360px phones all shift. A long
+       unbroken token — an email, a herb variant, a generated column label — otherwise
+       forces the whole page to scroll sideways, and a horizontally scrolling app feels
+       broken in a way no individual component can fix. This is the safety net; the
+       layouts still wrap on purpose rather than relying on it. */
+    overflow-wrap: break-word;
+  }
+  /* Columns of figures must align; large standalone numbers must NOT use
+     tabular-nums (equal-width digits make a value like 121 look loose at display
+     sizes), so this is opt-in per table rather than global. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ============================================================================
+   ANIMATION
+   Only what is actually used. The previous file carried ~120 lines of dead
+   glassmorphism plus these defects:
+     • `.animate-slide-up` referenced @keyframes slide-up, which did not exist
+     • a duplicate `.animate-fade-in` referenced a non-existent `fade-in` and
+       SHADOWED the working rule above it, killing both
+     • `.animate-float`, `.animate-pulse-glow` and `.delay-*` were each declared
+       twice
+   ============================================================================ */
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-20px);
+  }
+}
+
+@keyframes logo-reveal {
+  0% {
+    transform: scale(0.92);
+    opacity: 0;
+    filter: blur(8px);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+/* Submission confirmation. Short and single-purpose: it says "the state changed".
+   Starts at 0.8 rather than 0 — nothing in the real world appears from nothing. */
+@keyframes check-pop {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-check-pop {
+  animation: check-pop 260ms var(--ease-out) both;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp var(--dur-slow) var(--ease-out) forwards;
+}
+
+.animate-float {
+  animation: float 6s var(--ease-in-out) infinite;
+}
+
+.animate-logo-reveal {
+  animation: logo-reveal 900ms var(--ease-out) forwards;
+}
+
+/* Stagger for entrance sequences. NOTE: these set animation-delay and therefore
+   shadow Tailwind's own transition-delay `delay-*` utilities on any element that
+   uses both. Only the steps the splash actually uses are defined; prefer an inline
+   style for new work. */
+.delay-200 {
+  animation-delay: 200ms;
+}
+.delay-300 {
+  animation-delay: 300ms;
+}
+.delay-400 {
+  animation-delay: 400ms;
+}
+
+/* Hover effects only where a real pointer exists — touch devices synthesise
+   hover on tap, which leaves elements stuck in their hover state. */
+@media (hover: hover) and (pointer: fine) {
+  .hover-lift {
+    transition: transform var(--dur-base) var(--ease-out);
+  }
+  .hover-lift:hover {
+    transform: translateY(-2px);
+  }
+}
+
+/* Reduced motion: fewer and gentler, not zero. Opacity and colour transitions
+   aid comprehension and stay; movement goes. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-fade-in-up,
+  .animate-logo-reveal {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+  .animate-check-pop {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .animate-float {
+    animation: none;
+  }
+}
+
+/* ── Hero panel (SupervisorDashboard) ──────────────────────────────────────── */
+.hero-panel {
+  background-image: linear-gradient(135deg, var(--hero-from) 0%, var(--hero-to) 100%);
+}
+
+/* ── Splash screen (app/page.tsx) ──────────────────────────────────────────── */
+.glass-button-hero {
+  @apply relative overflow-hidden px-8 py-4 rounded-full font-bold transition-all;
+  background: linear-gradient(135deg, var(--brand-solid) 0%, var(--brand) 100%);
+  color: var(--brand-ink);
+  box-shadow: 0 10px 30px color-mix(in oklab, var(--brand) 30%, transparent);
+  transition-duration: var(--dur-base);
+  transition-timing-function: var(--ease-out);
+}
+
+.glass-button-hero:active {
+  transform: scale(0.97);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .glass-button-hero:hover {
+    box-shadow: 0 15px 40px color-mix(in oklab, var(--brand) 40%, transparent);
+  }
+}
+
+/* Decorative background orbs.
+ *
+ * NO `filter: blur()` — and that is a performance fix, not a style change. These are
+ * radial gradients that already fade to transparent, so an 80px blur on top was
+ * almost invisible; what it DID do was make two ~500px filtered layers that the
+ * browser had to re-rasterise whenever anything above them repainted. Typing in the
+ * sign-in form repaints the input on every keystroke, so every keystroke paid for
+ * re-blurring half the screen — which is exactly what "the login field feels slow"
+ * is. On the splash they also animate, so the blur was being redone per frame.
+ *
+ * The softness now comes from a three-stop ramp instead, which costs nothing, and
+ * `contain: paint` keeps each orb's painting to its own box. */
+.gradient-orb {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.34;
+  pointer-events: none;
+  contain: paint;
+}
+
+.gradient-orb-1 {
+  width: min(500px, 80vw);
+  height: min(500px, 80vw);
+  background: radial-gradient(
+    circle,
+    color-mix(in oklab, var(--brand) 34%, transparent) 0%,
+    color-mix(in oklab, var(--brand) 14%, transparent) 45%,
+    transparent 78%
+  );
+  top: -10%;
+  right: -5%;
+}
+
+.gradient-orb-2 {
+  width: min(400px, 70vw);
+  height: min(400px, 70vw);
+  background: radial-gradient(
+    circle,
+    color-mix(in oklab, var(--brand) 22%, transparent) 0%,
+    color-mix(in oklab, var(--brand) 9%, transparent) 45%,
+    transparent 78%
+  );
+  bottom: -5%;
+  left: -10%;
+}
+
+.bg-mesh {
+  background-color: var(--surface-page);
+  background-image: radial-gradient(at 0% 0%, color-mix(in oklab, var(--brand) 10%, transparent) 0, transparent 50%),
+    radial-gradient(at 50% 0%, color-mix(in oklab, var(--brand) 5%, transparent) 0, transparent 50%),
+    radial-gradient(at 100% 0%, color-mix(in oklab, var(--brand) 10%, transparent) 0, transparent 50%);
+}

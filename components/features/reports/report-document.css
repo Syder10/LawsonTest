@@ -1,0 +1,535 @@
+/* ============================================================================
+   Printed report template — styles for components/features/reports/report-document.tsx.
+
+   A formal corporate document: a white A4 "paper" card on a soft grey desk on
+   screen, a clean A4 page in print. Times New Roman, black text, and only the
+   colours the paper reports already use:
+
+     --rd-green   #00B050  house header bar and accent (as on the filed reports)
+     --rd-red     #FF0000  Critical / Stockout
+     --rd-darkred #943634  the ATTENTION callout
+     --rd-amber            Monitor — the app's own warning ink, contrast-safe
+     --rd-good             Adequate — the app's own good ink, contrast-safe
+
+   These are literal colours on purpose: a printed document must look the same
+   in light mode, dark mode and on paper, so it does not follow the app theme.
+   The paper is always white with black text.
+
+   Page size and margins (@page) are NOT here: a stylesheet imported by a route
+   stays loaded after you navigate away, and a global @page would then change
+   how every other screen prints. ReportPrintStyles renders it only while a
+   report is on screen.
+   ============================================================================ */
+
+.rd-desk {
+  --rd-green: #00b050;
+  --rd-red: #ff0000;
+  --rd-darkred: #943634;
+  --rd-amber: #8a5a00;
+  --rd-good: #05691f;
+  --rd-ink: #000000;
+  --rd-muted: #404040;
+  --rd-line: #000000;
+  --rd-head: #f2f2f2;
+  --rd-zebra: #fafafa;
+  --rd-ash: #c9c9c9;
+
+  background: color-mix(in srgb, var(--surface-sunken) 70%, #d9dcdb);
+  border-radius: 16px;
+  padding: 24px 16px;
+}
+
+.rd-paper {
+  box-sizing: border-box;
+  width: 210mm;
+  max-width: 100%;
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 25.4mm;
+  background: #ffffff;
+  color: var(--rd-ink);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.08),
+    0 12px 32px -12px rgb(0 0 0 / 0.25);
+  font-family: "Times New Roman", Times, Georgia, serif;
+  font-size: 12pt;
+  line-height: 1.4;
+  overflow-wrap: break-word;
+}
+.rd-paper + .rd-paper {
+  margin-top: 24px;
+}
+.rd-paper *,
+.rd-paper *::before,
+.rd-paper *::after {
+  box-sizing: border-box;
+}
+.rd-paper h1,
+.rd-paper h2,
+.rd-paper h3,
+.rd-paper p,
+.rd-paper ol {
+  margin: 0;
+}
+
+/* The frame is a layout table so its thead — the house header — repeats at the
+   top of every printed page. Browsers repeat a table's header group on each page
+   a table spans; nothing else repeats reliably. role="presentation" in the JSX. */
+.rd-frame {
+  width: 100%;
+  border-collapse: collapse;
+}
+.rd-frame > thead > tr > td,
+.rd-frame > tbody > tr > td {
+  padding: 0;
+  vertical-align: top;
+}
+.rd-frame > thead > tr > td {
+  padding-bottom: 14pt;
+}
+
+/* ── House header ─────────────────────────────────────────────────────────── */
+.rd-header {
+  display: flex;
+  align-items: stretch;
+  gap: 4pt;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.rd-header-accent {
+  flex: none;
+  width: 18pt;
+  background: var(--rd-green);
+}
+.rd-header-bar {
+  flex: 1;
+  min-width: 0;
+  background: var(--rd-green);
+  color: #000000; /* black on #00B050 is 7.4:1; white would be 2.8:1 */
+  font-weight: 700;
+  font-size: 12pt;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 3pt 8pt;
+}
+
+/* ── Title block ──────────────────────────────────────────────────────────── */
+.rd-title {
+  font-size: 18pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  text-decoration: underline;
+  text-underline-offset: 3pt;
+  text-align: center;
+  line-height: 1.25;
+}
+.rd-dateline {
+  margin-top: 6pt;
+  font-weight: 700;
+  text-align: center;
+}
+.rd-subtitle {
+  margin-top: 4pt;
+  text-align: center;
+  color: var(--rd-muted);
+  font-size: 11pt;
+}
+
+/* ── Sections ─────────────────────────────────────────────────────────────── */
+.rd-section {
+  margin-top: 16pt;
+}
+/* Dense documents (a month of daily rows) sit closer together so a full month and
+   its sign-off fit one A4 page. */
+.rd-section-tight {
+  margin-top: 10pt;
+}
+.rd-section > h2,
+.rd-h2 {
+  font-size: 12pt;
+  font-weight: 700;
+  margin-bottom: 6pt;
+  break-after: avoid;
+  page-break-after: avoid;
+}
+.rd-h2-green {
+  color: var(--rd-green);
+}
+.rd-h2-underline {
+  text-decoration: underline;
+  text-underline-offset: 2pt;
+}
+.rd-h2-large {
+  font-size: 13pt;
+}
+.rd-gap {
+  margin-top: 24pt;
+}
+.rd-keep {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.rd-body {
+  text-align: justify;
+}
+.rd-note {
+  margin-top: 6pt;
+  font-size: 10pt;
+  color: var(--rd-muted);
+}
+
+/* ── Tables ───────────────────────────────────────────────────────────────── */
+.rd-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.rd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11pt;
+}
+.rd-table caption {
+  caption-side: bottom;
+  text-align: left;
+  padding-top: 4pt;
+  font-size: 10pt;
+  color: var(--rd-muted);
+}
+.rd-table th,
+.rd-table td {
+  border: 1px solid var(--rd-line);
+  padding: 4pt 6pt;
+  vertical-align: top;
+  text-align: left;
+}
+.rd-table thead th {
+  background: var(--rd-head);
+  font-weight: 700;
+  font-size: 11.5pt;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.rd-table tbody tr:nth-child(even) td,
+.rd-table tbody tr:nth-child(even) th {
+  background: var(--rd-zebra);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.rd-table tbody th {
+  font-weight: 400;
+}
+.rd-table tr {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+/* Totals print once, at the end. A tfoot otherwise repeats at the foot of every
+   page the table spans, which would show the month total half-way down the month. */
+.rd-table tfoot {
+  display: table-row-group;
+}
+.rd-table tfoot td,
+.rd-table tfoot th {
+  font-weight: 700;
+  background: var(--rd-head);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.rd-num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.rd-nowrap {
+  white-space: nowrap;
+}
+.rd-compact {
+  font-size: 10pt;
+  line-height: 1.15;
+}
+.rd-compact th,
+.rd-compact td {
+  padding: 1pt 4pt;
+}
+.rd-compact thead th {
+  font-size: 10pt;
+}
+/* ── Shift shading (department matrices) ─────────────────────────────────────
+   Morning plain, Afternoon ash, Night black — the convention the plant asked for.
+   Shading carries meaning here, so the compact matrix drops zebra striping: the
+   only shaded cells on the sheet are shift cells. Figures stay legible on both:
+   black on ash (about 13:1), bold white on black. Selectors are long enough to
+   outrank the zebra rule above. */
+.rd-compact tbody tr:nth-child(even) td,
+.rd-compact tbody tr:nth-child(even) th {
+  background: none;
+}
+.rd-table tbody tr > td.rd-shift-afternoon {
+  background: var(--rd-ash);
+  color: #000000;
+}
+.rd-table tbody tr > td.rd-shift-night {
+  background: #000000;
+  color: #ffffff;
+  font-weight: 700;
+}
+.rd-shift-initials {
+  margin-left: 3pt;
+  font-size: 8.5pt;
+  color: var(--rd-muted);
+}
+/* Outranks `.rd-table tbody th { font-weight: 400 }`. */
+.rd-table tbody th.rd-sunday {
+  font-weight: 700;
+  font-style: italic;
+}
+.rd-legend {
+  display: inline-block;
+  min-width: 26pt;
+  margin: 0 3pt 0 1pt;
+  padding: 0 4pt;
+  border: 1px solid var(--rd-line);
+  font-size: 8.5pt;
+  text-align: center;
+  color: #000000;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.rd-legend-afternoon {
+  background: var(--rd-ash);
+}
+.rd-legend-night {
+  background: #000000;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+/* ── Status text ──────────────────────────────────────────────────────────── */
+.rd-status {
+  font-weight: 700;
+}
+.rd-status-critical,
+.rd-status-stockout,
+.rd-red {
+  color: var(--rd-red);
+}
+.rd-status-monitor {
+  color: var(--rd-amber);
+}
+.rd-status-adequate {
+  color: var(--rd-good);
+}
+
+/* ── ATTENTION callout ────────────────────────────────────────────────────── */
+.rd-attention {
+  margin-top: 8pt;
+}
+.rd-attention-label {
+  font-weight: 700;
+  text-decoration: underline;
+}
+.rd-attention-alert {
+  color: var(--rd-darkred);
+  font-weight: 700;
+}
+
+/* ── Action list ──────────────────────────────────────────────────────────── */
+.rd-actions {
+  padding-left: 22pt;
+}
+.rd-actions > li {
+  margin-top: 4pt;
+  padding-left: 2pt;
+}
+.rd-actions > li::marker {
+  font-weight: 700;
+}
+.rd-urgent {
+  font-weight: 700;
+}
+.rd-most-urgent {
+  font-weight: 700;
+  text-decoration: underline;
+  color: var(--rd-red);
+}
+
+/* ── Summary grid (matrix report) ─────────────────────────────────────────── */
+.rd-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border: 1px solid var(--rd-line);
+  break-inside: avoid;
+}
+.rd-summary > div {
+  padding: 4pt 6pt;
+  border-left: 1px solid var(--rd-line);
+}
+.rd-summary > div:first-child {
+  border-left: 0;
+}
+.rd-summary dt {
+  font-size: 9.5pt;
+  color: var(--rd-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.rd-summary dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.rd-signoff {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24pt;
+  margin-top: 14pt;
+  break-inside: avoid;
+}
+/* "Prepared by: ....BRIGHT AMOAH...." — the value sits on a dotted rule, so a
+   blank one (no name on the account) is still a line to write on. */
+.rd-signoff p {
+  display: flex;
+  align-items: baseline;
+  gap: 5pt;
+  font-size: 11pt;
+}
+.rd-signoff-label {
+  flex: none;
+  font-weight: 700;
+}
+.rd-signoff-value {
+  flex: 1;
+  min-width: 0;
+  min-height: 1.4em;
+  border-bottom: 1.5px dotted var(--rd-line);
+  text-align: center;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+}
+
+/* ── On-screen editing affordances (never printed) ────────────────────────── */
+.rd-edit-area {
+  display: block;
+  width: 100%;
+  min-height: 4.5em;
+  resize: vertical;
+  font: inherit;
+  color: inherit;
+  text-align: justify;
+  border: 1px dashed #9aa5a0;
+  border-radius: 4px;
+  padding: 4pt 6pt;
+  background: #fbfdfc;
+}
+.rd-edit-area:focus-visible,
+.rd-edit-input:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.rd-edit-input {
+  width: 100%;
+  min-height: 44px;
+  font: inherit;
+  color: inherit;
+  border: 1px dashed #9aa5a0;
+  border-radius: 4px;
+  padding: 4pt 6pt;
+  background: #fbfdfc;
+}
+.rd-print-only {
+  display: none;
+}
+
+/* ── Loading skeleton ─────────────────────────────────────────────────────── */
+.rd-skeleton {
+  display: block;
+  height: 11pt;
+  margin: 7pt 0;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #ececec 0%, #f6f6f6 50%, #ececec 100%);
+  background-size: 200% 100%;
+  animation: rd-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes rd-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rd-skeleton {
+    animation: none;
+  }
+}
+
+/* ── Phone width: the paper becomes the full width, tables scroll ────────── */
+/* Screen only: a printed A4 page is narrower than 760px, so without `screen` these
+   phone rules would also apply to the printout. */
+@media screen and (max-width: 760px) {
+  .rd-desk {
+    padding: 8px;
+    border-radius: 12px;
+  }
+  .rd-paper {
+    width: 100%;
+    min-height: 0;
+    padding: 18px 14px;
+    font-size: 11pt;
+  }
+  .rd-title {
+    font-size: 15pt;
+  }
+  .rd-table {
+    min-width: 520px;
+  }
+  .rd-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .rd-summary > div:nth-child(3) {
+    border-left: 0;
+  }
+  .rd-summary > div:nth-child(n + 3) {
+    border-top: 1px solid var(--rd-line);
+  }
+}
+
+/* ── Print ────────────────────────────────────────────────────────────────── */
+@media print {
+  .rd-desk {
+    background: none !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+  }
+  .rd-paper {
+    width: auto !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    font-size: 11.5pt;
+  }
+  .rd-paper + .rd-paper {
+    margin-top: 0 !important;
+    break-before: page;
+    page-break-before: always;
+  }
+  .rd-scroll {
+    overflow: visible !important;
+  }
+  .rd-table {
+    min-width: 0 !important;
+  }
+  .rd-screen-only {
+    display: none !important;
+  }
+  .rd-print-only {
+    display: block !important;
+  }
+  .rd-summary {
+    grid-template-columns: repeat(4, 1fr) !important;
+  }
+}
