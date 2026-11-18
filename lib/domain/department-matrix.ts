@@ -1,5 +1,5 @@
 import type { GenericProductionRecord } from "@/lib/domain/production-pivot"
-import { expectedShiftForGroup, groupsForDepartment, shiftRank } from "@/lib/shift-config"
+import { groupsForDepartment, shiftRank } from "@/lib/shift-config"
 import { hasProductSplit } from "@/lib/domain/dept-metrics"
 import type { Product } from "@/lib/db/types"
 
@@ -242,12 +242,10 @@ export function monthBounds(year: number, month: number): { from: string; to: st
 }
 
 // ── No work ─────────────────────────────────────────────────────────────────
-// A no-work record belongs to ONE group's shift, so the matrix marks it in that
-// group's cell ("No work") instead of only noting it against the day. The record
-// carries its shift and, usually, its group. When the group was not filled in, it
-// is the group the rotation rostered on that shift that week. If even the rotation
-// cannot say (a shift nobody was rostered on), it stays in Remarks only — the
-// matrix never guesses a group.
+// A no-work record sits on the matrix exactly as a production record does: under
+// the group that recorded it, on the date it was recorded. A record filed without
+// a group goes in Part Time, the column production filed without a group already
+// lands in (buildProductionPivotMatrix). Nothing is inferred from the rotation.
 
 export interface NoWorkRow {
   date: unknown
@@ -256,40 +254,40 @@ export interface NoWorkRow {
   reason: unknown
 }
 
+/** A matrix column: a rotation group, or Part Time (which also holds records with no group). */
+export type MatrixColumn = 1 | 2 | 3 | "pt"
+
 export interface NoWorkPlacement {
-  /** "date|group" → the shift that did not run, for the cells to mark. */
-  cells: Map<string, string>
+  /** "date|column" → the shift(s) that did not run, for the cells to mark. */
+  cells: Map<string, string[]>
   /** date → "Night (Group 2): Power outage; …", in shift order, for the Remarks column. */
   remarks: Map<string, string>
 }
 
-export const noWorkCellKey = (date: string, group: number) => `${date}|${group}`
+export const noWorkCellKey = (date: string, column: MatrixColumn) => `${date}|${column}`
 
-/** The group the rotation rostered on `shift` in the week of `dateISO`, or null. */
-export function rosteredGroupFor(department: string, shift: string, dateISO: string): MatrixGroup | null {
-  const day = new Date(`${dateISO}T00:00:00Z`)
-  if (Number.isNaN(day.getTime())) return null
-  for (const g of groupsForDepartment(department)) {
-    if ((g === 1 || g === 2 || g === 3) && expectedShiftForGroup(department, g, day) === shift) return g
-  }
-  return null
+/** The column a record belongs in, by the group it was filed under. */
+export function columnForGroup(groupNumber: unknown): MatrixColumn {
+  const g = Number(groupNumber)
+  return groupNumber != null && (g === 1 || g === 2 || g === 3) ? g : "pt"
 }
 
-export function placeNoWork(department: string, rows: NoWorkRow[]): NoWorkPlacement {
-  const cells = new Map<string, string>()
+export function placeNoWork(rows: NoWorkRow[]): NoWorkPlacement {
+  const cells = new Map<string, string[]>()
   const byDate = new Map<string, { rank: number; text: string }[]>()
   for (const r of rows) {
     const date = String(r.date)
     const shift = r.shift ? String(r.shift) : ""
-    const filed = Number(r.group_number)
-    const group: MatrixGroup | null =
-      filed === 1 || filed === 2 || filed === 3 ? filed : shift ? rosteredGroupFor(department, shift, date) : null
-    if (group !== null && shift) cells.set(noWorkCellKey(date, group), shift)
+    const column = columnForGroup(r.group_number)
+    const key = noWorkCellKey(date, column)
+    const shifts = cells.get(key) ?? []
+    if (shift && !shifts.includes(shift)) shifts.push(shift)
+    cells.set(key, shifts)
 
     const reason = String(r.reason ?? "").trim()
     if (!reason) continue
-    const who = [shift, group !== null ? `(Group ${group})` : ""].filter(Boolean).join(" ")
-    const text = who ? `${who}: ${reason}` : reason
+    const who = [shift, column === "pt" ? "(no group)" : `(Group ${column})`].filter(Boolean).join(" ")
+    const text = `${who}: ${reason}`
     const list = byDate.get(date) ?? []
     if (!list.some((e) => e.text === text)) list.push({ rank: shift ? shiftRank(shift) : -1, text })
     byDate.set(date, list)

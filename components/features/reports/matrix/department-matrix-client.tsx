@@ -52,8 +52,8 @@ interface Sheet {
   measure: MatrixMeasure
   matrix: ProductionPivotMatrix
   remarks: Map<string, string>
-  /** "date|group" → the shift that did not run (see placeNoWork). */
-  noWorkCells: Map<string, string>
+  /** "date|column" → the shift(s) that did not run (see placeNoWork). */
+  noWorkCells: Map<string, string[]>
 }
 
 const ALL = "all"
@@ -71,19 +71,21 @@ const cell = (n: number) => (n === 0 ? "–" : fmtQty(n))
 function GroupCell({
   value,
   shifts,
-  noWorkShift,
+  noWorkShifts = [],
 }: {
   value: number
   shifts: { shift: string; value: number }[]
-  noWorkShift?: string
+  noWorkShifts?: string[]
 }) {
   const produced = cellShift(shifts)
-  const tone = produced.tone !== "none" || !noWorkShift ? produced.tone : cellShift([{ shift: noWorkShift, value: 1 }]).tone
+  const idle = noWorkShifts.length > 0 ? cellShift(noWorkShifts.map((shift) => ({ shift, value: 1 }))) : null
+  const tone = produced.tone !== "none" || !idle ? produced.tone : idle.tone
   const shiftClass = tone === "afternoon" || tone === "night" ? ` rd-shift-${tone}` : ""
-  if (noWorkShift && value === 0) {
+  if (idle && value === 0) {
     return (
       <td className={`rd-num${shiftClass}`}>
         <span className="rd-no-work">No work</span>
+        {idle.initials && <span className="rd-shift-initials">({idle.initials})</span>}
       </td>
     )
   }
@@ -91,7 +93,7 @@ function GroupCell({
     <td className={`rd-num${shiftClass}`}>
       {cell(value)}
       {produced.initials && <span className="rd-shift-initials">({produced.initials})</span>}
-      {noWorkShift && <span className="rd-no-work rd-no-work-note">no work filed</span>}
+      {idle && <span className="rd-no-work rd-no-work-note">no work filed</span>}
     </td>
   )
 }
@@ -107,7 +109,7 @@ function MatrixSheet({ sheet, preparedBy }: { sheet: Sheet; preparedBy: string |
   const groups = matrixGroupColumns(
     def.department,
     s,
-    [...noWorkCells.keys()].map((k) => Number(k.split("|")[1])),
+    [...noWorkCells.keys()].map((k) => Number(k.split("|")[1])).filter((g) => g > 0),
   )
   const label = `${def.department} — ${measure.label}`
   return (
@@ -147,8 +149,8 @@ function MatrixSheet({ sheet, preparedBy }: { sheet: Sheet; preparedBy: string |
             <>
               Figures in {measure.unit}. Shift: <span className="rd-legend">Morning</span>
               <span className="rd-legend rd-legend-afternoon">Afternoon</span>
-              <span className="rd-legend rd-legend-night">Night</span>. (M+N): two shifts in one cell. &ldquo;No work&rdquo;: that
-              group&rsquo;s shift did not run, reason in Remarks. Part Time includes records without a group.
+              <span className="rd-legend rd-legend-night">Night</span>. (M+N): two shifts in one cell. &ldquo;No work&rdquo;: shown under the
+              group that recorded it, reason in Remarks. Part Time includes records without a group.
             </>
           }
         >
@@ -176,10 +178,14 @@ function MatrixSheet({ sheet, preparedBy }: { sheet: Sheet; preparedBy: string |
                     key={g}
                     value={r[GROUP_CELL[g]].value}
                     shifts={r[GROUP_CELL[g]].shifts}
-                    noWorkShift={noWorkCells.get(noWorkCellKey(r.date, g))}
+                    noWorkShifts={noWorkCells.get(noWorkCellKey(r.date, g))}
                   />
                 ))}
-                <GroupCell value={r.partTime.value} shifts={r.partTime.shifts} />
+                <GroupCell
+                  value={r.partTime.value}
+                  shifts={r.partTime.shifts}
+                  noWorkShifts={noWorkCells.get(noWorkCellKey(r.date, "pt"))}
+                />
                 <td className="rd-num">
                   <strong>{cell(r.total)}</strong>
                 </td>
@@ -281,10 +287,7 @@ export function DepartmentMatrixClient({ preparedBy }: { preparedBy: string | nu
     return selectedDefs.flatMap((def) => {
       const recs = records.get(def.key)
       if (!recs) return []
-      const { cells: noWorkCells, remarks } = placeNoWork(
-        def.department,
-        noWork.filter((n) => n.department === def.department),
-      )
+      const { cells: noWorkCells, remarks } = placeNoWork(noWork.filter((n) => n.department === def.department))
       return matrixMeasures(def)
         .filter((m) => measureKey === ALL || department === ALL || m.key === measureKey)
         .map((measure) => ({

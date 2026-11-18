@@ -7,9 +7,9 @@ import {
   measureValue,
   cellShift,
   monthBounds,
+  columnForGroup,
   noWorkCellKey,
   placeNoWork,
-  rosteredGroupFor,
   readBlendingRow,
   readBlowingRow,
   readFillingRow,
@@ -133,45 +133,44 @@ describe("monthBounds", () => {
 })
 
 describe("placeNoWork", () => {
-  // The rotation's own anchor week (Monday 13 April 2026): Group 1 Afternoon,
-  // Group 2 Night, Group 3 Morning. Blending's anchor (5 May 2025): Group 1
-  // Morning, Group 2 Afternoon, no Night.
-  it("knows which group the rotation put on a shift", () => {
-    expect(rosteredGroupFor("Packaging", "Night", "2026-04-15")).toBe(2)
-    expect(rosteredGroupFor("Packaging", "Morning", "2026-04-15")).toBe(3)
-    expect(rosteredGroupFor("Alcohol and Blending", "Afternoon", "2025-05-06")).toBe(2)
-    expect(rosteredGroupFor("Alcohol and Blending", "Night", "2025-05-06")).toBeNull()
-    expect(rosteredGroupFor("Packaging", "Night", "not-a-date")).toBeNull()
-  })
-
-  it("marks the group the record names, else the rostered group, in that cell", () => {
-    const { cells } = placeNoWork("Packaging", [
-      { date: "2026-04-15", shift: "Night", group_number: null, reason: "Power outage" },
-      { date: "2026-04-16", shift: "Morning", group_number: 1, reason: "Covering another line" },
+  it("puts a no-work under the group that recorded it, on its date, like a production record", () => {
+    const { cells } = placeNoWork([
+      { date: "2026-10-14", shift: "Night", group_number: 2, reason: "Power outage" },
+      { date: "2026-10-21", shift: "Morning", group_number: "1", reason: "Sealer under repair" },
     ])
     expect([...cells]).toEqual([
-      [noWorkCellKey("2026-04-15", 2), "Night"],
-      [noWorkCellKey("2026-04-16", 1), "Morning"],
+      [noWorkCellKey("2026-10-14", 2), ["Night"]],
+      [noWorkCellKey("2026-10-21", 1), ["Morning"]],
     ])
   })
 
-  it("leaves a no-work it cannot place in Remarks only", () => {
-    const { cells, remarks } = placeNoWork("Alcohol and Blending", [
-      { date: "2025-05-06", shift: "Night", group_number: null, reason: "No night line" },
+  it("puts a no-work filed without a group in Part Time, where group-less production goes", () => {
+    expect(columnForGroup(null)).toBe("pt")
+    expect(columnForGroup(undefined)).toBe("pt")
+    expect(columnForGroup(0)).toBe("pt")
+    expect(columnForGroup(3)).toBe(3)
+    const { cells, remarks } = placeNoWork([{ date: "2026-10-14", shift: "Night", group_number: null, reason: "Power outage" }])
+    expect([...cells]).toEqual([[noWorkCellKey("2026-10-14", "pt"), ["Night"]]])
+    expect(remarks.get("2026-10-14")).toBe("Night (no group): Power outage")
+  })
+
+  it("keeps both shifts when one group files no-work for two shifts on a day", () => {
+    const { cells } = placeNoWork([
+      { date: "2026-10-14", shift: "Night", group_number: 1, reason: "a" },
+      { date: "2026-10-14", shift: "Morning", group_number: 1, reason: "b" },
     ])
-    expect(cells.size).toBe(0)
-    expect(remarks.get("2025-05-06")).toBe("Night: No night line")
+    expect(cells.get(noWorkCellKey("2026-10-14", 1))).toEqual(["Night", "Morning"])
   })
 
   it("names the group in Remarks, in shift order, without duplicates", () => {
-    const { remarks } = placeNoWork("Packaging", [
-      { date: "2026-04-15", shift: "Night", reason: "Power outage" },
-      { date: "2026-04-15", shift: "Morning", reason: "No preforms" },
-      { date: "2026-04-15", shift: "Night", reason: "Power outage" },
-      { date: "2026-04-16", shift: "Afternoon", reason: "  " },
+    const { remarks } = placeNoWork([
+      { date: "2026-10-14", shift: "Night", group_number: 2, reason: "Power outage" },
+      { date: "2026-10-14", shift: "Morning", group_number: 3, reason: "No preforms" },
+      { date: "2026-10-14", shift: "Night", group_number: 2, reason: "Power outage" },
+      { date: "2026-10-15", shift: "Afternoon", group_number: 1, reason: "  " },
     ])
-    expect(remarks.get("2026-04-15")).toBe("Morning (Group 3): No preforms; Night (Group 2): Power outage")
-    expect(remarks.has("2026-04-16")).toBe(false)
+    expect(remarks.get("2026-10-14")).toBe("Morning (Group 3): No preforms; Night (Group 2): Power outage")
+    expect(remarks.has("2026-10-15")).toBe(false)
   })
 })
 
