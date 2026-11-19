@@ -25,7 +25,7 @@ import {
   getDaysInMonth,
   type ProductionPivotMatrix,
 } from "@/lib/domain/production-pivot"
-import { FILLING_SELECT, readFillingRow, type FillingRecordRow } from "@/lib/domain/department-matrix"
+import { FILLING_SELECT, readFillingRow, type FillingRecordRow, noWorkCellKey, placeNoWork, type NoWorkPlacement } from "@/lib/domain/department-matrix"
 import { Card, Eyebrow, StatTile, Chip } from "@/components/primitives"
 import { cn } from "@/lib/utils"
 
@@ -75,6 +75,9 @@ export function FillingPivotTable({
 
   const [records, setRecords] = useState<FillingRecordRow[]>([])
   const [noWorkMap, setNoWorkMap] = useState<Map<string, string>>(new Map())
+  // No-work placed under the group that recorded it, on its date (placeNoWork — the
+  // same rule as the printed matrix): "date|group" cells and per-date reasons.
+  const [noWorkCells, setNoWorkCells] = useState<NoWorkPlacement>({ cells: new Map(), remarks: new Map() })
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
 
@@ -97,7 +100,7 @@ export function FillingPivotTable({
           .order("date", { ascending: true }),
         supabase
           .from("no_work_records")
-          .select("date, shift, department, reason")
+          .select("date, shift, group_number, department, reason")
           .eq("department", "Filling Line")
           .gte("date", fromDate)
           .lte("date", toDate),
@@ -122,6 +125,7 @@ export function FillingPivotTable({
         nwMap.set(key, existing ? `${existing}; ${entry}` : entry)
       }
       setNoWorkMap(nwMap)
+      setNoWorkCells(placeNoWork(nwRes.data ?? []))
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : "Failed to load filling line records")
       setRecords([])
@@ -595,7 +599,16 @@ export function FillingPivotTable({
                                 </span>
                               </div>
                             ) : (
+                              noWorkCells.cells.has(noWorkCellKey(r.date, 1)) ? (
+                              <span
+                                className="text-[11px] font-bold text-amber-700 dark:text-amber-400 whitespace-nowrap"
+                                title={noWorkCells.remarks.get(r.date)}
+                              >
+                                No work
+                              </span>
+                            ) : (
                               <span className="text-ink-muted/40 text-xs">—</span>
+                            )
                             )}
                           </td>
 
@@ -609,7 +622,16 @@ export function FillingPivotTable({
                                 </span>
                               </div>
                             ) : (
+                              noWorkCells.cells.has(noWorkCellKey(r.date, 2)) ? (
+                              <span
+                                className="text-[11px] font-bold text-amber-700 dark:text-amber-400 whitespace-nowrap"
+                                title={noWorkCells.remarks.get(r.date)}
+                              >
+                                No work
+                              </span>
+                            ) : (
                               <span className="text-ink-muted/40 text-xs">—</span>
+                            )
                             )}
                           </td>
 
@@ -623,7 +645,16 @@ export function FillingPivotTable({
                                 </span>
                               </div>
                             ) : (
+                              noWorkCells.cells.has(noWorkCellKey(r.date, 3)) ? (
+                              <span
+                                className="text-[11px] font-bold text-amber-700 dark:text-amber-400 whitespace-nowrap"
+                                title={noWorkCells.remarks.get(r.date)}
+                              >
+                                No work
+                              </span>
+                            ) : (
                               <span className="text-ink-muted/40 text-xs">—</span>
+                            )
                             )}
                           </td>
 
@@ -637,7 +668,16 @@ export function FillingPivotTable({
                                 </span>
                               </div>
                             ) : (
+                              noWorkCells.cells.has(noWorkCellKey(r.date, "pt")) ? (
+                              <span
+                                className="text-[11px] font-bold text-amber-700 dark:text-amber-400 whitespace-nowrap"
+                                title={noWorkCells.remarks.get(r.date)}
+                              >
+                                No work
+                              </span>
+                            ) : (
                               <span className="text-ink-muted/40 text-xs">—</span>
+                            )
                             )}
                           </td>
                         </>
