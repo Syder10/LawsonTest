@@ -145,8 +145,9 @@ The same derivation covers tax stamps and cartons: received from
 editing a packaging record self-corrects the stamp balance, which the old
 insert-only trigger could not do.
 
-**Finished goods are derived too**: `Σ produced − Σ loaded` per product from
-`packaging_daily_records`, via `finished_goods_stock()`. The stored
+**Finished goods are derived too**: `Σ produced − Σ dispatched + Σ returns` per
+product, via `finished_goods_stock()` — production from `packaging_daily_records`,
+the outbound count from the stock dispatch log (0014). The stored
 `packaging_live_stocks` running total was dropped because it drifted on edits and
 could go negative.
 
@@ -205,11 +206,11 @@ Design notes:
   at most one line per product and quantities cannot be double-entered.
 - **`cartons > 0`**, not `>= 0`: a zero line is noise, and FR-13 requires at
   least one real quantity.
-- **Dispatch does not touch `finished_goods_stock()`.** See PRD.md §3.3. The
-  balance keeps deriving from `quantity_cartons_loaded`; dispatch is the delivery
-  history beside it, with no variance report. The two figures may differ and the
-  system will not flag it — that is the decision, recorded here so nobody "fixes"
-  it by accident.
+- **Dispatch drives `finished_goods_stock()`** (migration 0014, confirmed by the
+  business 2026-11-19, reversing the original PRD.md §3.3 decision). The balance
+  deducts `dispatch_lines.cartons`; `quantity_cartons_loaded` on the packaging
+  form is still collected but no longer deducts anything. There is no variance
+  report between the two. `06_stock_separation.sql` asserts this.
 
 ## 4. Roles and access control
 

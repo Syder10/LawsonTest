@@ -61,10 +61,11 @@ movement, `procurement` reduced to read-only, plus supplier invoices and a
 dispatch log with vehicle, driver and destination. Approved, not built. Phases:
 database → domain/lib → API → UI, with a review gate after each.
 
-Two decisions in that spec look like bugs and are not:
+Two decisions in that spec are easy to get wrong:
 
-- **Dispatch does not feed the finished-goods balance and there is no variance
-  report** (PRD.md §3.3). Dispatched totals may differ from
-  `quantity_cartons_loaded` and nothing flags it.
+- **The dispatch log drives the finished-goods balance** (migration 0014,
+  PRD.md §3.3, confirmed 2026-11-19): available = Σ produced − Σ dispatched +
+  Σ returns. `quantity_cartons_loaded` is still on the packaging form but no
+  longer moves the balance. There is no variance report between the two.
 - **An invoice's declared total may disagree with its line sum.** Warn, never
   block.

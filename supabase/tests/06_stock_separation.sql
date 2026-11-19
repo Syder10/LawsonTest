@@ -684,44 +684,61 @@ begin
   raise notice 'PASS security context is correct on all four new functions';
 end $$;
 
--- ════════════════════════ the decision that must NOT be "fixed" ════════════════════════
+-- ════════════════════════ dispatch drives the finished-goods balance (0014) ════════════════════════
 --
--- Dispatch is deliberately NOT wired into the finished-goods balance, and there is
--- no variance report (PRD.md §3.3). finished_goods_stock() keeps deriving from
--- packaging_daily_records.quantity_cartons_loaded.
+-- Since 0014 (confirmed by the business, 2026-11-19) finished_goods_stock() deducts
+-- what the STOCK DISPATCH LOG says went out:
 --
--- This test asserts the DIVERGENCE, so anyone who later "fixes" it by making
--- dispatch feed the balance gets a failing test pointing at the decision rather
--- than a silent change in what the finished-goods number means.
+--   available    = Σ packaging produced − Σ dispatch_lines.cartons + Σ product_returns
+--   total_loaded = Σ dispatch_lines.cartons
 --
--- Measured as a DELTA: finished_goods_stock() is cumulative over every packaging
--- row ever written, and three earlier suites insert Bitters rows.
+-- packaging_daily_records.quantity_cartons_loaded is still collected on the form but
+-- no longer moves the balance. These assertions pin both halves, so a regression
+-- back to the packaging field fails here with a pointer to the decision.
+--
+-- Measured as DELTAS: the function is cumulative over every row ever written, and
+-- earlier suites insert packaging rows and dispatches.
 do $$
-declare v_before numeric; v_after numeric; v_dispatched numeric;
+declare v_before numeric; v_mid numeric; v_after numeric;
+        v_loaded_before numeric; v_loaded_after numeric; d public.dispatches;
 begin
-  select available into v_before from public.finished_goods_stock() where product = 'Bitters';
+  select available, total_loaded into v_before, v_loaded_before
+    from public.finished_goods_stock() where product = 'Bitters';
   v_before := coalesce(v_before, 0);
 
-  -- 300 produced, 50 of them recorded as loaded on the packaging record.
+  -- 300 produced, 50 typed as loaded on the packaging form: the balance rises by
+  -- the full 300, because that form figure no longer deducts anything.
   insert into public.packaging_daily_records
     (date, shift, department, product, quantity_cartons_produced, quantity_cartons_loaded, user_id)
   values ('2026-11-10', 'Night', 'Packaging', 'Bitters', 300, 50,
           'd0000000-0000-0000-0000-00000000000d');
+  select available into v_mid from public.finished_goods_stock() where product = 'Bitters';
+  assert v_mid - v_before = 300, format(
+    'packaging loaded must not move the balance since 0014 (expected +300, got %s) — see PRD.md §3.3',
+    v_mid - v_before);
 
-  select available into v_after from public.finished_goods_stock() where product = 'Bitters';
-  select cartons  into v_dispatched
-    from public.dispatch_totals('2026-11-10', '2026-11-10') where product = 'Bitters';
+  -- A dispatch of 80 Bitters cartons takes exactly 80 off the balance and shows as loaded.
+  set local role authenticated;
+  perform set_config('request.jwt.claim.sub', 'a0000000-0000-0000-0000-00000000000a', true);
+  d := public.record_dispatch(
+    '2026-11-11', 'Morning', 'GT-7000-26', 'Yaw Owusu', 'Head Office',
+    '[{"product":"Bitters","cartons":80}]'::jsonb
+  );
+  reset role;
+  select available, total_loaded into v_after, v_loaded_after
+    from public.finished_goods_stock() where product = 'Bitters';
+  assert v_mid - v_after = 80, format('a dispatch of 80 must deduct 80, deducted %s', v_mid - v_after);
+  assert v_loaded_after - coalesce(v_loaded_before, 0) = 80, format(
+    'total_loaded must be the dispatch log total (expected +80, got %s)',
+    v_loaded_after - coalesce(v_loaded_before, 0));
 
-  -- The balance moves by produced − loaded = 250, from the packaging field ALONE.
-  -- The 195 Bitters cartons in the dispatch log do not enter this figure at all.
-  assert v_after - v_before = 250, format(
-    'finished_goods_stock must move by produced − quantity_cartons_loaded only '
-    '(expected +250, got %s). If dispatch now feeds the balance, that is a scope '
-    'change — see PRD.md §3.3.', v_after - v_before);
-  assert v_dispatched = 195, format('dispatch log expected 195 Bitters, got %s', v_dispatched);
-  assert v_after - v_before <> 300 - v_dispatched,
-    'the two figures are expected to DIVERGE by design';
-  raise notice 'PASS dispatch does not feed the finished-goods balance (deliberate — PRD.md §3.3)';
+  -- And the whole figure equals the formula over independent aggregates.
+  assert v_after =
+      (select coalesce(sum(quantity_cartons_produced), 0) from public.packaging_daily_records where product = 'Bitters')
+    - (select coalesce(sum(cartons), 0) from public.dispatch_lines where product = 'Bitters')
+    + (select coalesce(sum(cartons), 0) from public.product_returns where product = 'Bitters'),
+    'available must equal produced − dispatched + returned';
+  raise notice 'PASS the dispatch log drives the finished-goods balance; packaging loaded does not (0014)';
 end $$;
 
 select '✓ 06_stock_separation.sql — role split, invoices and dispatch behaviour tests passed' as result;

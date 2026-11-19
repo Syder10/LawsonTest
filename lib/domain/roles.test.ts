@@ -11,8 +11,10 @@ import {
   canWriteStock,
   activeNavHref,
   sideNavFor,
+  STOCK_READ_ROLES,
+  STOCK_WRITE_ROLES,
 } from "@/lib/domain/roles"
-import { existsSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
 describe("navFor", () => {
@@ -305,37 +307,74 @@ describe("roleLabel", () => {
 })
 
 describe("sideNavFor", () => {
-  it("gives the stock role a sidebar and every other role none", () => {
-    expect(sideNavFor("stock")).not.toBeNull()
-    for (const role of ROLES.filter((r) => r !== "stock")) expect(sideNavFor(role)).toBeNull()
+  const OFFICE_ROLES = ["stock", "procurement", "manager", "qc_manager"] as const
+
+  it("gives the four office roles a sidebar and every other role none", () => {
+    for (const role of OFFICE_ROLES) expect(sideNavFor(role), role).not.toBeNull()
+    for (const role of ROLES.filter((r) => !(OFFICE_ROLES as readonly string[]).includes(r))) expect(sideNavFor(role), role).toBeNull()
     expect(sideNavFor("nonsense")).toBeNull()
   })
 
-  const items = (sideNavFor("stock") ?? []).flatMap((s) => s.items)
+  const itemsFor = (role: string) => (sideNavFor(role) ?? []).flatMap((s) => s.items)
+  const pageFile = (href: string) => join(process.cwd(), "app", ...href.split("/").filter(Boolean), "page.tsx")
 
-  it("lists each destination once", () => {
-    expect(new Set(items.map((i) => i.key)).size).toBe(items.length)
-    expect(new Set(items.map((i) => i.href)).size).toBe(items.length)
-  })
+  // Which roles a page admits, read from the guard the page itself calls. Role lists
+  // come from the same constants the guards use, so this cannot drift from them.
+  function admits(href: string, role: string): boolean {
+    const src = readFileSync(pageFile(href), "utf8")
+    if (src.includes("requireStockWrite(")) return (STOCK_WRITE_ROLES as string[]).includes(role)
+    if (src.includes("requireStockRead(")) return (STOCK_READ_ROLES as string[]).includes(role)
+    if (src.includes("requireManager(")) return role === "manager"
+    if (src.includes("requireQcAccess(")) return ["qc_officer", "qc_manager", "admin"].includes(role)
+    const named = [...src.matchAll(/role === "([a-z_]+)"/g)].map((m) => m[1])
+    return named.length === 0 || named.includes(role)
+  }
 
-  it("only links to pages that exist", () => {
-    for (const { href } of items) {
-      const page = join(process.cwd(), "app", ...href.split("/").filter(Boolean), "page.tsx")
-      expect(existsSync(page), href).toBe(true)
+  for (const role of OFFICE_ROLES) {
+    describe(role, () => {
+      const items = itemsFor(role)
+
+      it("lists each destination once", () => {
+        expect(new Set(items.map((i) => i.key)).size).toBe(items.length)
+        expect(new Set(items.map((i) => i.href)).size).toBe(items.length)
+      })
+
+      it("only links to pages that exist and that this role may open", () => {
+        for (const { href } of items) {
+          expect(existsSync(pageFile(href)), href).toBe(true)
+          expect(admits(href, role), `${role} → ${href}`).toBe(true)
+        }
+      })
+
+      it("covers every bottom tab, so desktop loses nothing", () => {
+        const hrefs = new Set(items.map((i) => i.href))
+        for (const tab of navFor(role)) {
+          const owned = items.some((i) => i.href === tab.href || (i.extraPrefixes ?? []).includes(tab.href))
+          expect(hrefs.has(tab.href) || owned, tab.href).toBe(true)
+        }
+      })
+    })
+  }
+
+  it("keeps Receive & issue to the stock role, the only one that may record it", () => {
+    for (const role of OFFICE_ROLES) {
+      expect(itemsFor(role).some((i) => i.key === "receive"), role).toBe(role === "stock")
     }
   })
 
-  it("covers every bottom tab of the stock role, so desktop loses nothing", () => {
-    const hrefs = new Set(items.map((i) => i.href))
-    for (const tab of navFor("stock")) expect(hrefs.has(tab.href), tab.href).toBe(true)
-  })
-
   it("lights the most specific item, and Home only on Home", () => {
-    expect(activeNavHref("/dashboard", items)).toBe("/dashboard")
-    expect(activeNavHref("/dashboard/stock", items)).toBe("/dashboard/stock")
-    expect(activeNavHref("/dashboard/stock/herbs", items)).toBe("/dashboard/stock/herbs")
-    expect(activeNavHref("/dashboard/stock/material/alcohol", items)).toBe("/dashboard/stock")
-    expect(activeNavHref("/dashboard/stock/dispatch/new", items)).toBe("/dashboard/stock/dispatch")
-    expect(activeNavHref("/dashboard/qc", items)).toBeNull()
+    const stock = itemsFor("stock")
+    expect(activeNavHref("/dashboard", stock)).toBe("/dashboard")
+    expect(activeNavHref("/dashboard/stock", stock)).toBe("/dashboard/stock")
+    expect(activeNavHref("/dashboard/stock/herbs", stock)).toBe("/dashboard/stock/herbs")
+    expect(activeNavHref("/dashboard/stock/material/alcohol", stock)).toBe("/dashboard/stock")
+    expect(activeNavHref("/dashboard/stock/dispatch/new", stock)).toBe("/dashboard/stock/dispatch")
+    expect(activeNavHref("/dashboard/qc", stock)).toBeNull()
+    const manager = itemsFor("manager")
+    expect(activeNavHref("/dashboard/reports/matrix", manager)).toBe("/dashboard/reports/matrix")
+    expect(activeNavHref("/dashboard/reports", manager)).toBe("/dashboard/reports")
+    const qc = itemsFor("qc_manager")
+    expect(activeNavHref("/dashboard/qc/new", qc)).toBe("/dashboard/qc/new")
+    expect(activeNavHref("/dashboard/qc/0b6f-uuid", qc)).toBe("/dashboard/qc/history")
   })
 })

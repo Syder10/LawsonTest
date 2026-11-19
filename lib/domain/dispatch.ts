@@ -17,16 +17,15 @@ export const isDispatchBranch = (value: string): value is DispatchBranch =>
 // outbound carton was `packaging_daily_records.quantity_cartons_loaded`, a number
 // with no destination. This module owns the shapes and the aggregation.
 //
-// DISPATCH IS NOT A STOCK MOVEMENT HERE. It does not feed the finished-goods
-// balance, and there is no variance report. `finished_goods_stock()` keeps deriving
-// from `quantity_cartons_loaded`; this log sits beside it and answers a different
-// question — "where did the goods go", not "how many left".
+// DISPATCH IS THE OUTBOUND STOCK MOVEMENT. Since migration 0014 (confirmed by the
+// business 2026-11-19, reversing the original PRD.md §3.3 decision),
+// `finished_goods_stock()` deducts `dispatch_lines.cartons`:
 //
-// So dispatched totals may differ from cartons loaded, and nothing flags the
-// difference. That is a decision, not an oversight (PRD.md §3.3), asserted in
-// supabase/tests/06_stock_separation.sql so it cannot be "fixed" silently. If the
-// business ever wants one authoritative number, that is a separate decision with a
-// data migration attached.
+//   available = Σ packaging produced − Σ dispatched + Σ returns
+//
+// `packaging_daily_records.quantity_cartons_loaded` is still collected on the
+// packaging form but no longer moves the balance, and there is no variance report
+// between the two. Asserted in supabase/tests/06_stock_separation.sql.
 // ============================================================================
 
 /** A dispatch with its per-product quantities, as the API returns it. */

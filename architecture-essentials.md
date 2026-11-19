@@ -53,7 +53,8 @@ Reads go through `SECURITY DEFINER` functions (`stock_opening`,
 spans supervisors that RLS correctly hides from each other.
 
 Same model for tax stamps and cartons (received from receipts, consumed as
-`cartons produced × packaging_bom`). Finished goods too: `Σ produced − Σ loaded`.
+`cartons produced × packaging_bom`). Finished goods too:
+`Σ produced − Σ dispatched + Σ returns` (dispatch log, since 0014).
 
 **PPE is the exception** — a stored running total in `consumable_stock`, because
 its issued events are not reconstructable from anything else.
@@ -181,10 +182,9 @@ raw_materials_received  + invoice_line_id  null, on delete set null
   **warned, never blocked** — real invoices carry freight and tax, and refusing a
   real document makes users type fake numbers.
 - `invoice_line_id` is nullable: goods arrive before paperwork.
-- **Dispatch does not feed the finished-goods balance and there is no variance
-  report.** The balance keeps deriving from `quantity_cartons_loaded`. The two
-  figures may differ and the system will not flag it — that is the decision
-  (PRD.md §3.3), not an oversight.
+- **The dispatch log drives the finished-goods balance** (0014, confirmed
+  2026-11-19). `quantity_cartons_loaded` on the packaging form no longer moves
+  it, and there is no variance report between the two (PRD.md §3.3).
 
 ## 12. Gates
 

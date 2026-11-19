@@ -201,16 +201,19 @@ export function activeNavHref(pathname: string, all: NavDestination[]): string |
   return bestItem?.href ?? null
 }
 
-// ── Side navigation (stock office) ──────────────────────────────────────────
-// The stock office works at a desk across a dozen screens — receipts, invoices,
-// dispatch, returns, counts, reports — which a five-tab bar cannot hold. On a
-// desktop the stock role gets an ERP-style left sidebar with every screen, grouped
-// by what the office is doing. Phones keep the five bottom tabs above.
+// ── Side navigation (office roles) ──────────────────────────────────────────
+// The offices work at a desk across many screens — receipts, invoices, dispatch,
+// returns, reports, inspections — which a five-tab bar cannot hold. On a desktop the
+// stock office, procurement, the manager and the QC manager get an ERP-style left
+// sidebar with every screen they can open, grouped by what the office is doing.
+// Phones keep the five bottom tabs above.
 //
-// Presentation only, like every nav list here: each route still runs its own guard.
+// Presentation only, like every nav list here: each route still runs its own guard,
+// and every item below is a page that role's guard admits (asserted in roles.test).
 
 export type SideNavKey =
   | "home"
+  | "production"
   | "stock"
   | "herbs"
   | "analysis"
@@ -219,8 +222,13 @@ export type SideNavKey =
   | "dispatch"
   | "returns"
   | "donations"
+  | "matrix"
+  | "reports"
   | "monthly-report"
   | "procurement-report"
+  | "qc-new"
+  | "qc-history"
+  | "qc-standards"
   | "history"
   | "profile"
 
@@ -234,43 +242,67 @@ export interface SideNavSection {
   items: SideNavItem[]
 }
 
-const STOCK_SIDE_NAV: SideNavSection[] = [
-  { heading: "Overview", items: [{ key: "home", href: "/dashboard", label: "Dashboard" }] },
-  {
-    heading: "Inventory",
-    items: [
-      { key: "stock", href: "/dashboard/stock", label: "Stock levels", extraPrefixes: ["/dashboard/stock/material"] },
-      { key: "herbs", href: "/dashboard/stock/herbs", label: "Herbs" },
-      { key: "analysis", href: "/dashboard/stock/analysis", label: "Stock analysis" },
-    ],
-  },
-  {
-    heading: "Movements",
-    items: [
-      { key: "receive", href: "/dashboard/stock/receipts", label: "Receive & issue" },
-      { key: "invoices", href: "/dashboard/stock/invoices", label: "Supplier invoices" },
-      { key: "dispatch", href: "/dashboard/stock/dispatch", label: "Dispatch" },
-      { key: "returns", href: "/dashboard/stock/returns", label: "Product returns" },
-      { key: "donations", href: "/dashboard/stock/donations", label: "Donations" },
-    ],
-  },
-  {
-    heading: "Reports",
-    items: [
-      { key: "monthly-report", href: "/dashboard/stock/monthly-report", label: "Monthly stock report" },
-      { key: "procurement-report", href: "/dashboard/stock/procurement-report", label: "Procurement report" },
-    ],
-  },
-  {
-    heading: "Account",
-    items: [
-      { key: "history", href: "/dashboard/history", label: "Submission history" },
-      { key: "profile", href: "/dashboard/profile", label: "Profile" },
-    ],
-  },
-]
+/** Every sidebar destination, spelled once; each role picks the ones it uses. */
+const SIDE: Record<SideNavKey, SideNavItem> = {
+  home: { key: "home", href: "/dashboard", label: "Dashboard" },
+  production: { key: "production", href: "/dashboard/production", label: "Production analysis" },
+  stock: { key: "stock", href: "/dashboard/stock", label: "Stock levels", extraPrefixes: ["/dashboard/stock/material"] },
+  herbs: { key: "herbs", href: "/dashboard/stock/herbs", label: "Herbs" },
+  analysis: { key: "analysis", href: "/dashboard/stock/analysis", label: "Stock analysis" },
+  receive: { key: "receive", href: "/dashboard/stock/receipts", label: "Receive & issue" },
+  invoices: { key: "invoices", href: "/dashboard/stock/invoices", label: "Supplier invoices" },
+  dispatch: { key: "dispatch", href: "/dashboard/stock/dispatch", label: "Dispatch" },
+  returns: { key: "returns", href: "/dashboard/stock/returns", label: "Product returns" },
+  donations: { key: "donations", href: "/dashboard/stock/donations", label: "Donations" },
+  matrix: { key: "matrix", href: "/dashboard/reports/matrix", label: "Department matrices" },
+  reports: { key: "reports", href: "/dashboard/reports", label: "All reports & exports" },
+  "monthly-report": { key: "monthly-report", href: "/dashboard/stock/monthly-report", label: "Monthly stock report" },
+  "procurement-report": { key: "procurement-report", href: "/dashboard/stock/procurement-report", label: "Procurement report" },
+  "qc-new": { key: "qc-new", href: "/dashboard/qc/new", label: "New inspection" },
+  // Inspection detail pages (/dashboard/qc/<id>) and the /dashboard/qc overview light this item.
+  "qc-history": { key: "qc-history", href: "/dashboard/qc/history", label: "Inspection history", extraPrefixes: ["/dashboard/qc"] },
+  "qc-standards": { key: "qc-standards", href: "/dashboard/qc/standards", label: "QC standards" },
+  history: { key: "history", href: "/dashboard/history", label: "Submission history" },
+  profile: { key: "profile", href: "/dashboard/profile", label: "Profile" },
+}
 
-/** The desktop sidebar for a role, or null when the role uses the header nav. Stock only, as agreed. */
+const section = (heading: string, keys: SideNavKey[]): SideNavSection => ({ heading, items: keys.map((k) => SIDE[k]) })
+
+const VIEW_MOVEMENTS: SideNavKey[] = ["invoices", "dispatch", "returns", "donations"]
+const INVENTORY: SideNavKey[] = ["stock", "herbs", "analysis"]
+const ACCOUNT = section("Account", ["history", "profile"])
+
+const SIDE_NAV_BY_ROLE: Partial<Record<UserRole, SideNavSection[]>> = {
+  stock: [
+    section("Overview", ["home"]),
+    section("Inventory", INVENTORY),
+    section("Movements", ["receive", ...VIEW_MOVEMENTS]),
+    section("Reports", ["monthly-report", "procurement-report"]),
+    ACCOUNT,
+  ],
+  // Read-only: no Receive & issue, which only the stock role may record.
+  procurement: [
+    section("Overview", ["home"]),
+    section("Inventory", INVENTORY),
+    section("Movements", VIEW_MOVEMENTS),
+    section("Reports", ["monthly-report", "procurement-report"]),
+    ACCOUNT,
+  ],
+  manager: [
+    section("Overview", ["home", "production"]),
+    section("Inventory", INVENTORY),
+    section("Movements", VIEW_MOVEMENTS),
+    section("Reports", ["matrix", "monthly-report", "procurement-report", "reports"]),
+    ACCOUNT,
+  ],
+  qc_manager: [
+    section("Overview", ["home"]),
+    section("Quality control", ["qc-new", "qc-history", "qc-standards"]),
+    section("Account", ["profile"]),
+  ],
+}
+
+/** The desktop sidebar for a role, or null when the role uses the header nav. */
 export function sideNavFor(role: string): SideNavSection[] | null {
-  return role === "stock" ? STOCK_SIDE_NAV : null
+  return isKnownRole(role) ? (SIDE_NAV_BY_ROLE[role] ?? null) : null
 }

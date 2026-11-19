@@ -2,52 +2,44 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
-import { motion, useReducedMotion } from "framer-motion"
+import { motion } from "framer-motion"
 import {
   AlertTriangle,
   ArrowRight,
-  ArrowUpRight,
-  Boxes,
   CheckCircle2,
-  Factory,
-  FileSpreadsheet,
-  Home,
-  Layers,
+  ClipboardList,
+  FileText,
   Loader2,
   Package,
   RefreshCw,
-  TrendingUp,
+  Table2,
   Warehouse,
 } from "lucide-react"
-import { StatusBadge, compact } from "@/components/primitives"
-import { GlassPanel, GlassWorkspace, type GlassTab } from "@/components/ui/glass-dashboard"
+import { Card, CardHeader, EmptyState, Eyebrow, StatTile, StatusBadge } from "@/components/primitives"
 import { GroupBreakdown, ProductionTrend } from "./manager/charts"
 import { DayDetailDrawer } from "./manager/day-detail-drawer"
-import { MaterialsTable } from "./manager/materials-table"
 import { fmt, fmt1 } from "./manager/viz"
-import type { MaterialStatus } from "./manager/types"
 import type { OverviewReport } from "@/lib/domain/analytics-contract"
 import { burnLooksImplausible } from "@/lib/domain/stock-status"
 
 // ============================================================================
-// Manager landing — the glass redesign.
+// Manager landing — office style, beside the ERP sidebar.
 //
-// What changed is the chrome: the content now sits inside the GlassWorkspace
-// shell (components/ui/glass-dashboard) with its rail/dock navigation and the
-// adjustable material. What did NOT change is anything the business reads:
+// Navigation lives in the sidebar now (lib/domain/roles → manager), so this page
+// is the overview only: plain cards on the shared tokens, the same as the Stock
+// Office. What the business reads is unchanged from every previous version:
 //
-//   • the same request (`/api/analytics/report`, last 7 days) with the same
-//     request-sequence guard and the same loading / failed states;
+//   • the same request (/api/analytics/report, last 7 days) with the same
+//     request-sequence guard, the previous render held at reduced opacity while
+//     refetching, and the same loading / failed states;
 //   • the same four figures (produced, critical count, Bitters and Ginger on
-//     hand) from the same fields, and the same `/day avg` arithmetic;
+//     hand) from the same fields, and the same /day average;
 //   • the same "Needs attention" rule — red, yellow, or an implausible burn —
 //     and the same top-five cut, with StatusBadge carrying the level;
-//   • the same ProductionTrend → DayDetailDrawer drill-down;
-//   • the same three hub links.
+//   • the same ProductionTrend → DayDetailDrawer drill-down.
 //
-// The dock's two extra views show more of the SAME report through components
-// the manager already has on /dashboard/production (MaterialsTable,
-// GroupBreakdown) — nothing is computed here that is not computed there.
+// GroupBreakdown shows more of the SAME report (byGroup / byShift), through the
+// component the manager already uses on /dashboard/production.
 // ============================================================================
 
 const daysAgo = (n: number) => {
@@ -55,50 +47,17 @@ const daysAgo = (n: number) => {
   return d.toISOString().slice(0, 10)
 }
 
-const TABS = [
-  { id: "overview", label: "Overview", icon: Home },
-  { id: "materials", label: "Materials", icon: Layers },
-  { id: "output", label: "Output", icon: TrendingUp },
-] as const satisfies readonly GlassTab[]
-type View = (typeof TABS)[number]["id"]
-
-const TITLES: Record<View, string> = {
-  overview: "Operations Overview",
-  materials: "Materials & days left",
-  output: "Production output",
-}
-
-const HUBS = [
-  {
-    href: "/dashboard/production",
-    Icon: Factory,
-    title: "Production Analysis",
-    body: "Department tabs, shift breakdown, recipe BOM, and materials.",
-  },
-  {
-    href: "/dashboard/stock",
-    Icon: Boxes,
-    title: "Stock Office",
-    body: "Warehouse inventory, material receipts, dispatches & counts.",
-  },
-  {
-    href: "/dashboard/reports",
-    Icon: FileSpreadsheet,
-    title: "Reports & Audits",
-    body: "Monthly reconciliation matrix, shift audit trail & raw export.",
-  },
+const PRINTABLE = [
+  { href: "/dashboard/reports/matrix", Icon: Table2, title: "Department matrices", body: "Monthly production by day, group and shift." },
+  { href: "/dashboard/stock/monthly-report", Icon: FileText, title: "Monthly stock report", body: "End-of-month stock reconciliation." },
+  { href: "/dashboard/stock/procurement-report", Icon: ClipboardList, title: "Procurement report", body: "Stock analysis and priority actions." },
 ] as const
-
-const daysLeftText = (m: MaterialStatus) =>
-  `${fmt(m.remaining)} ${m.unit} on hand · ${m.operatingDaysLeft !== null ? `${fmt1(m.operatingDaysLeft)}d left` : "no usage"}`
 
 export function ManagerDashboard({ userName = null }: { userName?: string | null }) {
   const [report, setReport] = useState<OverviewReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
-  const [view, setView] = useState<View>("overview")
   const requestRef = useRef(0)
-  const reduceMotion = useReducedMotion()
 
   const load = useCallback(async () => {
     const seq = ++requestRef.current
@@ -129,308 +88,202 @@ export function ManagerDashboard({ userName = null }: { userName?: string | null
   const criticalMaterials = report?.materials.filter((m) => m.level === "red") ?? []
   const attentionMaterials =
     report?.materials.filter((m) => m.level === "red" || m.level === "yellow" || burnLooksImplausible(m)) ?? []
-
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: { opacity: 1, transition: { staggerChildren: 0.06 } },
-  }
-  const itemVariants = reduceMotion
-    ? { hidden: { opacity: 0 }, show: { opacity: 1, transition: { duration: 0.2 } } }
-    : {
-        hidden: { opacity: 0.45, y: 12, filter: "blur(3px)" },
-        show: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.45, ease: [0.23, 1, 0.32, 1] as const } },
-      }
-
   const criticalCount = criticalMaterials.length
-  const statusText =
-    criticalCount > 0 ? `${criticalCount} material${criticalCount > 1 ? "s" : ""} critical` : "All materials healthy"
 
-  const alertsContent = (
-    <>
-      <p>
-        {criticalCount > 0
-          ? "Operating stock has fallen to a critical number of days. Replenish before it runs out."
-          : attentionMaterials.length > 0
-            ? `No material is critical. ${attentionMaterials.length} ${attentionMaterials.length === 1 ? "is" : "are"} flagged under Needs attention.`
-            : "No materials are low, and burn rates are within expected parameters."}
-      </p>
-      {criticalCount > 0 && (
-        <div className="gw-list">
-          {criticalMaterials.map((m) => (
-            <div className="gw-row" key={m.key}>
-              <span className="gw-row-icon is-critical">
-                <AlertTriangle size={17} strokeWidth={1.8} aria-hidden="true" />
-              </span>
-              <div className="gw-row-body">
-                <strong>{m.label}</strong>
-                <span>{daysLeftText(m)}</span>
-              </div>
-              <div className="gw-row-end">
-                <StatusBadge level={m.level} />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </>
-  )
-
-  const refreshButton = (
-    <button type="button" className="gw-button" onClick={load} disabled={loading}>
-      {loading ? (
-        <Loader2 className="gw-spin" size={15} aria-hidden="true" />
-      ) : (
-        <RefreshCw size={15} aria-hidden="true" />
-      )}
-      Refresh
-    </button>
-  )
+  const containerVariants = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } }
+  const itemVariants = { hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0, transition: { duration: 0.25 } } }
 
   return (
-    <>
-      <GlassWorkspace
-        brand="Lawson"
-        brandNote="Manager workspace"
-        userName={userName}
-        tabs={TABS}
-        view={view}
-        onViewChange={setView}
-        storageKey="lawson:manager:glass"
-        greeting={
-          view === "overview" && userName
-            ? `Welcome back, ${userName}.`
-            : "Lawson Limited Company · 7-day plant throughput, warehouse balances and inventory attention items."
-        }
-        title={TITLES[view]}
-        headingAction={
-          <>
-            <span className="gw-date">Last 7 days</span>
-            {refreshButton}
-          </>
-        }
-        alerts={report ? { count: criticalCount, content: alertsContent } : undefined}
-        footerNote={
-          report ? (
-            <>
+    <div className="space-y-6">
+      {/* Header */}
+      <header className="flex flex-wrap items-end justify-between gap-4 pb-4 border-b border-hairline">
+        <div className="min-w-0">
+          <Eyebrow>Lawson Limited Company</Eyebrow>
+          <h1 className="text-2xl sm:text-3xl font-bold text-ink-primary leading-tight mt-0.5">Operations Overview</h1>
+          <p className="text-sm text-ink-secondary mt-1">
+            {userName ? `Welcome back, ${userName}. ` : ""}Plant throughput, warehouse balances and inventory attention
+            items for the last 7 days.
+          </p>
+          {report && (
+            <p className="text-xs font-medium text-ink-muted mt-1 tnum flex items-center flex-wrap gap-x-1.5">
               <span>
                 Updated {new Date(report.last_updated).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               </span>
-              <span aria-hidden="true">·</span>
+              <span className="opacity-40" aria-hidden="true">·</span>
               <span>Last 7 days</span>
-              <span aria-hidden="true">·</span>
-              <span className={criticalCount > 0 ? "text-critical-ink font-bold" : "text-good-ink font-semibold"}>{statusText}</span>
-            </>
-          ) : undefined
-        }
-      >
-        {/* Hold the previous render at reduced opacity while refetching. */}
-        <div className={loading && report ? "opacity-60 transition-opacity" : "transition-opacity"}>
-          {report && (
-            <motion.div key={view} variants={containerVariants} initial="hidden" animate="show">
-              {/* ── OVERVIEW ─────────────────────────────────────────────── */}
-              {view === "overview" && (
-                <>
-                  <div className="gw-overview-grid">
-                    <motion.div variants={itemVariants} className="gw-reveal">
-                      <GlassPanel className="gw-hero" label="Produced (last 7 days)" icon={<Package size={17} aria-hidden="true" />}>
-                        <strong className="gw-hero-value">
-                          {fmt(report.totals.production_cartons)}
-                          <small>ctn</small>
-                        </strong>
-                        <p className="gw-hero-meta">
-                          <span className="gw-pill">{fmt1(report.totals.production_cartons / 7)}/day</span>
-                          average over the window
-                        </p>
-                        <Link href="/dashboard/production" className="gw-hero-link">
-                          <span className="gw-hero-link-icon">
-                            <Factory size={19} strokeWidth={1.8} aria-hidden="true" />
-                          </span>
-                          <div>
-                            <strong>Production Analysis</strong>
-                            <span>Department tabs, shift breakdown, recipe BOM, and materials.</span>
-                          </div>
-                          <span className="gw-hero-link-arrow" aria-hidden="true">
-                            <ArrowUpRight size={20} />
-                          </span>
-                        </Link>
-                      </GlassPanel>
-                    </motion.div>
-
-                    <motion.div variants={itemVariants} className="gw-reveal gw-embed">
-                      <ProductionTrend data={report.byDay} onSelectDay={setSelectedDay} label="Daily Output (7 Days)" />
-                    </motion.div>
-                  </div>
-
-                  <div className="gw-stat-grid">
-                    <motion.div variants={itemVariants} className="gw-reveal">
-                      <GlassPanel
-                        label="Critical materials"
-                        icon={<AlertTriangle size={17} aria-hidden="true" />}
-                        accent={criticalCount > 0 ? "critical" : "brand"}
-                      >
-                        <strong className="gw-stat-value">
-                          {compact(criticalCount)}
-                          <small>{criticalCount === 1 ? "item" : "items"}</small>
-                        </strong>
-                        <span className="gw-stat-sub">
-                          {criticalCount > 0 ? "urgent replenishment needed" : "all materials healthy"}
-                        </span>
-                      </GlassPanel>
-                    </motion.div>
-                    <motion.div variants={itemVariants} className="gw-reveal">
-                      <GlassPanel label="Bitters on hand" icon={<Warehouse size={17} aria-hidden="true" />} accent="bitters">
-                        <strong className="gw-stat-value">
-                          {compact(report.finishedGoods.bitters)}
-                          <small>ctn</small>
-                        </strong>
-                        <span className="gw-stat-sub">warehouse stock balance</span>
-                      </GlassPanel>
-                    </motion.div>
-                    <motion.div variants={itemVariants} className="gw-reveal">
-                      <GlassPanel label="Ginger on hand" icon={<Warehouse size={17} aria-hidden="true" />} accent="ginger">
-                        <strong className="gw-stat-value">
-                          {compact(report.finishedGoods.ginger)}
-                          <small>ctn</small>
-                        </strong>
-                        <span className="gw-stat-sub">warehouse stock balance</span>
-                      </GlassPanel>
-                    </motion.div>
-                  </div>
-
-                  <div className="gw-lower-grid">
-                    <motion.div variants={itemVariants} className="gw-reveal">
-                      <GlassPanel
-                        title="Needs attention"
-                        actions={
-                          <span>
-                            {attentionMaterials.length > 0
-                              ? `${attentionMaterials.length} material${attentionMaterials.length > 1 ? "s" : ""} flagged`
-                              : "Stock health"}
-                          </span>
-                        }
-                      >
-                        {attentionMaterials.length === 0 ? (
-                          <div className="gw-empty">
-                            <span className="gw-empty-orb">
-                              <CheckCircle2 size={20} aria-hidden="true" />
-                            </span>
-                            <h3>All materials healthy</h3>
-                            <p>Operating stock is above the critical threshold and burn rates are within expected parameters.</p>
-                          </div>
-                        ) : (
-                          <div className="gw-list">
-                            {attentionMaterials.slice(0, 5).map((m) => (
-                              <div className="gw-row" key={m.key}>
-                                <span
-                                  className={`gw-row-icon ${
-                                    m.level === "red" ? "is-critical" : m.level === "yellow" ? "is-warning" : ""
-                                  }`}
-                                >
-                                  <AlertTriangle size={17} strokeWidth={1.8} aria-hidden="true" />
-                                </span>
-                                <div className="gw-row-body">
-                                  <strong>{m.label}</strong>
-                                  <span>{daysLeftText(m)}</span>
-                                </div>
-                                <div className="gw-row-end">
-                                  <StatusBadge level={m.level} />
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        <button type="button" className="gw-text-button" onClick={() => setView("materials")}>
-                          View complete material status
-                          <ArrowRight size={14} aria-hidden="true" />
-                        </button>
-                      </GlassPanel>
-                    </motion.div>
-
-                    <motion.div variants={itemVariants} className="gw-reveal">
-                      <GlassPanel title="Go to" actions={<span>{HUBS.length} areas</span>}>
-                        <div className="gw-list">
-                          {HUBS.map(({ href, Icon, title, body }) => (
-                            <Link key={href} href={href} className="gw-row">
-                              <span className="gw-row-icon is-brand">
-                                <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
-                              </span>
-                              <div className="gw-row-body">
-                                <strong>{title}</strong>
-                                <span>{body}</span>
-                              </div>
-                              <div className="gw-row-end">
-                                <ArrowRight size={16} aria-hidden="true" />
-                              </div>
-                            </Link>
-                          ))}
-                        </div>
-                      </GlassPanel>
-                    </motion.div>
-                  </div>
-                </>
+              <span className="opacity-40" aria-hidden="true">·</span>
+              {criticalCount > 0 ? (
+                <span className="text-critical-ink font-bold inline-flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-critical" aria-hidden="true" />
+                  {criticalCount} material{criticalCount > 1 ? "s" : ""} critical
+                </span>
+              ) : (
+                <span className="text-good-ink font-semibold inline-flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-good" aria-hidden="true" />
+                  All materials healthy
+                </span>
               )}
-
-              {/* ── MATERIALS ────────────────────────────────────────────── */}
-              {view === "materials" &&
-                (report.materials.length > 0 ? (
-                  <motion.div variants={itemVariants} className="gw-reveal gw-embed-deep">
-                    <MaterialsTable
-                      materials={report.materials}
-                      redDays={report.thresholds.redDays}
-                      amberDays={report.thresholds.amberDays}
-                      onReconciled={load}
-                    />
-                  </motion.div>
-                ) : (
-                  <motion.div variants={itemVariants} className="gw-reveal">
-                    <GlassPanel>
-                      <div className="gw-empty">
-                        <span className="gw-empty-orb">
-                          <Layers size={20} aria-hidden="true" />
-                        </span>
-                        <h3>No materials in the ledger yet</h3>
-                        <p>Material balances appear once receipts and shift usage have been recorded.</p>
-                      </div>
-                    </GlassPanel>
-                  </motion.div>
-                ))}
-
-              {/* ── OUTPUT ───────────────────────────────────────────────── */}
-              {view === "output" && (
-                <div className="gw-output-grid">
-                  <motion.div variants={itemVariants} className="gw-reveal gw-embed">
-                    <ProductionTrend data={report.byDay} onSelectDay={setSelectedDay} label="Cartons produced" />
-                  </motion.div>
-                  <motion.div variants={itemVariants} className="gw-reveal gw-embed">
-                    <GroupBreakdown data={report.byGroup} shiftData={report.byShift} />
-                  </motion.div>
-                </div>
-              )}
-            </motion.div>
+            </p>
           )}
         </div>
+        <button
+          type="button"
+          onClick={load}
+          disabled={loading}
+          className="h-11 px-4 flex items-center gap-2 rounded-xl bg-brand-solid text-brand-ink text-sm font-bold hover:bg-brand-solid-hover transition-colors disabled:opacity-60 active:scale-[0.97]"
+        >
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <RefreshCw className="w-4 h-4" aria-hidden="true" />}
+          Refresh
+        </button>
+      </header>
 
-        {loading && !report && (
-          <div className="gw-empty gw-empty-tall" aria-busy="true">
-            <Loader2 className="gw-spin" size={28} aria-hidden="true" />
-            <span className="sr-only">Loading overview</span>
-          </div>
+      {/* Hold the previous render at reduced opacity while refetching. */}
+      <div className={loading && report ? "opacity-60 transition-opacity" : "transition-opacity"}>
+        {report && (
+          <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-6">
+            {/* Key figures */}
+            <motion.div variants={itemVariants} className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <StatTile
+                label="Produced (last 7 days)"
+                value={report.totals.production_cartons}
+                unit="ctn"
+                sub={`${fmt1(report.totals.production_cartons / 7)}/day avg`}
+                icon={<Package className="w-5 h-5" />}
+                accent="brand"
+              />
+              <StatTile
+                label="Critical materials"
+                value={criticalCount}
+                unit={criticalCount === 1 ? "item" : "items"}
+                sub={criticalCount > 0 ? "urgent replenishment needed" : "all materials healthy"}
+                icon={<AlertTriangle className="w-5 h-5" />}
+                accent={criticalCount > 0 ? "critical" : "brand"}
+              />
+              <StatTile
+                label="Bitters on hand"
+                value={report.finishedGoods.bitters}
+                unit="ctn"
+                sub="warehouse stock balance"
+                icon={<Warehouse className="w-5 h-5" />}
+                accent="bitters"
+              />
+              <StatTile
+                label="Ginger on hand"
+                value={report.finishedGoods.ginger}
+                unit="ctn"
+                sub="warehouse stock balance"
+                icon={<Warehouse className="w-5 h-5" />}
+                accent="ginger"
+              />
+            </motion.div>
+
+            {/* Trend + attention */}
+            <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              <div className="lg:col-span-2">
+                <ProductionTrend data={report.byDay} onSelectDay={setSelectedDay} label="Daily Output (7 Days)" />
+              </div>
+
+              <Card className="flex flex-col">
+                <CardHeader
+                  title="Needs attention"
+                  hint={
+                    attentionMaterials.length > 0
+                      ? `${attentionMaterials.length} material${attentionMaterials.length > 1 ? "s" : ""} flagged`
+                      : "Stock health"
+                  }
+                />
+                <div className="p-4 pt-3 flex-1 flex flex-col justify-between gap-3">
+                  {attentionMaterials.length === 0 ? (
+                    <div className="py-8 flex flex-col items-center justify-center text-center">
+                      <div className="w-10 h-10 rounded-full bg-brand-subtle text-brand flex items-center justify-center mb-2">
+                        <CheckCircle2 className="w-5 h-5" aria-hidden="true" />
+                      </div>
+                      <p className="text-sm font-bold text-ink-primary">All materials healthy</p>
+                      <p className="text-xs text-ink-muted mt-1 max-w-[220px]">
+                        Operating stock is above the critical threshold and burn rates are within expected parameters.
+                      </p>
+                    </div>
+                  ) : (
+                    <ul className="divide-y divide-hairline">
+                      {attentionMaterials.slice(0, 5).map((m) => (
+                        <li key={m.key} className="py-2.5 first:pt-0 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-ink-primary break-words">{m.label}</p>
+                            <p className="text-xs text-ink-muted tnum">
+                              {fmt(m.remaining)} {m.unit} on hand ·{" "}
+                              {m.operatingDaysLeft !== null ? `${fmt1(m.operatingDaysLeft)}d left` : "no usage"}
+                            </p>
+                          </div>
+                          <StatusBadge level={m.level} />
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <Link
+                    href="/dashboard/production"
+                    className="min-h-11 pt-3 border-t border-hairline text-sm font-bold text-brand hover:underline flex items-center justify-between"
+                  >
+                    <span>View complete material status</span>
+                    <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                  </Link>
+                </div>
+              </Card>
+            </motion.div>
+
+            {/* Output by group + printable reports */}
+            <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              <div className="lg:col-span-2">
+                <GroupBreakdown data={report.byGroup} shiftData={report.byShift} label="Cartons produced" />
+              </div>
+              <Card>
+                <CardHeader title="Printable reports" />
+                <ul className="divide-y divide-hairline">
+                  {PRINTABLE.map(({ href, Icon, title, body }) => (
+                    <li key={href}>
+                      <Link
+                        href={href}
+                        className="group flex items-center gap-3 px-4 py-3 min-h-11 hover:bg-surface-sunken transition-colors"
+                      >
+                        <span className="w-9 h-9 rounded-lg bg-surface-sunken text-ink-secondary flex items-center justify-center shrink-0 group-hover:bg-brand-subtle group-hover:text-brand-subtle-ink transition-colors">
+                          <Icon className="w-4 h-4" aria-hidden="true" />
+                        </span>
+                        <span className="flex-1">
+                          <span className="block text-sm font-bold text-ink-primary">{title}</span>
+                          <span className="block text-xs text-ink-muted">{body}</span>
+                        </span>
+                        <ArrowRight className="w-4 h-4 text-ink-muted group-hover:text-brand transition-colors" aria-hidden="true" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            </motion.div>
+          </motion.div>
         )}
+      </div>
 
-        {!loading && !report && (
-          <GlassPanel>
-            <div className="gw-empty">
-              <h3>Couldn’t load the overview</h3>
-              <p>The request failed. Check your connection and try again.</p>
-              <button type="button" className="gw-button" onClick={load}>
+      {loading && !report && (
+        <div className="flex items-center justify-center py-20 text-ink-muted">
+          <Loader2 className="w-7 h-7 animate-spin" aria-hidden="true" />
+          <span className="sr-only">Loading overview</span>
+        </div>
+      )}
+
+      {!loading && !report && (
+        <Card>
+          <EmptyState
+            title="Couldn’t load the overview"
+            description="The request failed. Check your connection and try again."
+            action={
+              <button onClick={load} className="h-11 px-4 rounded-xl bg-brand-solid text-brand-ink text-sm font-bold active:scale-[0.97]">
                 Retry
               </button>
-            </div>
-          </GlassPanel>
-        )}
-      </GlassWorkspace>
+            }
+          />
+        </Card>
+      )}
 
       <DayDetailDrawer date={selectedDay} shift="" department="" onClose={() => setSelectedDay(null)} />
-    </>
+    </div>
   )
 }

@@ -11,6 +11,9 @@ insert into auth.users (id, email, raw_user_meta_data) values
 -- A return without any packaging history must still create stock on hand.
 -- This deletion is transaction-local and is rolled back at the end of the suite.
 delete from public.packaging_daily_records where product = 'Ginger';
+-- Since 0014 the dispatch log also moves the balance, so Ginger's dispatch history
+-- is cleared the same way: the assertion below is about returns alone.
+delete from public.dispatch_lines where product = 'Ginger';
 do $$
 declare before_bitters numeric; before_produced numeric; before_loaded numeric;
         after_bitters numeric; after_produced numeric; after_loaded numeric; ginger numeric;

@@ -5,14 +5,20 @@ import { usePathname } from "next/navigation"
 import {
   ArrowLeftRight,
   ClipboardList,
+  Factory,
+  FileSpreadsheet,
   FileText,
+  FlaskConical,
   Gift,
   History,
   LayoutDashboard,
   Leaf,
   LineChart,
+  ListChecks,
   PackagePlus,
   Receipt,
+  ShieldCheck,
+  Table2,
   Truck,
   User,
   Warehouse,
@@ -21,7 +27,8 @@ import { activeNavHref, type SideNavKey, type SideNavSection } from "@/lib/domai
 import { cn } from "@/lib/utils"
 
 // ============================================================================
-// ERP-style left sidebar (desktop, `md` and up). Phones keep the bottom tabs.
+// ERP-style left sidebar for the office roles (desktop, `md` and up). Phones keep
+// the bottom tabs. Which roles get one, and what is in it, lives in lib/domain/roles.
 //
 // Plain and dense on purpose: grouped sections with small uppercase headings,
 // one icon per row in the muted ink, and the active row marked by a brand rule
@@ -31,6 +38,7 @@ import { cn } from "@/lib/utils"
 
 const ICON: Record<SideNavKey, typeof Warehouse> = {
   home: LayoutDashboard,
+  production: Factory,
   stock: Warehouse,
   herbs: Leaf,
   analysis: LineChart,
@@ -39,8 +47,13 @@ const ICON: Record<SideNavKey, typeof Warehouse> = {
   dispatch: Truck,
   returns: ArrowLeftRight,
   donations: Gift,
+  matrix: Table2,
+  reports: FileSpreadsheet,
   "monthly-report": FileText,
   "procurement-report": ClipboardList,
+  "qc-new": FlaskConical,
+  "qc-history": ListChecks,
+  "qc-standards": ShieldCheck,
   history: History,
   profile: User,
 }
@@ -52,7 +65,7 @@ export function SideNav({ sections, title }: { sections: SideNavSection[]; title
   return (
     <aside className="hidden md:flex print:hidden w-60 lg:w-64 shrink-0 flex-col border-r border-hairline bg-surface-card sticky top-16 h-[calc(100dvh-4rem)] overflow-y-auto">
       <p className="px-5 pt-5 pb-1 text-xs font-bold uppercase tracking-widest text-ink-muted">{title}</p>
-      <nav aria-label="Stock office" className="flex-1 px-3 pb-6">
+      <nav aria-label={title} className="flex-1 px-3 pb-6">
         {sections.map((section) => (
           <div key={section.heading} className="mt-4 first:mt-2">
             <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-ink-muted">{section.heading}</p>

@@ -92,8 +92,21 @@ That migration is a deployment step, not a code change — see §9.
 - Supplier lead times and safety-stock reorder points ("days-left Level 2"),
   which remain open pending supplier data.
 
-### 3.3 Explicitly decided: dispatch is a log, not a second count
+### 3.3 Explicitly decided: the dispatch log drives the balance
 
+> **Superseded 2026-11-19.** The business confirmed that the dispatch log is the
+> authoritative outbound count, as implemented by migration
+> `0014_dispatch_drives_stock.sql`:
+>
+>     available = Σ packaging produced − Σ dispatch_lines.cartons + Σ returns
+>
+> `quantity_cartons_loaded` is still collected on the packaging form but no longer
+> moves the balance. No historical dispatch rows were invented, so a product with
+> old packaging "loaded" figures and no dispatch rows rose by that amount; an
+> opening correction, if wanted, is a stock count. There is still no variance
+> report between the two figures. The original decision is kept below for history.
+
+**Original decision (no longer in force):**
 `packaging_daily_records.quantity_cartons_loaded` stays exactly as it is, and
 the finished-goods balance keeps deriving from it. The new `dispatches` table
 records the same physical event in much more detail, but it is **not** wired
@@ -222,7 +235,9 @@ Changed:
 
 Unchanged, deliberately: `stock_records`, `blowing_daily_records`,
 `consumable_stock`, `stock_counts`, the balance functions, and
-`packaging_daily_records` including `quantity_cartons_loaded`.
+`packaging_daily_records` including `quantity_cartons_loaded`. (Later changed:
+since 0014 `finished_goods_stock()` deducts the dispatch log, not
+`quantity_cartons_loaded` — see §3.3.)
 
 ## 7. Phasing
 
@@ -246,7 +261,7 @@ previous phase's gate is green.
 | Risk | Mitigation |
 |---|---|
 | `procurement` accounts lose write access on deploy | §9 migration step, run before or with the deploy |
-| Dispatch and packaging figures diverge visibly | Documented in §3.3 and stated in the UI, by design |
+| Dispatch and packaging "loaded" figures diverge visibly | Since 0014 the balance follows dispatch; packaging "loaded" is informational (§3.3) |
 | Invoice totals disagree with line sums | Warned, never blocked (FR-9) |
 | A new role means a new RLS surface to get wrong | Write matrix asserted in SQL tests, not just in guards |
 

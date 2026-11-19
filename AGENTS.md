@@ -165,10 +165,12 @@ Phases, each ending at a review gate: **1** database · **2** domain and lib ·
 
 Two decisions in that spec are easy to "fix" by mistake:
 
-1. **Dispatch does not feed the finished-goods balance, and there is no variance
-   report.** The balance keeps deriving from
-   `packaging_daily_records.quantity_cartons_loaded`. Dispatched totals may differ
-   from cartons loaded and the system will not flag it. See PRD.md §3.3.
+1. **The dispatch log drives the finished-goods balance** (migration 0014,
+   confirmed by the business 2026-11-19, reversing the original PRD decision):
+   available = Σ packaging produced − Σ `dispatch_lines.cartons` + Σ returns.
+   `packaging_daily_records.quantity_cartons_loaded` is still collected but no
+   longer moves the balance, and no variance report compares the two. Test
+   `06_stock_separation.sql` pins this. See PRD.md §3.3.
 2. **An invoice's `declared_total` may disagree with the sum of its lines.** Warn,
    never block. Real invoices carry freight, tax and discounts the line model does
    not represent.
