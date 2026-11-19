@@ -20,11 +20,17 @@ import "./report-document.css"
  * mounted, so it cannot change how any other screen prints. Hides the app header,
  * nav and anything marked `.no-print`, the same convention as the monthly stock
  * report.
+ *
+ * The page margin is ZERO on purpose. Browsers print their own header and footer —
+ * the page title, the date and the web address — inside the page margin, and a
+ * zero margin leaves them nowhere to go, so the printed document carries no web
+ * link. The document's one-inch margins are drawn instead by spacer rows in the
+ * frame table (see ReportPaper), which repeat on every page like the house header.
  */
 export function ReportPrintStyles() {
   return (
     <style>{`
-@page { size: A4 portrait; margin: 1in; }
+@page { size: A4 portrait; margin: 0; }
 @media print {
   header, nav, aside, .no-print { display: none !important; }
   main { padding: 0 !important; margin: 0 !important; max-width: none !important; }
@@ -57,6 +63,9 @@ export function ReportDesk({ children, busy = false }: { children: ReactNode; bu
 /**
  * One document. Its content sits in the body of a layout table whose header is
  * the house header, which is what makes the header repeat on every printed page.
+ * In print the header group also carries the top page margin and the footer group
+ * the bottom one: both repeat per page, so every page keeps its one-inch margins
+ * even though the browser page margin is zero (see ReportPrintStyles).
  */
 export function ReportPaper({
   department,
@@ -74,10 +83,18 @@ export function ReportPaper({
         <thead>
           <tr>
             <td>
+              <div className="rd-page-margin" aria-hidden="true" />
               <ReportHeader department={department} />
             </td>
           </tr>
         </thead>
+        <tfoot>
+          <tr>
+            <td>
+              <div className="rd-page-margin" aria-hidden="true" />
+            </td>
+          </tr>
+        </tfoot>
         <tbody>
           <tr>
             <td>{children}</td>

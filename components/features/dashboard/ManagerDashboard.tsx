@@ -7,7 +7,6 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
-  ClipboardList,
   FileText,
   Loader2,
   Package,
@@ -50,7 +49,6 @@ const daysAgo = (n: number) => {
 const PRINTABLE = [
   { href: "/dashboard/reports/matrix", Icon: Table2, title: "Department matrices", body: "Monthly production by day, group and shift." },
   { href: "/dashboard/stock/monthly-report", Icon: FileText, title: "Monthly stock report", body: "End-of-month stock reconciliation." },
-  { href: "/dashboard/stock/procurement-report", Icon: ClipboardList, title: "Procurement report", body: "Stock analysis and priority actions." },
 ] as const
 
 export function ManagerDashboard({ userName = null }: { userName?: string | null }) {

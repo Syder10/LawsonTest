@@ -13,7 +13,10 @@ import {
   sideNavFor,
   STOCK_READ_ROLES,
   STOCK_WRITE_ROLES,
+  canSeeHerbs,
+  HERB_DEPARTMENT,
 } from "@/lib/domain/roles"
+import { getRecordType } from "@/lib/domain/record-types"
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
@@ -326,6 +329,8 @@ describe("sideNavFor", () => {
     if (src.includes("requireStockRead(")) return (STOCK_READ_ROLES as string[]).includes(role)
     if (src.includes("requireManager(")) return role === "manager"
     if (src.includes("requireQcAccess(")) return ["qc_officer", "qc_manager", "admin"].includes(role)
+    const listed = /requireRole\(\[([^\]]*)\]\)/.exec(src)
+    if (listed) return [...listed[1].matchAll(/"([a-z_]+)"/g)].some((m) => m[1] === role)
     const named = [...src.matchAll(/role === "([a-z_]+)"/g)].map((m) => m[1])
     return named.length === 0 || named.includes(role)
   }
@@ -356,6 +361,26 @@ describe("sideNavFor", () => {
     })
   }
 
+  it("shows herbs to the manager only (herb stock is confidential)", () => {
+    for (const role of OFFICE_ROLES) {
+      expect(itemsFor(role).some((i) => i.key === "herbs"), role).toBe(canSeeHerbs(role))
+    }
+    expect(canSeeHerbs("manager")).toBe(true)
+    for (const role of ROLES.filter((r) => r !== "manager")) expect(canSeeHerbs(role), role).toBe(false)
+  })
+
+  it("shows the procurement report to the procurement department only", () => {
+    for (const role of OFFICE_ROLES) {
+      expect(itemsFor(role).some((i) => i.key === "procurement-report"), role).toBe(role === "procurement")
+    }
+  })
+
+  it("names the same herb department as the database and the record registry", () => {
+    expect(getRecordType("Herbs Stock")?.departments).toEqual([HERB_DEPARTMENT])
+    const migration = readFileSync(join(process.cwd(), "supabase/migrations/0015_herbs_confidential.sql"), "utf8")
+    expect(migration).toContain(`p.department = '${HERB_DEPARTMENT}'`)
+  })
+
   it("keeps Receive & issue to the stock role, the only one that may record it", () => {
     for (const role of OFFICE_ROLES) {
       expect(itemsFor(role).some((i) => i.key === "receive"), role).toBe(role === "stock")
@@ -366,7 +391,7 @@ describe("sideNavFor", () => {
     const stock = itemsFor("stock")
     expect(activeNavHref("/dashboard", stock)).toBe("/dashboard")
     expect(activeNavHref("/dashboard/stock", stock)).toBe("/dashboard/stock")
-    expect(activeNavHref("/dashboard/stock/herbs", stock)).toBe("/dashboard/stock/herbs")
+    expect(activeNavHref("/dashboard/stock/herbs", itemsFor("manager"))).toBe("/dashboard/stock/herbs")
     expect(activeNavHref("/dashboard/stock/material/alcohol", stock)).toBe("/dashboard/stock")
     expect(activeNavHref("/dashboard/stock/dispatch/new", stock)).toBe("/dashboard/stock/dispatch")
     expect(activeNavHref("/dashboard/qc", stock)).toBeNull()

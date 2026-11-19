@@ -45,6 +45,17 @@ export const canWriteStock = (role: string): boolean =>
 export const canReadStock = (role: string): boolean =>
   (STOCK_READ_ROLES as string[]).includes(role)
 
+/**
+ * Herb stock is CONFIDENTIAL to the Production Manager (business decision,
+ * 2026-11-19). Screens use this; the database enforces the same rule in 0015
+ * (can_read_herbs), which additionally lets the Concentrate supervisors who RECORD
+ * herbs see their own entries and the opening balance their form needs.
+ */
+export const canSeeHerbs = (role: string): boolean => role === "manager"
+
+/** The one department whose record type writes herb stock. Mirrors 0015's can_read_herbs(). */
+export const HERB_DEPARTMENT = "Concentrate"
+
 export const canAccessQc = (role: string): boolean =>
   (["qc_officer", "qc_manager", "admin"] as string[]).includes(role)
 
@@ -269,7 +280,8 @@ const SIDE: Record<SideNavKey, SideNavItem> = {
 const section = (heading: string, keys: SideNavKey[]): SideNavSection => ({ heading, items: keys.map((k) => SIDE[k]) })
 
 const VIEW_MOVEMENTS: SideNavKey[] = ["invoices", "dispatch", "returns", "donations"]
-const INVENTORY: SideNavKey[] = ["stock", "herbs", "analysis"]
+// No herbs here: herb stock is the Production Manager's alone (see canSeeHerbs).
+const INVENTORY: SideNavKey[] = ["stock", "analysis"]
 const ACCOUNT = section("Account", ["history", "profile"])
 
 const SIDE_NAV_BY_ROLE: Partial<Record<UserRole, SideNavSection[]>> = {
@@ -277,7 +289,7 @@ const SIDE_NAV_BY_ROLE: Partial<Record<UserRole, SideNavSection[]>> = {
     section("Overview", ["home"]),
     section("Inventory", INVENTORY),
     section("Movements", ["receive", ...VIEW_MOVEMENTS]),
-    section("Reports", ["monthly-report", "procurement-report"]),
+    section("Reports", ["monthly-report"]),
     ACCOUNT,
   ],
   // Read-only: no Receive & issue, which only the stock role may record.
@@ -290,9 +302,9 @@ const SIDE_NAV_BY_ROLE: Partial<Record<UserRole, SideNavSection[]>> = {
   ],
   manager: [
     section("Overview", ["home", "production"]),
-    section("Inventory", INVENTORY),
+    section("Inventory", ["stock", "herbs", "analysis"]),
     section("Movements", VIEW_MOVEMENTS),
-    section("Reports", ["matrix", "monthly-report", "procurement-report", "reports"]),
+    section("Reports", ["matrix", "monthly-report", "reports"]),
     ACCOUNT,
   ],
   qc_manager: [

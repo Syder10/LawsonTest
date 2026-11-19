@@ -820,9 +820,9 @@ export function StockClient({ canWrite }: { canWrite: boolean }) {
                       rows={filteredMaterials}
                       rowKey={(m) => m.key}
                       rowHref={(m) =>
-                        m.key === "herb" || m.key.startsWith("herb")
-                          ? "/dashboard/stock/herbs"
-                          : `/dashboard/stock/material/${m.key}`
+                        // The stock report carries no herb rows (herbs are confidential
+                        // to the Production Manager), so every row opens its own ledger.
+                        `/dashboard/stock/material/${m.key}`
                       }
                       empty={
                         <EmptyState

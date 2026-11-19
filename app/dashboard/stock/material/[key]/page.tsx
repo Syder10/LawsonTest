@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation"
 import { requireStockRead } from "@/lib/auth/guards"
-import { canWriteStock } from "@/lib/domain/roles"
+import { canSeeHerbs, canWriteStock } from "@/lib/domain/roles"
 import { materialDescriptorForKey, herbDescriptor, parseHerbKey } from "@/lib/domain/stock-materials"
 import { assembleMaterialDetail } from "@/lib/domain/material-detail"
 import { ALL_TIME, ALL_TIME_FROM, isAllTime } from "@/lib/domain/date-window"
@@ -31,6 +31,9 @@ export default async function MaterialDetailPage({
   // but only after confirming the variant is a real herb_types row so an arbitrary
   // path segment cannot conjure an empty detail page.
   const herbVariant = descriptor ? null : parseHerbKey(key)
+  // Herb stock is confidential to the Production Manager (0015): anyone else gets the
+  // same 404 as a material that does not exist, not a hint that it does.
+  if (herbVariant && !canSeeHerbs(auth.ctx.profile.role)) notFound()
   if (herbVariant) {
     const { data: herb } = await auth.ctx.supabase
       .from("herb_types")

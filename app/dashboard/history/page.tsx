@@ -4,6 +4,7 @@ import { Calendar, FileText } from "lucide-react"
 import { Suspense } from "react"
 import HistoryDateFilter from "./HistoryDateFilter"
 import { RECORD_TYPES, recordTypesForDepartment, type RecordTypeDef } from "@/lib/domain/record-types"
+import { canSeeHerbs } from "@/lib/domain/roles"
 import { enrichWithBalances } from "@/lib/domain/stock-ledger"
 import { StockLedgerIndex } from "@/components/features/stock/ledger-index"
 import { Card, Chip, EmptyState, PageHeader } from "@/components/primitives"
@@ -60,8 +61,12 @@ export default async function HistoryPage({
   }
 
   const isManager = profile?.role === "manager" || profile?.role === "admin"
+  // Herb stock is confidential to the Production Manager: admin does not get the
+  // "Herbs Stock" type (the database returns admin no herb rows anyway — 0015).
+  // The Concentrate supervisor still sees it through their own department's list.
+  const isHerbType = (d: RecordTypeDef) => d.storage.kind === "stock" && d.storage.material === "herb"
   const defs: RecordTypeDef[] = isManager
-    ? RECORD_TYPES
+    ? RECORD_TYPES.filter((d) => canSeeHerbs(profile?.role ?? "") || !isHerbType(d))
     : profile?.department
       ? recordTypesForDepartment(profile.department)
       : []

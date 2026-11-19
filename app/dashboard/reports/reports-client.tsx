@@ -9,7 +9,6 @@ import {
   ArrowRight,
   ShieldCheck,
   Table2,
-  ClipboardList,
 } from "lucide-react"
 import { Card, Eyebrow } from "@/components/primitives"
 
@@ -23,16 +22,6 @@ const REPORT_SECTIONS = [
     badgeTone: "bg-surface-sunken text-ink-secondary border-line-strong",
     accent: "border-hairline",
     meta: "One A4 sheet per department and measure",
-  },
-  {
-    title: "Procurement Stock Analysis",
-    description: "Formal stock analysis of cartons, production materials and tax stamps, with days left, status and priority procurement actions.",
-    href: "/dashboard/stock/procurement-report",
-    icon: ClipboardList,
-    badge: "Printable",
-    badgeTone: "bg-surface-sunken text-ink-secondary border-line-strong",
-    accent: "border-hairline",
-    meta: "Dated report from the latest stock figures",
   },
   {
     title: "Monthly Stock Reconciliation",

@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation"
-import { requireStockRead } from "@/lib/auth/guards"
+import { requireManager } from "@/lib/auth/guards"
 import { ledgerUnitFor } from "@/lib/domain/materials"
 import { fmt } from "@/components/features/dashboard/manager/viz"
 import { Card, CardHeader, DataTable, EmptyState, PageHeader, type Column } from "@/components/primitives"
 
 // The herbs hub, reached from the manager materials table's aggregated "Herbs" row.
+// MANAGER ONLY: herb stock is confidential to the Production Manager (0015 enforces
+// it in the database; this guard keeps everyone else from an empty page).
 // The overview shows herbs as ONE line across every variant; this splits that line
 // back into its herb_types, each row opening that variant's own dated ledger,
 // filed records and counts on the shared material detail page.
@@ -24,7 +26,7 @@ interface HerbRow {
 }
 
 export default async function HerbsHubPage() {
-  const auth = await requireStockRead()
+  const auth = await requireManager()
   if (!auth.ok) redirect("/dashboard")
   const supabase = auth.ctx.supabase
   const today = iso(new Date())

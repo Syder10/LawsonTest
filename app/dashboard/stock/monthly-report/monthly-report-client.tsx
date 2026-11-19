@@ -48,16 +48,18 @@ const openingKey = (product: Product, year: number, month: number) => `${product
 
 // Rules for printing: only the report pages come out, one per sheet of paper, and
 // the branch matrix on a landscape page. The app header and tab bar are hidden.
+// The page margin is ZERO so the browser has nowhere to print its own header and
+// footer (title, date, web address); each sheet supplies its margin as padding.
 const PRINT_CSS = `
-@page { size: A4 portrait; margin: 14mm; }
-@page branch-sheet { size: A4 landscape; margin: 12mm; }
+@page { size: A4 portrait; margin: 0; }
+@page branch-sheet { size: A4 landscape; margin: 0; }
 @media print {
   header, nav, .no-print { display: none !important; }
   main { padding: 0 !important; max-width: none !important; }
   body, main { background: #fff !important; }
-  .sheet { background: #fff !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 0 !important; break-after: page; }
+  .sheet { background: #fff !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; padding: 14mm !important; break-after: page; }
   .sheet:last-of-type { break-after: auto; }
-  .sheet-landscape { page: branch-sheet; }
+  .sheet-landscape { page: branch-sheet; padding: 12mm !important; }
   .sheet, .sheet * { color: #000 !important; border-color: #000 !important; background-color: transparent !important; }
   .sheet .green-cell { background-color: #70ad47 !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .sheet-scroll { overflow: visible !important; }

@@ -20,13 +20,14 @@ import type { Product, Shift } from "@/lib/db/types"
 // registry every other screen reads makes that disagreement impossible rather than
 // merely fixed. tax_stamp and carton really are counted in pieces and have no
 // registry entry, hence the fallback.
-const RECONCILABLE: { code: string; name: string; tracksProduct?: boolean; isHerb?: boolean }[] = [
+// Herbs are not here: herb stock is confidential to the Production Manager, and the
+// database refuses a herb count from the stock office (0015).
+const RECONCILABLE: { code: string; name: string; tracksProduct?: boolean }[] = [
   { code: "alcohol", name: "Alcohol" },
   { code: "preform", name: "Preforms" },
   { code: "caps", name: "Caps" },
   { code: "labels", name: "Labels", tracksProduct: true },
   { code: "caramel", name: "Caramel", tracksProduct: true },
-  { code: "herb", name: "Herb", isHerb: true },
   { code: "tax_stamp", name: "Tax Stamps" },
   { code: "carton", name: "Cartons", tracksProduct: true },
 ]
@@ -36,7 +37,6 @@ export const LEDGER_MATERIALS: {
   name: string
   unit: string
   tracksProduct?: boolean
-  isHerb?: boolean
 }[] = RECONCILABLE.map((m) => ({ ...m, unit: ledgerUnitFor(m.code)?.unit ?? "pcs" }))
 
 export interface ReconcileTarget {
@@ -79,7 +79,6 @@ export function ReconcileModal({
   const generic = !target
   const [materialCode, setMaterialCode] = useState("alcohol")
   const [product, setProduct] = useState<Product | "">("")
-  const [variant, setVariant] = useState("")
   const [counted, setCounted] = useState("")
   const [date, setDate] = useState(today())
   const [shift, setShift] = useState<Shift | "">("")
@@ -93,11 +92,10 @@ export function ReconcileModal({
   const unit = target?.unit ?? mat?.unit ?? ""
   const label = target?.label ?? mat?.name ?? material
   const needsProduct = generic ? !!mat?.tracksProduct : false
-  const needsVariant = generic ? !!mat?.isHerb : false
 
   const reset = () => {
     setCounted(""); setNote(""); setResult(null); setShift(""); setKind("reconciliation")
-    setDate(today()); setProduct(""); setVariant("")
+    setDate(today()); setProduct("")
   }
   const close = () => { reset(); onClose() }
 
@@ -105,7 +103,6 @@ export function ReconcileModal({
     const qty = Number(counted)
     if (!Number.isFinite(qty) || qty < 0) { toast.error("Enter a valid counted quantity."); return }
     if (needsProduct && !product) { toast.error("Select a product."); return }
-    if (needsVariant && !variant.trim()) { toast.error("Enter a herb variant."); return }
 
     setSubmitting(true)
     try {
@@ -118,7 +115,7 @@ export function ReconcileModal({
           counted: qty,
           shift: shift || null,
           product: target ? target.product ?? null : (needsProduct ? product : null),
-          variant: target ? target.variant ?? null : (needsVariant ? variant.trim() : null),
+          variant: target?.variant ?? null,
           kind,
           note: note.trim() || null,
         }),
@@ -185,7 +182,7 @@ export function ReconcileModal({
                     <Select
                       {...p}
                       value={materialCode}
-                      onChange={(e) => { setMaterialCode(e.target.value); setProduct(""); setVariant("") }}
+                      onChange={(e) => { setMaterialCode(e.target.value); setProduct("") }}
                     >
                       {LEDGER_MATERIALS.map((m) => <option key={m.code} value={m.code}>{m.name}</option>)}
                     </Select>
@@ -199,13 +196,6 @@ export function ReconcileModal({
                         <option value="Bitters">Bitters</option>
                         <option value="Ginger">Ginger</option>
                       </Select>
-                    )}
-                  </Field>
-                )}
-                {needsVariant && (
-                  <Field label="Herb variant">
-                    {(p) => (
-                      <TextInput {...p} value={variant} onChange={(e) => setVariant(e.target.value)} placeholder="e.g. Alligator Pepper" />
                     )}
                   </Field>
                 )}

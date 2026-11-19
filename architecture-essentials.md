@@ -85,6 +85,17 @@ access-control regressions hide.
 `PLANNED` guards: `requireStockWrite`, `requireStockRead`. `requireProcurement`
 is replaced at every call site, not redefined.
 
+**Herb stock is confidential to the Production Manager** (0015, 2026-11-19). The
+manager sees all herb stock; Concentrate supervisors, who record it, see their own
+entries plus the opening their form needs; stock, procurement and admin see none
+(admin sees herb *names* only, to maintain the list). Enforced by RLS on
+`stock_records` / `stock_counts` / `herb_types` and by `can_read_herbs()` gates in
+the SECURITY DEFINER ledger functions, which bypass RLS. Screens use
+`canSeeHerbs()`. `supabase/tests/10_herbs_confidential.sql` asserts it.
+
+**The Procurement Stock Analysis Report is for the procurement role only**
+(2026-11-19) — page guard `requireRole(["procurement"])`.
+
 ## 5. Grants and RLS are different things
 
 `drop schema public cascade` destroys Supabase's grants and does not restore
